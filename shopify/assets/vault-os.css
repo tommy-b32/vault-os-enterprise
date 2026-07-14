@@ -1,0 +1,1252 @@
+/* =========================================
+   FABRIC VAULT OS — DESIGN TOKENS
+   Version 3.0.0 RC1
+========================================= */
+
+:root {
+  /* -----------------------------------------
+     Brand colours
+  ----------------------------------------- */
+
+  --tfv-os-gold: #c59d5f;
+  --tfv-os-gold-light: #f7dc94;
+  --tfv-os-green: #4ade80;
+
+  --tfv-os-black: #080808;
+  --tfv-os-panel: #101010;
+  --tfv-os-panel-deep: #0d0d0d;
+
+  /* -----------------------------------------
+     Text hierarchy
+  ----------------------------------------- */
+
+  --tfv-os-text-primary: #ffffff;
+  --tfv-os-text-secondary: rgba(255, 255, 255, 0.76);
+  --tfv-os-text-body: rgba(255, 255, 255, 0.5);
+  --tfv-os-text-muted: rgba(255, 255, 255, 0.34);
+  --tfv-os-text-faint: rgba(255, 255, 255, 0.28);
+
+  /* -----------------------------------------
+     Borders
+  ----------------------------------------- */
+
+  --tfv-os-border-neutral: rgba(255, 255, 255, 0.065);
+  --tfv-os-border-soft: rgba(255, 255, 255, 0.085);
+
+  --tfv-os-border-gold:
+    rgba(197, 157, 95, 0.22);
+
+  --tfv-os-border-gold-active:
+    rgba(197, 157, 95, 0.38);
+
+  --tfv-os-border-green:
+    rgba(74, 222, 128, 0.22);
+
+  --tfv-os-border-green-active:
+    rgba(74, 222, 128, 0.34);
+
+  /* -----------------------------------------
+     Radius scale
+  ----------------------------------------- */
+
+  --tfv-os-radius-small: 8px;
+  --tfv-os-radius-standard: 10px;
+  --tfv-os-radius-module: 14px;
+  --tfv-os-radius-pill: 999px;
+
+  /* -----------------------------------------
+     Motion timing
+  ----------------------------------------- */
+
+  --tfv-os-motion-instant: 120ms;
+  --tfv-os-motion-fast: 180ms;
+  --tfv-os-motion-standard: 260ms;
+  --tfv-os-motion-comfort: 420ms;
+  --tfv-os-motion-feature: 620ms;
+  --tfv-os-motion-celebration: 1000ms;
+
+  /* -----------------------------------------
+     Easing
+  ----------------------------------------- */
+
+  --tfv-os-ease-standard: ease;
+
+  --tfv-os-ease-premium:
+    cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --tfv-os-ease-settle:
+    cubic-bezier(0.2, 0.9, 0.3, 1.25);
+
+  /* -----------------------------------------
+     Gold lighting
+  ----------------------------------------- */
+
+  --tfv-os-glow-gold-small:
+    0 0 18px rgba(197, 157, 95, 0.12);
+
+  --tfv-os-glow-gold-medium:
+    0 0 26px rgba(197, 157, 95, 0.16);
+
+  --tfv-os-glow-gold-large:
+    0 0 38px rgba(197, 157, 95, 0.2);
+
+  /* -----------------------------------------
+     Green lighting
+  ----------------------------------------- */
+
+  --tfv-os-glow-green-small:
+    0 0 18px rgba(74, 222, 128, 0.12);
+
+  --tfv-os-glow-green-medium:
+    0 0 26px rgba(74, 222, 128, 0.16);
+
+  --tfv-os-glow-green-large:
+    0 0 38px rgba(74, 222, 128, 0.2);
+
+  /* -----------------------------------------
+     Elevation
+  ----------------------------------------- */
+
+  --tfv-os-shadow-module:
+    0 13px 35px rgba(0, 0, 0, 0.32);
+
+  --tfv-os-shadow-active:
+    0 16px 42px rgba(0, 0, 0, 0.38);
+
+  --tfv-os-shadow-celebration:
+    0 18px 48px rgba(0, 0, 0, 0.44);
+
+  /* -----------------------------------------
+     Spacing rhythm
+  ----------------------------------------- */
+
+  --tfv-os-space-1: 4px;
+  --tfv-os-space-2: 8px;
+  --tfv-os-space-3: 12px;
+  --tfv-os-space-4: 16px;
+  --tfv-os-space-5: 20px;
+  --tfv-os-space-6: 24px;
+}
+
+/* =========================================
+   FABRIC VAULT OS — BUNDLE CELEBRATION
+   Version 1.2.0
+========================================= */
+
+.tfv-os-intelligence--bundle-celebrating {
+  position: relative;
+  min-height: 250px;
+  overflow: hidden;
+
+  border-color:
+    rgba(247, 220, 148, 0.46);
+
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.38),
+    0 0 34px rgba(197, 157, 95, 0.16);
+}
+
+.tfv-os-intelligence--bundle-celebrating::before {
+  content: "";
+
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -42%;
+  z-index: 5;
+
+  width: 24%;
+
+  pointer-events: none;
+
+  opacity: 0;
+  transform: skewX(-18deg);
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(247, 220, 148, 0.4),
+      transparent
+    );
+
+  animation:
+    tfvOsBundleCelebrationSweep
+    820ms
+    1080ms
+    ease forwards;
+}
+
+.tfv-os-bundle-celebration {
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 214px;
+
+  text-align: center;
+
+  animation:
+    tfvOsBundleCelebrationEnter
+    400ms
+    cubic-bezier(.2, .8, .2, 1)
+    both;
+}
+
+.tfv-os-bundle-celebration__icon {
+  display: grid;
+  place-items: center;
+
+  width: 68px;
+  height: 68px;
+
+  color: var(--tfv-os-green);
+  background: rgba(74, 222, 128, 0.07);
+
+  border: 1px solid rgba(74, 222, 128, 0.24);
+  border-radius: 50%;
+
+  box-shadow:
+    0 0 28px rgba(74, 222, 128, 0.12);
+
+  animation:
+    tfvOsBundleIconSettle
+    220ms
+    790ms
+    cubic-bezier(.2, .9, .3, 1.25)
+    both;
+}
+
+.tfv-os-bundle-celebration__icon svg {
+  overflow: visible;
+}
+
+.tfv-os-bundle-celebration__circle,
+.tfv-os-bundle-celebration__tick {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tfv-os-bundle-celebration__circle {
+  stroke-width: 1.5;
+  stroke-dasharray: 139;
+  stroke-dashoffset: 139;
+
+  animation:
+    tfvOsBundleCircleDraw
+    600ms
+    ease forwards;
+}
+
+.tfv-os-bundle-celebration__tick {
+  stroke-width: 3;
+  stroke-dasharray: 27;
+  stroke-dashoffset: 27;
+
+  animation:
+    tfvOsBundleTickDraw
+    340ms
+    390ms
+    ease forwards;
+}
+
+.tfv-os-bundle-celebration__eyebrow {
+  margin-top: 18px;
+
+  color: var(--tfv-os-green);
+
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+
+  opacity: 0;
+  transform: translateY(5px);
+
+  animation:
+    tfvOsBundleCopyEnter
+    340ms
+    500ms
+    ease forwards;
+}
+
+.tfv-os-bundle-celebration__saving {
+  display: block;
+
+  min-width: 235px;
+  margin-top: 8px;
+
+  color: #ffffff;
+
+  font-family: "Playfair Display", serif;
+  font-size: 1.55rem;
+  line-height: 1.2;
+
+  opacity: 0;
+  transform: translateY(8px);
+
+  text-shadow:
+    0 0 24px rgba(74, 222, 128, 0.15);
+
+  animation:
+    tfvOsBundleSavingEnter
+    420ms
+    610ms
+    cubic-bezier(.2, .8, .2, 1)
+    forwards;
+}
+
+.tfv-os-bundle-celebration__supporting {
+  display: block;
+
+  margin-top: 8px;
+
+  color: rgba(255, 255, 255, 0.42);
+
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+
+  opacity: 0;
+
+  animation:
+    tfvOsBundleSupportingEnter
+    340ms
+    790ms
+    ease forwards;
+}
+
+.tfv-os-intelligence--bundle-restoring
+.tfv-os-bundle-celebration {
+  opacity: 0;
+  transform:
+    translateY(-4px)
+    scale(0.992);
+
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
+}
+
+.tfv-os-intelligence--bundle-restored {
+  animation:
+    tfvOsBundleModuleRestore
+    600ms
+    cubic-bezier(.2, .8, .2, 1)
+    both;
+}
+
+@keyframes tfvOsBundleCelebrationSweep {
+  0% {
+    left: -42%;
+    opacity: 0;
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  100% {
+    left: 124%;
+    opacity: 0;
+  }
+}
+
+@keyframes tfvOsBundleCelebrationEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tfvOsBundleCircleDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes tfvOsBundleTickDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes tfvOsBundleIconSettle {
+  0% {
+    transform: scale(1);
+  }
+
+  55% {
+    transform: scale(1.045);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes tfvOsBundleCopyEnter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tfvOsBundleSavingEnter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tfvOsBundleSupportingEnter {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tfvOsBundleModuleRestore {
+  from {
+    opacity: 0;
+    transform:
+      translateY(7px)
+      scale(0.994);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tfv-os-intelligence--bundle-celebrating::before,
+  .tfv-os-bundle-celebration,
+  .tfv-os-bundle-celebration__icon,
+  .tfv-os-bundle-celebration__circle,
+  .tfv-os-bundle-celebration__tick,
+  .tfv-os-bundle-celebration__eyebrow,
+  .tfv-os-bundle-celebration__saving,
+  .tfv-os-bundle-celebration__supporting,
+  .tfv-os-intelligence--bundle-restored {
+    animation: none;
+  }
+
+  .tfv-os-bundle-celebration__circle,
+  .tfv-os-bundle-celebration__tick {
+    stroke-dashoffset: 0;
+  }
+
+  .tfv-os-bundle-celebration__eyebrow,
+  .tfv-os-bundle-celebration__saving,
+  .tfv-os-bundle-celebration__supporting {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* =========================================
+   FABRIC VAULT OS — INTELLIGENCE OVERLAY
+   Version 1.1.0 RC1
+========================================= */
+
+.tfv-os-intelligence-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+
+  display: grid;
+  place-items: center;
+
+  padding: var(--tfv-os-space-5);
+
+  color: var(--tfv-os-text-primary);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(17, 17, 17, 0.93),
+      rgba(8, 8, 8, 0.97)
+    );
+
+  border-radius: inherit;
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+
+  transition:
+    opacity
+    var(--tfv-os-motion-standard)
+    var(--tfv-os-ease-standard),
+
+    visibility
+    var(--tfv-os-motion-standard)
+    var(--tfv-os-ease-standard);
+}
+
+.tfv-os-intelligence-overlay.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.tfv-os-intelligence-overlay__content {
+  width: 100%;
+  max-width: 310px;
+}
+
+.tfv-os-intelligence-overlay__kicker,
+.tfv-os-intelligence-overlay__title,
+.tfv-os-intelligence-overlay__status {
+  display: block;
+}
+
+.tfv-os-intelligence-overlay__kicker {
+  color: var(--tfv-os-gold);
+
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.tfv-os-intelligence-overlay__title {
+  margin-top: var(--tfv-os-space-2);
+
+  color: var(--tfv-os-text-primary);
+
+  font-family: "Playfair Display", serif;
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+
+.tfv-os-intelligence-overlay__progress {
+  height: 4px;
+
+  margin-top: var(--tfv-os-space-5);
+
+  overflow: hidden;
+
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: var(--tfv-os-radius-pill);
+}
+
+.tfv-os-intelligence-overlay__progress span {
+  display: block;
+
+  width: 12%;
+  height: 100%;
+
+  background:
+    linear-gradient(
+      90deg,
+      #8f612c,
+      var(--tfv-os-gold-light),
+      #8f612c
+    );
+
+  border-radius: inherit;
+
+  box-shadow:
+    var(--tfv-os-glow-gold-small);
+
+  transition:
+    width
+    var(--tfv-os-motion-fast)
+    var(--tfv-os-ease-standard);
+}
+
+.tfv-os-intelligence-overlay__status {
+  margin-top: 11px;
+
+  color: rgba(255, 255, 255, 0.45);
+
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tfv-os-intelligence--scanning {
+  min-height: unset;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tfv-os-intelligence-overlay,
+  .tfv-os-intelligence-overlay__progress span {
+    transition: none;
+  }
+}
+
+/* =========================================
+   FABRIC VAULT OS — LIVE PRESENCE
+   Version 1.1.0 RC1
+========================================= */
+
+.tfv-os-status__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  padding: 7px 10px;
+
+  color: var(--tfv-os-green);
+  background: rgba(74, 222, 128, 0.06);
+
+  border: 1px solid var(--tfv-os-border-green);
+  border-radius: var(--tfv-os-radius-pill);
+
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tfv-os-status__live > span {
+  width: 6px;
+  height: 6px;
+
+  background: var(--tfv-os-green);
+  border-radius: 50%;
+
+  box-shadow:
+    var(--tfv-os-glow-green-small);
+
+  animation:
+    tfvOsPresenceBreathe
+    1.9s
+    var(--tfv-os-ease-standard)
+    infinite;
+}
+
+.tfv-os-status.is-updating
+.tfv-os-status__live {
+  color: var(--tfv-os-gold-light);
+  background: rgba(197, 157, 95, 0.07);
+
+  border-color:
+    var(--tfv-os-border-gold-active);
+}
+
+.tfv-os-status.is-updating
+.tfv-os-status__live > span,
+.tfv-os-status.is-updating
+.tfv-os-status__live-led {
+  background: var(--tfv-os-gold);
+
+  box-shadow:
+    var(--tfv-os-glow-gold-medium);
+}
+
+.tfv-os-status__metric.is-updated {
+  animation:
+    tfvOsPresenceMetricUpdate
+    var(--tfv-os-motion-feature)
+    var(--tfv-os-ease-premium)
+    both;
+}
+
+@keyframes tfvOsPresenceBreathe {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.88);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tfvOsPresenceMetricUpdate {
+  0% {
+    border-color:
+      rgba(197, 157, 95, 0.12);
+
+    background:
+      rgba(197, 157, 95, 0.025);
+  }
+
+  45% {
+    border-color:
+      var(--tfv-os-border-gold-active);
+
+    background:
+      rgba(197, 157, 95, 0.08);
+
+    box-shadow:
+      var(--tfv-os-glow-gold-small);
+  }
+
+  100% {
+    border-color:
+      var(--tfv-os-border-neutral);
+
+    background:
+      rgba(255, 255, 255, 0.02);
+
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tfv-os-status__live > span,
+  .tfv-os-status__metric.is-updated {
+    animation: none;
+  }
+}
+
+/* =========================================
+   FABRIC VAULT OS — VAULT ADVISOR
+   Version 1.1.0 RC1
+========================================= */
+
+.tfv-os-advisor {
+  position: relative;
+  z-index: 2;
+
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: var(--tfv-os-space-3);
+
+  margin-top: 17px;
+  padding: 14px;
+
+  overflow: hidden;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(197, 157, 95, 0.075),
+      rgba(255, 255, 255, 0.018)
+    );
+
+  border:
+    1px solid
+    var(--tfv-os-border-gold);
+
+  border-radius:
+    var(--tfv-os-radius-standard);
+
+  animation:
+    tfvOsAdvisorEnter
+    var(--tfv-os-motion-comfort)
+    var(--tfv-os-ease-premium)
+    both;
+}
+
+.tfv-os-advisor::after {
+  content: "";
+
+  position: absolute;
+  top: -45px;
+  right: -45px;
+
+  width: 100px;
+  height: 100px;
+
+  background:
+    rgba(197, 157, 95, 0.08);
+
+  border-radius: 50%;
+
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+.tfv-os-advisor__signal {
+  position: relative;
+  z-index: 1;
+
+  display: grid;
+  place-items: center;
+
+  width: 34px;
+  height: 34px;
+
+  color: var(--tfv-os-black);
+
+  background:
+    linear-gradient(
+      135deg,
+      #ad7d3d,
+      var(--tfv-os-gold-light),
+      #9d6b2e
+    );
+
+  border-radius: 50%;
+
+  font-size: 0.8rem;
+  font-weight: 900;
+
+  box-shadow:
+    var(--tfv-os-glow-gold-small);
+}
+
+.tfv-os-advisor__content {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.tfv-os-advisor__kicker,
+.tfv-os-advisor__title {
+  display: block;
+}
+
+.tfv-os-advisor__kicker {
+  color: var(--tfv-os-gold);
+
+  font-size: 7px;
+  font-weight: 850;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tfv-os-advisor__title {
+  margin-top: 5px;
+
+  color: var(--tfv-os-text-primary);
+
+  font-size: 0.77rem;
+  line-height: 1.4;
+}
+
+.tfv-os-advisor__message {
+  margin: 6px 0 0;
+
+  color: var(--tfv-os-text-body);
+
+  font-size: 0.69rem;
+  line-height: 1.55;
+}
+
+.tfv-os-advisor__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  margin-top: 10px;
+
+  color: var(--tfv-os-gold-light);
+
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.tfv-os-advisor__action span {
+  transition:
+    transform
+    var(--tfv-os-motion-fast)
+    var(--tfv-os-ease-standard);
+}
+
+.tfv-os-advisor__action:hover span {
+  transform: translateX(3px);
+}
+
+.tfv-os-advisor--priority {
+  border-color:
+    var(--tfv-os-border-gold-active);
+
+  box-shadow:
+    inset 0 1px 0
+      rgba(255, 255, 255, 0.03),
+    var(--tfv-os-glow-gold-small);
+}
+
+.tfv-os-advisor--protection {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(74, 222, 128, 0.055),
+      rgba(255, 255, 255, 0.018)
+    );
+
+  border-color:
+    var(--tfv-os-border-green);
+}
+
+.tfv-os-advisor--protection::after {
+  background:
+    rgba(74, 222, 128, 0.07);
+}
+
+.tfv-os-advisor--protection
+.tfv-os-advisor__signal {
+  color: #07140b;
+  background: var(--tfv-os-green);
+
+  box-shadow:
+    var(--tfv-os-glow-green-small);
+}
+
+.tfv-os-advisor--protection
+.tfv-os-advisor__kicker,
+.tfv-os-advisor--protection
+.tfv-os-advisor__action {
+  color: var(--tfv-os-green);
+}
+
+.tfv-os-advisor--verified {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(74, 222, 128, 0.065),
+      rgba(255, 255, 255, 0.018)
+    );
+
+  border-color:
+    var(--tfv-os-border-green);
+}
+
+.tfv-os-advisor--verified::after {
+  background:
+    rgba(74, 222, 128, 0.08);
+}
+
+.tfv-os-advisor--verified
+.tfv-os-advisor__signal {
+  color: #07140b;
+  background: var(--tfv-os-green);
+
+  box-shadow:
+    var(--tfv-os-glow-green-small);
+}
+
+.tfv-os-advisor--verified
+.tfv-os-advisor__kicker {
+  color: var(--tfv-os-green);
+}
+
+.tfv-os-advisor__action--button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  padding: 0;
+
+  appearance: none;
+  -webkit-appearance: none;
+
+  background: transparent;
+  border: 0;
+
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+}
+
+@keyframes tfvOsAdvisorEnter {
+  from {
+    opacity: 0;
+
+    transform:
+      translateY(6px)
+      scale(0.995);
+  }
+
+  to {
+    opacity: 1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tfv-os-advisor {
+    animation: none;
+  }
+
+  .tfv-os-advisor__action span {
+    transition: none;
+  }
+}
+
+/* =========================================
+   FABRIC VAULT OS — DISPATCH INTELLIGENCE
+   Version 1.1.0 RC1
+========================================= */
+
+.tfv-os-dispatch-estimate {
+  position: relative;
+  z-index: 1;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tfv-os-space-4);
+
+  margin-top: 17px;
+  padding: 15px;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(74, 222, 128, 0.075),
+      rgba(255, 255, 255, 0.018)
+    );
+
+  border:
+    1px solid
+    var(--tfv-os-border-green);
+
+  border-radius:
+    var(--tfv-os-radius-standard);
+}
+
+.tfv-os-checkout--scheduled
+.tfv-os-dispatch-estimate {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(197, 157, 95, 0.085),
+      rgba(255, 255, 255, 0.018)
+    );
+
+  border-color:
+    var(--tfv-os-border-gold);
+}
+
+.tfv-os-dispatch-estimate__identity {
+  min-width: 0;
+}
+
+.tfv-os-dispatch-estimate__label,
+.tfv-os-dispatch-estimate__identity strong,
+.tfv-os-dispatch-estimate__detail {
+  display: block;
+}
+
+.tfv-os-dispatch-estimate__label {
+  color: var(--tfv-os-text-muted);
+
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.tfv-os-dispatch-estimate__identity strong {
+  margin-top: 5px;
+
+  color: var(--tfv-os-text-primary);
+
+  font-family: "Playfair Display", serif;
+  font-size: 1.28rem;
+  line-height: 1.15;
+}
+
+.tfv-os-dispatch-estimate__detail {
+  margin-top: 5px;
+
+  color: rgba(255, 255, 255, 0.46);
+
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.tfv-os-dispatch-estimate__signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  flex: 0 0 auto;
+
+  padding: 7px 9px;
+
+  color: var(--tfv-os-green);
+  background: rgba(74, 222, 128, 0.06);
+
+  border:
+    1px solid
+    var(--tfv-os-border-green);
+
+  border-radius:
+    var(--tfv-os-radius-pill);
+
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tfv-os-dispatch-estimate__signal > span {
+  width: 6px;
+  height: 6px;
+
+  background: var(--tfv-os-green);
+  border-radius: 50%;
+
+  box-shadow:
+    var(--tfv-os-glow-green-small);
+
+  animation:
+    tfvOsDispatchSignal
+    1.8s
+    var(--tfv-os-ease-standard)
+    infinite;
+}
+
+.tfv-os-dispatch-estimate__signal--scheduled {
+  color: var(--tfv-os-gold-light);
+  background: rgba(197, 157, 95, 0.07);
+
+  border-color:
+    var(--tfv-os-border-gold);
+}
+
+.tfv-os-dispatch-estimate__signal--scheduled > span {
+  background: var(--tfv-os-gold);
+
+  box-shadow:
+    var(--tfv-os-glow-gold-small);
+}
+
+.tfv-os-dispatch-operations {
+  position: relative;
+  z-index: 1;
+
+  display: grid;
+  gap: 1px;
+
+  margin-top: var(--tfv-os-space-3);
+
+  overflow: hidden;
+
+  background:
+    rgba(255, 255, 255, 0.055);
+
+  border:
+    1px solid
+    var(--tfv-os-border-neutral);
+
+  border-radius:
+    var(--tfv-os-radius-standard);
+}
+
+.tfv-os-dispatch-operation {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+
+  padding: 11px 12px;
+
+  background:
+    var(--tfv-os-panel);
+
+  transition:
+    background
+    var(--tfv-os-motion-fast)
+    var(--tfv-os-ease-standard);
+}
+
+.tfv-os-dispatch-operation:hover {
+  background:
+    rgba(255, 255, 255, 0.028);
+}
+
+.tfv-os-dispatch-operation__icon {
+  display: grid;
+  place-items: center;
+
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+
+  color: #07140b;
+  background: var(--tfv-os-green);
+
+  border-radius: 50%;
+
+  font-size: 0.66rem;
+  font-weight: 900;
+
+  box-shadow:
+    var(--tfv-os-glow-green-small);
+}
+
+.tfv-os-dispatch-operation__icon--optional {
+  color: var(--tfv-os-gold);
+  background: rgba(197, 157, 95, 0.08);
+
+  border:
+    1px solid
+    var(--tfv-os-border-gold);
+
+  box-shadow: none;
+}
+
+.tfv-os-dispatch-operation small,
+.tfv-os-dispatch-operation strong {
+  display: block;
+}
+
+.tfv-os-dispatch-operation small {
+  color: var(--tfv-os-text-faint);
+
+  font-size: 6.5px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.tfv-os-dispatch-operation strong {
+  margin-top: 3px;
+
+  color: var(--tfv-os-text-secondary);
+
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+@keyframes tfvOsDispatchSignal {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: scale(0.88);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (max-width: 370px) {
+  .tfv-os-dispatch-estimate {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tfv-os-dispatch-estimate__signal > span {
+    animation: none;
+  }
+}
