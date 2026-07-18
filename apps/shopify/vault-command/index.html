@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>Vault Command</title>
+
+  <link
+    rel="stylesheet"
+    href="./vault-command.css"
+  >
+</head>
+
+<body>
+  <main class="vault-command">
+    <header class="vault-header">
+      <div>
+        <p class="vault-eyebrow">
+          VAULT COMMAND
+        </p>
+
+        <h1 id="vault-greeting">
+          Good Afternoon, Tom.
+        </h1>
+
+        <p class="vault-subtitle">
+          Live intelligence from The Fabric Vault.
+        </p>
+      </div>
+
+      <div class="vault-status">
+        <span class="vault-status-dot"></span>
+
+        <div>
+          <strong>Operator Online</strong>
+          <span id="vault-updated">
+            Connecting…
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <section class="vault-metrics">
+      <article class="vault-card">
+        <span class="vault-label">
+          Total page views
+        </span>
+
+        <strong
+          class="vault-value"
+          id="total-page-views"
+        >
+          —
+        </strong>
+
+        <span class="vault-detail">
+          Today
+        </span>
+      </article>
+
+      <article class="vault-card">
+        <span class="vault-label">
+          Tracked views
+        </span>
+
+        <strong
+          class="vault-value"
+          id="tracked-page-views"
+        >
+          —
+        </strong>
+
+        <span
+          class="vault-detail"
+          id="tracked-percentage"
+        >
+          —
+        </span>
+      </article>
+
+      <article class="vault-card">
+        <span class="vault-label">
+          Privacy-protected views
+        </span>
+
+        <strong
+          class="vault-value"
+          id="privacy-page-views"
+        >
+          —
+        </strong>
+
+        <span
+          class="vault-detail"
+          id="privacy-percentage"
+        >
+          —
+        </span>
+      </article>
+
+      <article class="vault-card">
+        <span class="vault-label">
+          Tracked sessions
+        </span>
+
+        <strong
+          class="vault-value"
+          id="tracked-sessions"
+        >
+          —
+        </strong>
+
+        <span class="vault-detail">
+          Consented journeys
+        </span>
+      </article>
+    </section>
+
+    <section class="vault-layout">
+      <article class="vault-panel">
+        <div class="vault-panel-header">
+          <div>
+            <span class="vault-label">
+              Operator Brief
+            </span>
+
+            <h2>Today’s traffic</h2>
+          </div>
+        </div>
+
+        <p
+          class="vault-brief"
+          id="operator-brief"
+        >
+          Vault OS is retrieving your live store data.
+        </p>
+      </article>
+
+      <article class="vault-panel">
+        <div class="vault-panel-header">
+          <div>
+            <span class="vault-label">
+              Traffic Breakdown
+            </span>
+
+            <h2>Views by page type</h2>
+          </div>
+        </div>
+
+        <div id="page-type-list">
+          <p class="vault-loading">
+            Loading traffic…
+          </p>
+        </div>
+      </article>
+    </section>
+
+    <div
+      class="vault-error"
+      id="vault-error"
+      hidden
+    ></div>
+  </main>
+
+  <script src="./vault-command.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 /**
  * Vault OS Collector
- * Sprint 009: Page-view heartbeat
+ * Sprint 010: Consent-aware Traffic Intelligence
  */
 
 const VAULT_COLLECTOR_ENDPOINT =
@@ -8,66 +8,77 @@ const VAULT_COLLECTOR_ENDPOINT =
 
 let vaultPrivacyStatus = init.customerPrivacy;
 
-/**
- * Keep the privacy status current if the visitor changes consent
- * without refreshing the page.
- */
-customerPrivacy.subscribe("visitorConsentCollected", (event) => {
-  vaultPrivacyStatus = event.customerPrivacy;
-});
+api.customerPrivacy.subscribe(
+  "visitorConsentCollected",
+  function (event) {
+    vaultPrivacyStatus = event.customerPrivacy;
+  }
+);
 
 function getPageType(pathname) {
   if (pathname === "/") return "home";
-  if (pathname.startsWith("/products/")) return "product";
-  if (pathname.startsWith("/collections/")) return "collection";
-  if (pathname.startsWith("/cart")) return "cart";
-  if (pathname.startsWith("/checkouts/")) return "checkout";
+  if (pathname.indexOf("/products/") === 0) return "product";
+  if (pathname.indexOf("/collections/") === 0) return "collection";
+  if (pathname.indexOf("/cart") === 0) return "cart";
+  if (pathname.indexOf("/checkouts/") === 0) return "checkout";
 
   return "page";
 }
 
 function sendVaultEvent(payload) {
-  return fetch(VAULT_COLLECTOR_ENDPOINT, {
+  fetch(VAULT_COLLECTOR_ENDPOINT, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(payload),
-    keepalive: true,
-  }).catch((error) => {
+    keepalive: true
+  }).catch(function (error) {
     console.error("[Vault OS Collector]", error);
   });
 }
 
-analytics.subscribe("page_viewed", (event) => {
+analytics.subscribe("page_viewed", function (event) {
   const analyticsAllowed =
-    vaultPrivacyStatus?.analyticsProcessingAllowed === true;
+    vaultPrivacyStatus &&
+    vaultPrivacyStatus.analyticsProcessingAllowed === true;
 
-  const location = event.context?.document?.location;
-  const pathname = location?.pathname || "/";
+  const location = event.context.document.location;
+  const pathname = location.pathname || "/";
+  const pageTitle = event.context.document.title || null;
+
+  if (analyticsAllowed) {
+    sendVaultEvent({
+      event_name: "PAGE_VIEW",
+      event_source: "storefront",
+      analytics_allowed: true,
+      session_id: event.clientId,
+      page_path: pathname,
+      page_type: getPageType(pathname),
+      metadata: {
+        shopify_event_name: event.name,
+        shopify_event_id: event.id,
+        occurred_at: event.timestamp,
+        page_title: pageTitle,
+        privacy_mode: "tracked"
+      }
+    });
+
+    return;
+  }
 
   sendVaultEvent({
     event_name: "PAGE_VIEW",
     event_source: "storefront",
-    analytics_allowed: analyticsAllowed,
-
-    /*
-     * Only attach Shopify's client identifier where analytics
-     * permission exists. Privacy-limited traffic gets no identifier.
-     */
-    session_id: analyticsAllowed
-      ? event.clientId
-      : undefined,
-
+    analytics_allowed: false,
     page_path: pathname,
     page_type: getPageType(pathname),
-
     metadata: {
       shopify_event_name: event.name,
       shopify_event_id: event.id,
       occurred_at: event.timestamp,
-      page_title:
-        event.context?.document?.title || null,
-    },
+      page_title: pageTitle,
+      privacy_mode: "privacy_limited"
+    }
   });
 });
