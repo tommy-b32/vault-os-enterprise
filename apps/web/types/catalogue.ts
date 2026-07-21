@@ -1,41 +1,29 @@
-export type InventoryStrategy =
-  | "stocked"
-  | "do_not_restock"
-  | "discontinued"
-  | "dropship"
-  | "service";
+export type ProductCommercialCost = {
+  currency: string;
+  exchange_rate_to_gbp: number;
 
-export type PackProfile =
-  | "tee_5_piece"
-  | "polo_6_piece"
-  | "hoodie"
-  | "custom";
+  pack_cost: number | null;
+  shipping_cost_per_pack: number | null;
+  import_cost_per_pack: number | null;
 
-export type CatalogueProduct = {
-  product_id: string;
-  product_name: string;
-  product_type: string | null;
-  status: string | null;
+  units_per_pack: number | null;
 
-  supplier_id: string | null;
-  supplier_company: string | null;
+  landed_cost_per_pack: number | null;
+  landed_cost_per_pack_gbp: number | null;
+  landed_cost_per_unit: number | null;
 
-  inventory_strategy: InventoryStrategy;
-  restock_enabled: boolean;
+  average_selling_price: number | null;
 
-  pack_profile: PackProfile | null;
-  supplier_moq_packs: number | null;
-  target_stock_days: number | null;
+  estimated_gross_profit_per_unit: number | null;
+  estimated_margin_percent: number | null;
 
-  decision_reason: string | null;
-  notes: string | null;
+  estimated_return_on_pack_capital_percent:
+    | number
+    | null;
 
-  stock_on_hand?: number;
-  complete_packs?: number;
-  loose_units?: number;
-};
+  commercial_cost_trusted: boolean;
+  missing_commercial_requirements: string[];
 
-export type CatalogueSupplier = {
-  id: string;
-  supplier_name: string;
+  last_supplier_price_update: string | null;
+  commercial_notes: string | null;
 };

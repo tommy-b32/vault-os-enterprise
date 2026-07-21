@@ -1,44 +1,65 @@
 "use client";
 
-import { useActionState } from "react";
-import { ProductSaveButton } from "@/components/catalogue/ProductSaveButton";
-import { ProductStats } from "@/components/catalogue/ProductStats";
-import type {
-  CatalogueProduct,
-  CatalogueSupplier,
-} from "@/types/catalogue";
+import {
+  useActionState,
+  useEffect,
+  useState,
+} from "react";
 
 import {
   updateProductSettings,
   type ProductSettingsActionState,
 } from "@/app/catalogue/actions";
 
+import { ProductSaveButton } from "@/components/catalogue/ProductSaveButton";
+import { ProductStats } from "@/components/catalogue/ProductStats";
+import {
+  ProductEditorTabs,
+  type ProductEditorTab,
+} from "@/components/catalogue/ProductEditorTabs";
+import { ProductBusinessTab } from "@/components/catalogue/editor/ProductBusinessTab";
+import { ProductCommercialTab } from "@/components/catalogue/editor/ProductCommercialTab";
+
+import type {
+  CatalogueProduct,
+  CatalogueSupplier,
+} from "@/types/catalogue";
+
 type ProductEditorProps = {
   product: CatalogueProduct | null;
   suppliers: CatalogueSupplier[];
 };
 
-const strategies = [
-  ["stocked", "Stocked"],
-  ["do_not_restock", "Do not restock"],
-  ["discontinued", "Discontinued"],
-  ["dropship", "Dropship"],
-  ["service", "Service"],
-] as const;
+const requirementLabels: Record<string, string> = {
+  supplier: "Supplier assigned",
+  inventory_strategy: "Inventory strategy",
+  pack_profile: "Pack profile",
+  supplier_moq: "Supplier MOQ",
+  target_stock_days: "Target stock days",
+};
 
-const packProfiles = [
-  ["", "No pack profile"],
-  ["tee_5_piece", "Tee — 5 piece"],
-  ["polo_6_piece", "Polo — 6 piece"],
-  ["hoodie", "Hoodie"],
-  ["custom", "Custom"],
-] as const;
+function getNextActions(
+  product: CatalogueProduct,
+): string[] {
+  if (product.missing_requirements.length === 0) {
+    return [
+      "No action required",
+      "Vault Brain can trust this product",
+    ];
+  }
+
+  return product.missing_requirements.map(
+    (requirement) =>
+      requirementLabels[requirement] ??
+      requirement.replaceAll("_", " "),
+  );
+}
 
 export function ProductEditor({
   product,
   suppliers,
 }: ProductEditorProps) {
-      const initialState: ProductSettingsActionState = {
+  const initialState: ProductSettingsActionState = {
     status: "idle",
     message: "",
   };
@@ -47,6 +68,13 @@ export function ProductEditor({
     updateProductSettings,
     initialState,
   );
+
+  const [activeTab, setActiveTab] =
+    useState<ProductEditorTab>("business");
+
+  useEffect(() => {
+    setActiveTab("business");
+  }, [product?.product_id]);
 
   if (!product) {
     return (
@@ -65,6 +93,51 @@ export function ProductEditor({
       </section>
     );
   }
+
+  const checks = [
+    {
+      key: "supplier",
+      label: "Supplier assigned",
+      complete:
+        !product.missing_requirements.includes(
+          "supplier",
+        ),
+    },
+    {
+      key: "inventory_strategy",
+      label: "Inventory strategy",
+      complete:
+        !product.missing_requirements.includes(
+          "inventory_strategy",
+        ),
+    },
+    {
+      key: "pack_profile",
+      label: "Pack profile",
+      complete:
+        !product.missing_requirements.includes(
+          "pack_profile",
+        ),
+    },
+    {
+      key: "supplier_moq",
+      label: "Supplier MOQ",
+      complete:
+        !product.missing_requirements.includes(
+          "supplier_moq",
+        ),
+    },
+    {
+      key: "target_stock_days",
+      label: "Target stock days",
+      complete:
+        !product.missing_requirements.includes(
+          "target_stock_days",
+        ),
+    },
+  ];
+
+  const nextActions = getNextActions(product);
 
   return (
     <form
@@ -97,178 +170,266 @@ export function ProductEditor({
         <span
           className={`catalogue-strategy-badge strategy-${product.inventory_strategy}`}
         >
-          {product.inventory_strategy
-            .replaceAll("_", " ")}
+          {product.inventory_strategy.replaceAll(
+            "_",
+            " ",
+          )}
         </span>
       </header>
 
       <ProductStats product={product} />
 
-      <section className="product-editor-section">
-        <div className="product-editor-section-heading">
+      <section className="configuration-health-card">
+        <div className="configuration-health-header">
           <div>
             <p className="vault-eyebrow">
-              Business Rules
+              Vault Brain
             </p>
 
-            <h3>Product configuration</h3>
+            <h3>Product Readiness</h3>
           </div>
 
-          <p>
-            These settings are private to Vault OS and
-            will not be overwritten by Shopify.
-          </p>
+          <span
+            className={`configuration-confidence confidence-${product.brain_confidence}`}
+          >
+            {product.brain_confidence === "high" &&
+              "Trusted"}
+
+            {product.brain_confidence === "limited" &&
+              "Limited confidence"}
+
+            {product.brain_confidence === "untrusted" &&
+              "Low confidence"}
+          </span>
         </div>
 
-        <div className="product-editor-grid">
-          <label>
-            <span>Supplier company</span>
+        <div className="configuration-score-row">
+          <strong>
+            {product.configuration_score}%
+          </strong>
 
-            <select
-              defaultValue={product.supplier_id ?? ""}
-              name="supplier_id"
+          <span>
+            {product.configuration_state.replaceAll(
+              "_",
+              " ",
+            )}
+          </span>
+        </div>
+
+        <div className="configuration-progress">
+          <span
+            style={{
+              width: `${product.configuration_score}%`,
+            }}
+          />
+        </div>
+
+        <div className="configuration-checklist">
+          {checks.map((check) => (
+            <div
+              className={`configuration-check ${
+                check.complete
+                  ? "is-complete"
+                  : "is-missing"
+              }`}
+              key={check.key}
             >
-              <option value="">
-                Not assigned
-              </option>
+              <span aria-hidden="true">
+                {check.complete ? "✓" : "✕"}
+              </span>
 
-              {suppliers.map((supplier) => (
-                <option
-                  key={supplier.id}
-                  value={supplier.id}
-                >
-                  {supplier.supplier_name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <span>{check.label}</span>
+            </div>
+          ))}
+        </div>
 
-          <label>
-            <span>Inventory strategy</span>
+        <div className="configuration-next-action">
+          <span>
+            {nextActions.length === 1
+              ? "Next action"
+              : "Next actions"}
+          </span>
 
-            <select
-              defaultValue={
-                product.inventory_strategy
-              }
-              name="inventory_strategy"
-            >
-              {strategies.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ul>
+            {nextActions.map((action) => (
+              <li key={action}>{action}</li>
+            ))}
+          </ul>
+        </div>
 
-          <label>
-            <span>Pack profile</span>
+        <div className="vault-brain-panel">
+          <div className="vault-brain-panel-header">
+            <p className="vault-eyebrow">
+              Vault Brain Analysis
+            </p>
 
-            <select
-              defaultValue={
-                product.pack_profile ?? ""
-              }
-              name="pack_profile"
-            >
-              {packProfiles.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <h4>
+              {product.configuration_trusted
+                ? "Decision Engine Ready"
+                : "Decision Engine Waiting"}
+            </h4>
+          </div>
 
-          <label>
-            <span>Supplier MOQ — packs</span>
+          {!product.configuration_trusted ? (
+            <>
+              <p className="vault-brain-message">
+                Vault Brain does not yet have enough
+                information to make reliable purchasing
+                decisions for this product.
+              </p>
 
-            <input
-              defaultValue={
-                product.supplier_moq_packs ?? ""
-              }
-              min="0"
-              name="supplier_moq_packs"
-              placeholder="Example: 20"
-              type="number"
-            />
-          </label>
+              <div className="vault-brain-summary">
+                <div>
+                  <span>Confidence</span>
+                  <strong>
+                    {product.configuration_score}%
+                  </strong>
+                </div>
 
-          <label>
-            <span>Target stock days</span>
+                <div>
+                  <span>Missing Rules</span>
+                  <strong>
+                    {product.missing_requirement_count}
+                  </strong>
+                </div>
 
-            <input
-              defaultValue={
-                product.target_stock_days ?? ""
-              }
-              min="0"
-              name="target_stock_days"
-              placeholder="Example: 30"
-              type="number"
-            />
-          </label>
+                <div>
+                  <span>Estimated Setup</span>
+                  <strong>
+                    {product.missing_requirement_count *
+                      10}{" "}
+                    sec
+                  </strong>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="vault-brain-message">
+                Vault Brain understands this product and
+                can safely include it in future stock
+                recommendations.
+              </p>
 
-          <label className="product-editor-toggle">
-            <span>Restock enabled</span>
+              <div className="vault-brain-summary">
+                <div>
+                  <span>Status</span>
+                  <strong>Trusted</strong>
+                </div>
 
-            <input
-              defaultChecked={
-                product.restock_enabled
-              }
-              name="restock_enabled"
-              type="checkbox"
-            />
+                <div>
+                  <span>Reorder Engine</span>
+                  <strong>
+                    {product.trusted_for_reorder
+                      ? "Enabled"
+                      : "Disabled"}
+                  </strong>
+                </div>
 
-            <small>
-              Include this product in future reorder
-              recommendations.
-            </small>
-          </label>
-
-          <label className="product-editor-wide">
-            <span>Decision reason</span>
-
-            <input
-              defaultValue={
-                product.decision_reason ?? ""
-              }
-              name="decision_reason"
-              placeholder="Example: Slow seller"
-              type="text"
-            />
-          </label>
-
-          <label className="product-editor-wide">
-            <span>Private notes</span>
-
-            <textarea
-              defaultValue={product.notes ?? ""}
-              name="notes"
-              placeholder="Record supplier, quality or purchasing notes..."
-              rows={4}
-            />
-          </label>
+                <div>
+                  <span>Confidence</span>
+                  <strong>
+                    {product.configuration_score}%
+                  </strong>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
-      <footer className="product-editor-footer">
-        <div>
-          <strong>Vault business memory</strong>
+      <ProductEditorTabs
+        activeTab={activeTab}
+        onChange={setActiveTab}
+      />
+
+      {activeTab === "business" && (
+        <ProductBusinessTab
+          product={product}
+          suppliers={suppliers}
+        />
+      )}
+
+      {activeTab === "commercial" && (
+        <ProductCommercialTab
+          product={product}
+        />
+      )}
+
+      {activeTab === "inventory" && (
+        <section className="product-editor-section product-workspace-placeholder">
+          <p className="vault-eyebrow">
+            Inventory Intelligence
+          </p>
+
+          <h3>Stock position and pack health</h3>
 
           <p>
-            Saving will update Inventory Intelligence,
-            supplier planning and future Vault Advisor
-            recommendations.
+            Current stock, complete packs and broken
+            size-run intelligence will be expanded here.
           </p>
-        </div>
+        </section>
+      )}
 
-        <ProductSaveButton />
-      </footer>
-            {saveState.status !== "idle" && (
-        <p
-          aria-live="polite"
-          className={`product-save-message is-${saveState.status}`}
-        >
-          {saveState.status === "success" ? "✓ " : "⚠ "}
-          {saveState.message}
-        </p>
+      {activeTab === "purchasing" && (
+        <section className="product-editor-section product-workspace-placeholder">
+          <p className="vault-eyebrow">
+            Vault Brain Purchasing
+          </p>
+
+          <h3>Purchasing recommendation</h3>
+
+          <p>
+            Supplier basket recommendations,
+            affordability and expected return will
+            appear here.
+          </p>
+        </section>
+      )}
+
+      {activeTab === "history" && (
+        <section className="product-editor-section product-workspace-placeholder">
+          <p className="vault-eyebrow">
+            Product History
+          </p>
+
+          <h3>Commercial and purchasing records</h3>
+
+          <p>
+            Supplier price changes, purchase history and
+            audit events will appear here.
+          </p>
+        </section>
+      )}
+
+      {activeTab === "business" && (
+        <>
+          <footer className="product-editor-footer">
+            <div>
+              <strong>Vault business memory</strong>
+
+              <p>
+                Saving will update Inventory
+                Intelligence, supplier planning and
+                future Vault Advisor recommendations.
+              </p>
+            </div>
+
+            <ProductSaveButton />
+          </footer>
+
+          {saveState.status !== "idle" && (
+            <p
+              aria-live="polite"
+              className={`product-save-message is-${saveState.status}`}
+            >
+              {saveState.status === "success"
+                ? "✓ "
+                : "⚠ "}
+              {saveState.message}
+            </p>
+          )}
+        </>
       )}
     </form>
   );

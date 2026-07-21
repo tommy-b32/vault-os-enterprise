@@ -1,5 +1,6 @@
 import type {
   CatalogueProduct,
+  ConfigurationState,
 } from "@/types/catalogue";
 
 type ProductListProps = {
@@ -16,22 +17,18 @@ const strategyLabels = {
   service: "Service",
 } as const;
 
-function needsConfiguration(
-  product: CatalogueProduct,
-): boolean {
-  if (
-    product.inventory_strategy === "dropship" ||
-    product.inventory_strategy === "service" ||
-    product.inventory_strategy === "discontinued"
-  ) {
-    return false;
-  }
-
-  return (
-    !product.supplier_id ||
-    !product.pack_profile
-  );
-}
+const configurationLabels: Record<
+  ConfigurationState,
+  string
+> = {
+  ready: "Ready",
+  almost_ready: "Almost Ready",
+  needs_configuration: "Needs Config",
+  dropship_ready: "Dropship",
+  do_not_restock: "Do Not Restock",
+  discontinued: "Discontinued",
+  service: "Service",
+};
 
 export function ProductList({
   products,
@@ -52,8 +49,10 @@ export function ProductList({
         const selected =
           product.product_id === selectedProductId;
 
-        const requiresSetup =
-          needsConfiguration(product);
+        const configurationLabel =
+          configurationLabels[
+            product.configuration_state
+          ];
 
         return (
           <button
@@ -80,17 +79,23 @@ export function ProductList({
 
                 <span aria-hidden="true">•</span>
 
-                {strategyLabels[
-                  product.inventory_strategy
-                ]}
+                {
+                  strategyLabels[
+                    product.inventory_strategy
+                  ]
+                }
+              </span>
+
+              <span className="product-list-score">
+                {product.configuration_score}% configured
               </span>
             </span>
 
-            {requiresSetup && (
-              <span className="product-list-warning">
-                Setup
-              </span>
-            )}
+            <span
+              className={`product-list-health health-${product.configuration_state}`}
+            >
+              {configurationLabel}
+            </span>
           </button>
         );
       })}

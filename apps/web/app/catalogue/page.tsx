@@ -5,24 +5,68 @@ import type {
   CatalogueSupplier,
   InventoryStrategy,
   PackProfile,
+  ProductCommercialCost,
 } from "@/types/catalogue";
 
 export const dynamic = "force-dynamic";
+
+type ConfigurationState =
+  | "ready"
+  | "almost_ready"
+  | "needs_configuration"
+  | "dropship_ready"
+  | "do_not_restock"
+  | "discontinued"
+  | "service";
+
+type BrainConfidence =
+  | "high"
+  | "limited"
+  | "untrusted";
 
 type ProductMasterRow = {
   product_id: string;
   product_name: string;
   product_type: string | null;
   status: string | null;
+
   supplier_id: string | null;
   supplier_company: string | null;
+
   inventory_strategy: InventoryStrategy | null;
   restock_enabled: boolean | null;
+
   pack_profile: PackProfile | null;
   supplier_moq_packs: number | null;
   target_stock_days: number | null;
+
   decision_reason: string | null;
   notes: string | null;
+
+  configuration_score: number | null;
+  configuration_state: ConfigurationState | null;
+
+  missing_requirements: string[] | null;
+  missing_requirement_count: number | null;
+
+  configuration_trusted: boolean | null;
+  trusted_for_reorder: boolean | null;
+
+  brain_confidence: BrainConfidence | null;
+};
+
+type ConfigurationSummaryRow = {
+  total_products: number | null;
+  fully_configured_products: number | null;
+  products_needing_configuration: number | null;
+  almost_ready_products: number | null;
+  dropship_products: number | null;
+  do_not_restock_products: number | null;
+  discontinued_products: number | null;
+  service_products: number | null;
+  reorder_ready_products: number | null;
+  average_configuration_score: number | null;
+  catalogue_completion_percentage: number | null;
 };
 
 type InventoryRow = {
@@ -36,20 +80,26 @@ type PackRow = {
   loose_units_after_complete_packs: number | null;
 };
 
+type CommercialRow = ProductCommercialCost & {
+  product_id: string;
+};
+
 export default async function CataloguePage() {
   const [
     productResponse,
     supplierResponse,
     inventoryResponse,
     packResponse,
+    summaryResponse,
+    commercialResponse,
   ] = await Promise.all([
     supabaseAdmin
-      .from("vault_product_master")
+      .from("vault_configuration_intelligence")
       .select(`
         product_id,
         product_name,
         product_type,
-        status,
+        shopify_status,
         supplier_id,
         supplier_company,
         inventory_strategy,
@@ -58,7 +108,14 @@ export default async function CataloguePage() {
         supplier_moq_packs,
         target_stock_days,
         decision_reason,
-        notes
+        notes,
+        configuration_score,
+        configuration_state,
+        missing_requirements,
+        missing_requirement_count,
+        configuration_trusted,
+        trusted_for_reorder,
+        brain_confidence
       `)
       .order("product_name", {
         ascending: true,
@@ -83,13 +140,43 @@ export default async function CataloguePage() {
         complete_packs,
         loose_units_after_complete_packs
       `),
+
+    supabaseAdmin
+      .from("vault_configuration_summary")
+      .select("*")
+      .single(),
+
+    supabaseAdmin
+      .from("vault_product_commercial_intelligence")
+      .select(`
+        product_id,
+        currency,
+        exchange_rate_to_gbp,
+        pack_cost,
+        shipping_cost_per_pack,
+        import_cost_per_pack,
+        units_per_pack,
+        landed_cost_per_pack,
+        landed_cost_per_pack_gbp,
+        landed_cost_per_unit,
+        average_selling_price,
+        estimated_gross_profit_per_unit,
+        estimated_margin_percent,
+        estimated_return_on_pack_capital_percent,
+        commercial_cost_trusted,
+        missing_commercial_requirements,
+        last_supplier_price_update,
+        commercial_notes
+      `),
   ]);
 
   const error =
     productResponse.error ??
     supplierResponse.error ??
     inventoryResponse.error ??
-    packResponse.error;
+    packResponse.error ??
+    summaryResponse.error ??
+    commercialResponse.error;
 
   if (error) {
     return (
@@ -101,7 +188,10 @@ export default async function CataloguePage() {
   }
 
   const productRows =
-    (productResponse.data ?? []) as ProductMasterRow[];
+    (productResponse.data ?? []).map((row) => ({
+      ...row,
+      status: row.shopify_status,
+    })) as ProductMasterRow[];
 
   const suppliers =
     (supplierResponse.data ?? []) as CatalogueSupplier[];
@@ -111,6 +201,12 @@ export default async function CataloguePage() {
 
   const packRows =
     (packResponse.data ?? []) as PackRow[];
+
+  const commercialRows =
+    (commercialResponse.data ?? []) as CommercialRow[];
+
+  const summary =
+    summaryResponse.data as ConfigurationSummaryRow;
 
   const stockByProduct = new Map<string, number>();
 
@@ -122,9 +218,8 @@ export default async function CataloguePage() {
   }
 
   /*
-   * Pack intelligence can contain multiple rows per product
-   * because each colour/design has its own size run.
-   * Add those rows together for the product-level editor.
+   * Pack intelligence may contain several rows for one
+   * product because each colour/design has its own size run.
    */
   const packTotalsByProduct = new Map<
     string,
@@ -157,10 +252,101 @@ export default async function CataloguePage() {
     );
   }
 
+  const commercialByProduct = new Map<
+    string,
+    ProductCommercialCost
+  >();
+
+  for (const row of commercialRows) {
+    commercialByProduct.set(row.product_id, {
+      currency: row.currency ?? "GBP",
+
+      exchange_rate_to_gbp:
+        row.exchange_rate_to_gbp ?? 1,
+
+      pack_cost: row.pack_cost,
+
+      shipping_cost_per_pack:
+        row.shipping_cost_per_pack,
+
+      import_cost_per_pack:
+        row.import_cost_per_pack,
+
+      units_per_pack:
+        row.units_per_pack,
+
+      landed_cost_per_pack:
+        row.landed_cost_per_pack,
+
+      landed_cost_per_pack_gbp:
+        row.landed_cost_per_pack_gbp,
+
+      landed_cost_per_unit:
+        row.landed_cost_per_unit,
+
+      average_selling_price:
+        row.average_selling_price,
+
+      estimated_gross_profit_per_unit:
+        row.estimated_gross_profit_per_unit,
+
+      estimated_margin_percent:
+        row.estimated_margin_percent,
+
+      estimated_return_on_pack_capital_percent:
+        row.estimated_return_on_pack_capital_percent,
+
+      commercial_cost_trusted:
+        row.commercial_cost_trusted ?? false,
+
+      missing_commercial_requirements:
+        row.missing_commercial_requirements ?? [],
+
+      last_supplier_price_update:
+        row.last_supplier_price_update,
+
+      commercial_notes:
+        row.commercial_notes,
+    });
+  }
+
+  const emptyCommercialCost: ProductCommercialCost = {
+    currency: "GBP",
+
+    exchange_rate_to_gbp: 1,
+
+    pack_cost: null,
+    shipping_cost_per_pack: null,
+    import_cost_per_pack: null,
+
+    units_per_pack: null,
+
+    landed_cost_per_pack: null,
+    landed_cost_per_pack_gbp: null,
+    landed_cost_per_unit: null,
+
+    average_selling_price: null,
+
+    estimated_gross_profit_per_unit: null,
+    estimated_margin_percent: null,
+
+    estimated_return_on_pack_capital_percent: null,
+
+    commercial_cost_trusted: false,
+    missing_commercial_requirements: [],
+
+    last_supplier_price_update: null,
+    commercial_notes: null,
+  };
+
   const products: CatalogueProduct[] =
     productRows.map((product) => {
       const packTotals =
         packTotalsByProduct.get(product.product_id);
+
+      const commercialCost =
+        commercialByProduct.get(product.product_id) ??
+        emptyCommercialCost;
 
       return {
         product_id: product.product_id,
@@ -179,13 +365,16 @@ export default async function CataloguePage() {
           product.restock_enabled ?? true,
 
         pack_profile: product.pack_profile,
+
         supplier_moq_packs:
           product.supplier_moq_packs,
+
         target_stock_days:
           product.target_stock_days,
 
         decision_reason:
           product.decision_reason,
+
         notes: product.notes,
 
         stock_on_hand:
@@ -196,24 +385,47 @@ export default async function CataloguePage() {
 
         loose_units:
           packTotals?.looseUnits ?? 0,
+
+        configuration_score:
+          product.configuration_score ?? 0,
+
+        configuration_state:
+          product.configuration_state ??
+          "needs_configuration",
+
+        missing_requirements:
+          product.missing_requirements ?? [],
+
+        missing_requirement_count:
+          product.missing_requirement_count ?? 0,
+
+        configuration_trusted:
+          product.configuration_trusted ?? false,
+
+        trusted_for_reorder:
+          product.trusted_for_reorder ?? false,
+
+        brain_confidence:
+          product.brain_confidence ?? "untrusted",
+
+        commercial_cost: commercialCost,
       };
     });
 
-  const needsConfigurationCount =
-    products.filter((product) => {
-      if (
-        product.inventory_strategy === "dropship" ||
-        product.inventory_strategy === "service" ||
-        product.inventory_strategy === "discontinued"
-      ) {
-        return false;
-      }
+  const totalProducts =
+    summary?.total_products ?? products.length;
 
-      return (
-        !product.supplier_id ||
-        !product.pack_profile
-      );
-    }).length;
+  const fullyConfiguredProducts =
+    summary?.fully_configured_products ?? 0;
+
+  const productsNeedingConfiguration =
+    summary?.products_needing_configuration ?? 0;
+
+  const almostReadyProducts =
+    summary?.almost_ready_products ?? 0;
+
+  const completionPercentage =
+    summary?.catalogue_completion_percentage ?? 0;
 
   return (
     <main className="catalogue-page">
@@ -239,47 +451,42 @@ export default async function CataloguePage() {
       <section className="catalogue-summary">
         <article>
           <span>Total products</span>
-          <strong>{products.length}</strong>
+          <strong>{totalProducts}</strong>
         </article>
 
         <article>
-          <span>Need configuring</span>
-          <strong>{needsConfigurationCount}</strong>
+          <span>Fully configured</span>
+          <strong>{fullyConfiguredProducts}</strong>
         </article>
 
         <article>
-          <span>Active suppliers</span>
-          <strong>{suppliers.length}</strong>
+          <span>Almost ready</span>
+          <strong>{almostReadyProducts}</strong>
         </article>
 
         <article>
-          <span>Live stock units</span>
-          <strong>
-            {products.reduce(
-              (total, product) =>
-                total +
-                (product.stock_on_hand ?? 0),
-              0,
-            )}
-          </strong>
+          <span>Catalogue health</span>
+          <strong>{completionPercentage}%</strong>
         </article>
       </section>
 
-      {needsConfigurationCount > 0 && (
+      {productsNeedingConfiguration > 0 && (
         <section className="catalogue-alert">
           <div>
             <strong>
-              {needsConfigurationCount} products need
+              {productsNeedingConfiguration} products need
               configuring
             </strong>
 
             <p>
-              Assign their supplier and pack profile so
-              Vault OS can make reliable recommendations.
+              {fullyConfiguredProducts} ready and{" "}
+              {almostReadyProducts} almost ready. Complete
+              the missing business rules before Vault Brain
+              uses these products for recommendations.
             </p>
           </div>
 
-          <span>Setup required</span>
+          <span>Configuration required</span>
         </section>
       )}
 
