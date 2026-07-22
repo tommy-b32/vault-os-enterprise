@@ -1,9 +1,11 @@
 "use client";
 
 import {
-  useMemo,
   useState,
 } from "react";
+
+import { CommercialReviewCard } from "@/components/catalogue/editor/commercial/CommercialReviewCard";
+import { useCommercialCalculator } from "@/components/catalogue/editor/commercial/useCommercialCalculator";
 
 import type {
   CatalogueProduct,
@@ -12,17 +14,6 @@ import type {
 type ProductCommercialTabProps = {
   product: CatalogueProduct;
 };
-
-function toNumber(
-  value: string,
-  fallback = 0,
-): number {
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed)
-    ? parsed
-    : fallback;
-}
 
 function formatCurrency(
   value: number,
@@ -138,72 +129,29 @@ export function ProductCommercialTab({
       commercial.last_supplier_price_update ?? "",
     );
 
-  const calculations = useMemo(() => {
-    const pack = toNumber(packCost);
-    const shipping = toNumber(shippingCost);
-    const imports = toNumber(importCost);
-    const exchangeRate =
-      currency === "GBP"
-        ? 1
-        : toNumber(exchangeRateToGbp, 1);
-
-    const unitsPerPack =
-      commercial.units_per_pack ?? 0;
-
-    const sellingPrice =
-      toNumber(averageSellingPrice);
-
-    const landedSupplierCurrency =
-      pack + shipping + imports;
-
-    const landedGbp =
-      landedSupplierCurrency * exchangeRate;
-
-    const costPerUnit =
-      unitsPerPack > 0
-        ? landedGbp / unitsPerPack
-        : null;
-
-    const grossProfit =
-      costPerUnit !== null &&
-      sellingPrice > 0
-        ? sellingPrice - costPerUnit
-        : null;
-
-    const marginPercent =
-      grossProfit !== null &&
-      sellingPrice > 0
-        ? (grossProfit / sellingPrice) * 100
-        : null;
-
-    const returnOnCapital =
-      grossProfit !== null &&
-      costPerUnit !== null &&
-      costPerUnit > 0
-        ? (grossProfit / costPerUnit) * 100
-        : null;
-
-    return {
-      landedSupplierCurrency,
-      landedGbp,
-      costPerUnit,
-      grossProfit,
-      marginPercent,
-      returnOnCapital,
-    };
-  }, [
-    averageSellingPrice,
-    commercial.units_per_pack,
-    currency,
-    exchangeRateToGbp,
-    importCost,
-    packCost,
-    shippingCost,
-  ]);
+  const calculations =
+    useCommercialCalculator({
+      currency,
+      exchangeRateToGbp,
+      packCost,
+      shippingCost,
+      importCost,
+      averageSellingPrice,
+      unitsPerPack:
+        commercial.units_per_pack,
+    });
 
   const efficiency = getEfficiencyState(
     calculations.returnOnCapital,
   );
+
+  const packCostEntered =
+    packCost.trim() !== "" &&
+    Number(packCost) > 0;
+
+  const sellingPriceEntered =
+    averageSellingPrice.trim() !== "" &&
+    Number(averageSellingPrice) > 0;
 
   return (
     <section className="product-editor-section commercial-editor">
@@ -470,6 +418,23 @@ export function ProductCommercialTab({
           )}
         </div>
       </div>
+
+      <CommercialReviewCard
+        calculations={calculations}
+        packCostEntered={packCostEntered}
+        productConfigured={
+          product.configuration_trusted
+        }
+        sellingPriceEntered={
+          sellingPriceEntered
+        }
+        supplierAssigned={
+          Boolean(product.supplier_id)
+        }
+        unitsPerPack={
+          commercial.units_per_pack
+        }
+      />
     </section>
   );
 }
