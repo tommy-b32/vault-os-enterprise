@@ -6,6 +6,18 @@ import {
   useState,
 } from "react";
 
+import {
+  BrainConfidenceBar,
+} from "@/components/brain/ui/BrainConfidenceBar";
+
+import {
+  BrainMetricGrid,
+} from "@/components/brain/ui/BrainMetricGrid";
+
+import {
+  BrainStatusBadge,
+} from "@/components/brain/ui/BrainStatusBadge";
+
 type BrainDecisionState =
   | "approved"
   | "review"
@@ -146,7 +158,9 @@ export function BrainDecisionCard({
     if (checks.length === 0) {
       const completeTimer = setTimeout(() => {
         setAnalysisComplete(true);
-        setDisplayedConfidence(safeConfidence);
+        setDisplayedConfidence(
+          safeConfidence,
+        );
       }, 180);
 
       timers.push(completeTimer);
@@ -170,7 +184,9 @@ export function BrainDecisionCard({
       }, pipelineDuration + 100);
 
       const confidenceTimer = setTimeout(() => {
-        setDisplayedConfidence(safeConfidence);
+        setDisplayedConfidence(
+          safeConfidence,
+        );
       }, pipelineDuration + 170);
 
       timers.push(
@@ -207,11 +223,18 @@ export function BrainDecisionCard({
           <h3>{title}</h3>
         </div>
 
-        <span className="brain-decision-status">
-          {analysisComplete
-            ? statusLabel
-            : "Analysing"}
-        </span>
+        <BrainStatusBadge
+          state={
+            analysisComplete
+              ? state
+              : "analysing"
+          }
+          label={
+            analysisComplete
+              ? statusLabel
+              : "Analysing"
+          }
+        />
       </header>
 
       {checks.length > 0 && (
@@ -249,7 +272,9 @@ export function BrainDecisionCard({
                     className="brain-analysis-check-icon"
                   >
                     {checkVisible
-                      ? getCheckIcon(check.status)
+                      ? getCheckIcon(
+                          check.status,
+                        )
                       : "•"}
                   </span>
 
@@ -277,24 +302,9 @@ export function BrainDecisionCard({
         </>
       )}
 
-      <div className="brain-confidence-heading">
-        <span>Decision Confidence</span>
-
-        <strong>
-          {displayedConfidence}%
-        </strong>
-      </div>
-
-      <div
-        aria-label={`Decision confidence ${displayedConfidence}%`}
-        className="brain-confidence-track"
-      >
-        <span
-          style={{
-            width: `${displayedConfidence}%`,
-          }}
-        />
-      </div>
+      <BrainConfidenceBar
+        value={displayedConfidence}
+      />
 
       <div
         className={`brain-decision-result ${
@@ -327,20 +337,11 @@ export function BrainDecisionCard({
           </p>
         </div>
 
-        {analysisComplete &&
-          metrics.length > 0 && (
-            <div className="brain-decision-metrics">
-              {metrics.map((metric) => (
-                <div key={metric.label}>
-                  <span>{metric.label}</span>
-
-                  <strong>
-                    {metric.value}
-                  </strong>
-                </div>
-              ))}
-            </div>
-          )}
+        {analysisComplete && (
+          <BrainMetricGrid
+            metrics={metrics}
+          />
+        )}
 
         {analysisComplete &&
           missingInputs.length > 0 && (

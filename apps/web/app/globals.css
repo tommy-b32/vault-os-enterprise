@@ -3654,3 +3654,75 @@ grid-template-columns:1fr;
     flex-direction: column;
   }
 }
+
+/* ============================================================
+   VAULT OS — BRAIN STATUS BADGE
+============================================================ */
+
+.brain-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #d8ddd9;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.brain-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.brain-status-approved {
+  border-color: rgba(72, 211, 118, 0.35);
+  background: rgba(72, 211, 118, 0.08);
+  color: #61e58f;
+}
+
+.brain-status-review,
+.brain-status-waiting {
+  border-color: rgba(239, 189, 73, 0.38);
+  background: rgba(239, 189, 73, 0.08);
+  color: #efbd49;
+}
+
+.brain-status-rejected {
+  border-color: rgba(255, 104, 89, 0.38);
+  background: rgba(255, 104, 89, 0.08);
+  color: #ff7467;
+}
+
+.brain-status-analysing {
+  border-color: rgba(120, 167, 255, 0.32);
+  background: rgba(120, 167, 255, 0.08);
+  color: #88adff;
+}
+
+.brain-status-analysing
+  .brain-status-dot {
+  animation: brain-status-pulse 900ms ease-in-out
+    infinite;
+}
+
+@keyframes brain-status-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
