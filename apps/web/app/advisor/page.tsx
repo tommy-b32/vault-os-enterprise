@@ -1,16 +1,28 @@
-import { AdvisorDiagnostics } from "@/components/advisor/AdvisorDiagnostics";
-import { AdvisorNarrative } from "@/components/advisor/AdvisorNarrative";
+import { BrainAlert } from "@/components/ui/BrainAlert";
+import { BrainCard } from "@/components/ui/BrainCard";
+import { BrainGrid } from "@/components/ui/BrainGrid";
+import { BrainMetric } from "@/components/ui/BrainMetric";
+import { BrainPill } from "@/components/ui/BrainPill";
+import { BrainProgress } from "@/components/ui/BrainProgress";
+import { BrainSection } from "@/components/ui/BrainSection";
+import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
 import { InsightEngine } from "@/lib/brain/InsightEngine";
-
-import {
-  AdvisorEngine,
-} from "@/lib/brain/AdvisorEngine";
-
-import {
-  getCatalogueData,
-} from "@/lib/catalogue";
+import type { Insight } from "@/lib/brain/InsightEngine";
+import { getCatalogueData } from "@/lib/catalogue";
 
 export const dynamic = "force-dynamic";
+
+type UiTone =
+  | "default"
+  | "success"
+  | "warning"
+  | "danger";
+
+type AlertTone =
+  | "info"
+  | "success"
+  | "warning"
+  | "danger";
 
 function formatGbp(value: number): string {
   return new Intl.NumberFormat("en-GB", {
@@ -20,27 +32,119 @@ function formatGbp(value: number): string {
   }).format(value);
 }
 
+function calculatePercentage(
+  value: number,
+  total: number,
+): number {
+  if (total <= 0) {
+    return 0;
+  }
+
+  return Math.round((value / total) * 100);
+}
+
+function getInsightTone(
+  severity: Insight["severity"],
+): AlertTone {
+  const severityValue = String(
+    severity,
+  ).toLowerCase();
+
+  if (severityValue === "success") {
+    return "success";
+  }
+
+  if (
+    severityValue === "warning" ||
+    severityValue === "critical"
+  ) {
+    return "warning";
+  }
+
+  return "info";
+}
+
+function getPriorityTone(
+  priority: string,
+): UiTone {
+  switch (priority.toLowerCase()) {
+    case "critical":
+    case "urgent":
+    case "high":
+      return "danger";
+
+    case "medium":
+    case "moderate":
+      return "warning";
+
+    case "low":
+      return "success";
+
+    default:
+      return "default";
+  }
+}
+
+function formatPriority(
+  priority: string,
+): string {
+  if (!priority) {
+    return "Standard";
+  }
+
+  return priority
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) =>
+      character.toUpperCase(),
+    );
+}
+
 export default async function AdvisorPage() {
   try {
-    const {
+    const { products, summary } =
+      await getCatalogueData();
+
+    const advisor = AdvisorEngine.analyse({
       products,
-      summary,
-    } = await getCatalogueData();
+    });
 
-    const advisor =
-      AdvisorEngine.analyse({
-        products,
-      });
+    const analysis = advisor.analysis;
+    const diagnostics = advisor.diagnostics;
 
-    const analysis =
-      advisor.analysis;
-      const insights = InsightEngine.analyse({
-  diagnostics: advisor.diagnostics,
-});
+    const insights = InsightEngine.analyse({
+      diagnostics,
+    });
+
+    const productsScanned =
+      diagnostics.productsScanned;
+
+    const commercialCompletion =
+      calculatePercentage(
+        diagnostics.commercialDataComplete,
+        productsScanned,
+      );
+
+    const supplierCoverage =
+      calculatePercentage(
+        diagnostics.supplierAssigned,
+        productsScanned,
+      );
+
+    const restockCoverage =
+      calculatePercentage(
+        diagnostics.restockEnabled,
+        productsScanned,
+      );
+
+    const commercialTrust =
+      calculatePercentage(
+        diagnostics.commercialCostTrusted,
+        productsScanned,
+      );
 
     return (
-      <main className="advisor-page">
-        <header className="advisor-header">
+      <main className="catalogue-page advisor-page">
+        <header className="catalogue-header advisor-header">
           <div>
             <p className="vault-eyebrow">
               Vault Brain
@@ -62,158 +166,427 @@ export default async function AdvisorPage() {
           </a>
         </header>
 
-        <AdvisorNarrative
-  insights={insights.insights}
-/>
+        <BrainSection
+          eyebrow="Vault AI"
+          title="Commercial Advisor"
+          description="AI-powered analysis of catalogue readiness, supplier configuration, stock exposure and commercial opportunity."
+        >
+          <BrainCard
+            title="Commercial Overview"
+            subtitle="Live Intelligence"
+          >
+            <BrainGrid columns={4}>
+              <BrainMetric
+                label="Products Scanned"
+                value={productsScanned}
+                helper="Catalogue products analysed"
+              />
 
-<AdvisorDiagnostics
-  diagnostics={advisor.diagnostics}
-/>
-
-        {analysis.highestPriority ? (
-          <section className="advisor-primary">
-            <div>
-              <p className="vault-eyebrow">
-                Highest Priority
-              </p>
-
-              <h2>
-                {analysis.highestPriority.title}
-              </h2>
-
-              <p>
-                {
-                  analysis.highestPriority
-                    .description
+              <BrainMetric
+                label="Low Stock"
+                value={diagnostics.lowStock}
+                helper="Products requiring attention"
+                tone={
+                  diagnostics.lowStock > 0
+                    ? "warning"
+                    : "success"
                 }
-              </p>
-            </div>
+              />
 
-            <div className="advisor-primary-metrics">
-              <span>
-                Estimated profit
+              <BrainMetric
+                label="Commercial Ready"
+                value={
+                  diagnostics
+                    .commercialCostTrusted
+                }
+                helper="Products with trusted cost data"
+                tone={
+                  diagnostics
+                    .commercialCostTrusted > 0
+                    ? "success"
+                    : "warning"
+                }
+              />
 
-                <strong>
-                  {formatGbp(
-                    analysis.highestPriority
-                      .estimatedProfit,
-                  )}
-                </strong>
-              </span>
+              <BrainMetric
+                label="Qualifying Products"
+                value={
+                  diagnostics
+                    .productsQualifying
+                }
+                helper="Products passing advisor rules"
+                tone={
+                  diagnostics
+                    .productsQualifying > 0
+                    ? "success"
+                    : "default"
+                }
+              />
+            </BrainGrid>
+          </BrainCard>
 
-              <span>
-                Confidence
-
-                <strong>
-                  {
-                    analysis.highestPriority
-                      .confidence
-                  }
-                  %
-                </strong>
-              </span>
-            </div>
-          </section>
-        ) : (
-          <section className="advisor-empty">
-            <h2>
-              No buying opportunities found
-            </h2>
-
-            <p>
-              Vault Brain analysed every catalogue
-              product but did not find one that currently
-              meets the stock, margin and
-              return-on-capital rules.
-            </p>
-          </section>
-        )}
-
-        <section className="advisor-opportunities">
-          <div className="advisor-section-heading">
-            <div>
-              <p className="vault-eyebrow">
-                Ranked Opportunities
-              </p>
-
-              <h2>Recommended actions</h2>
-            </div>
-
-            <span>
-              Catalogue health{" "}
-              {
-                summary
-                  .catalogue_completion_percentage
-              }
-              %
-            </span>
-          </div>
-
-          {analysis.ranked.length > 0 ? (
-            <div className="advisor-opportunity-list">
-              {analysis.ranked.map(
-                (opportunity, index) => (
-                  <article
-                    className={`advisor-opportunity priority-${opportunity.priority}`}
-                    key={opportunity.id}
+          <BrainGrid columns={2}>
+            <BrainCard
+              title="Commercial Briefing"
+              subtitle="Vault Brain"
+            >
+              <div className="brain-stack">
+                {insights.insights.length > 0 ? (
+                  insights.insights.map(
+                    (insight) => (
+                      <BrainAlert
+                        key={insight.id}
+                        title={insight.title}
+                        tone={getInsightTone(
+                          insight.severity,
+                        )}
+                      >
+                        <p>{insight.message}</p>
+                      </BrainAlert>
+                    ),
+                  )
+                ) : (
+                  <BrainAlert
+                    title="No active intelligence alerts"
+                    tone="success"
                   >
-                    <div className="advisor-opportunity-rank">
-                      {index + 1}
-                    </div>
+                    <p>
+                      Vault Brain has not identified
+                      any current catalogue or
+                      commercial issues.
+                    </p>
+                  </BrainAlert>
+                )}
+              </div>
+            </BrainCard>
 
-                    <div className="advisor-opportunity-content">
-                      <div className="advisor-opportunity-heading">
-                        <div>
-                          <span>
-                            {opportunity.source}
-                          </span>
+            <BrainCard
+              title="Catalogue Health"
+              subtitle="Configuration Coverage"
+            >
+              <div className="brain-stack-large">
+                <BrainProgress
+                  label="Catalogue completion"
+                  value={
+                    summary
+                      .catalogue_completion_percentage
+                  }
+                  helper={`${summary.catalogue_completion_percentage}% of catalogue configuration is complete.`}
+                />
 
-                          <h3>
-                            {opportunity.title}
-                          </h3>
+                <BrainProgress
+                  label="Commercial data complete"
+                  value={commercialCompletion}
+                  helper={`${diagnostics.commercialDataComplete} of ${productsScanned} products have complete commercial data.`}
+                />
+
+                <BrainProgress
+                  label="Supplier coverage"
+                  value={supplierCoverage}
+                  helper={`${diagnostics.supplierAssigned} of ${productsScanned} products have a supplier assigned.`}
+                />
+
+                <BrainProgress
+                  label="Commercial cost trust"
+                  value={commercialTrust}
+                  helper={`${diagnostics.commercialCostTrusted} of ${productsScanned} products have trusted cost data.`}
+                />
+              </div>
+            </BrainCard>
+          </BrainGrid>
+
+          <BrainCard
+            title="Commercial Diagnostics"
+            subtitle="Live System Health"
+          >
+            <div className="brain-stack-large">
+              <BrainGrid columns={4}>
+                <BrainMetric
+                  label="Data Complete"
+                  value={
+                    diagnostics
+                      .commercialDataComplete
+                  }
+                  helper="Complete commercial profiles"
+                  tone="success"
+                />
+
+                <BrainMetric
+                  label="Data Missing"
+                  value={
+                    diagnostics
+                      .commercialDataMissing
+                  }
+                  helper="Products needing information"
+                  tone={
+                    diagnostics
+                      .commercialDataMissing > 0
+                      ? "warning"
+                      : "success"
+                  }
+                />
+
+                <BrainMetric
+                  label="Supplier Assigned"
+                  value={
+                    diagnostics.supplierAssigned
+                  }
+                  helper="Products linked to suppliers"
+                />
+
+                <BrainMetric
+                  label="Restock Enabled"
+                  value={
+                    diagnostics.restockEnabled
+                  }
+                  helper={`${restockCoverage}% catalogue coverage`}
+                />
+              </BrainGrid>
+
+              <BrainGrid columns={4}>
+                <BrainMetric
+                  label="Trusted for Reorder"
+                  value={
+                    diagnostics.trustedForReorder
+                  }
+                  helper="Safe for automated decisions"
+                  tone={
+                    diagnostics.trustedForReorder > 0
+                      ? "success"
+                      : "warning"
+                  }
+                />
+
+                <BrainMetric
+                  label="Margin Target"
+                  value={
+                    diagnostics
+                      .marginThresholdPassed
+                  }
+                  helper="Products passing margin rules"
+                  tone={
+                    diagnostics
+                      .marginThresholdPassed > 0
+                      ? "success"
+                      : "default"
+                  }
+                />
+
+                <BrainMetric
+                  label="Return Target"
+                  value={
+                    diagnostics
+                      .returnThresholdPassed
+                  }
+                  helper="Products passing return rules"
+                  tone={
+                    diagnostics
+                      .returnThresholdPassed > 0
+                      ? "success"
+                      : "default"
+                  }
+                />
+
+                <BrainMetric
+                  label="Low Stock"
+                  value={diagnostics.lowStock}
+                  helper="Products within low-stock range"
+                  tone={
+                    diagnostics.lowStock > 0
+                      ? "warning"
+                      : "success"
+                  }
+                />
+              </BrainGrid>
+            </div>
+          </BrainCard>
+
+          {analysis.highestPriority ? (
+            <BrainCard
+              title="Highest Priority"
+              subtitle="Recommended Action"
+            >
+              <div className="brain-stack-large">
+                <div>
+                  <BrainPill
+                    tone={getPriorityTone(
+                      analysis.highestPriority
+                        .priority,
+                    )}
+                  >
+                    {formatPriority(
+                      analysis.highestPriority
+                        .priority,
+                    )}{" "}
+                    Priority
+                  </BrainPill>
+                </div>
+
+                <div>
+                  <h2>
+                    {
+                      analysis.highestPriority
+                        .title
+                    }
+                  </h2>
+
+                  <p className="brain-section-description">
+                    {
+                      analysis.highestPriority
+                        .description
+                    }
+                  </p>
+                </div>
+
+                <BrainGrid columns={2}>
+                  <BrainMetric
+                    label="Estimated Profit"
+                    value={formatGbp(
+                      analysis.highestPriority
+                        .estimatedProfit,
+                    )}
+                    helper="Estimated commercial return"
+                    tone="success"
+                  />
+
+                  <BrainMetric
+                    label="Confidence"
+                    value={`${analysis.highestPriority.confidence}%`}
+                    helper="Vault Brain confidence score"
+                  />
+                </BrainGrid>
+              </div>
+            </BrainCard>
+          ) : (
+            <BrainAlert
+              title="No buying opportunities found"
+              tone="warning"
+            >
+              <p>
+                Vault Brain analysed every catalogue
+                product but did not find one that
+                currently passes the stock, margin,
+                return and configuration rules.
+              </p>
+            </BrainAlert>
+          )}
+
+          <BrainCard
+            title="Recommended Actions"
+            subtitle="Ranked Opportunities"
+          >
+            <div className="brain-stack-large">
+              <div>
+                <BrainPill
+                  tone={
+                    analysis.ranked.length > 0
+                      ? "success"
+                      : "warning"
+                  }
+                >
+                  {analysis.ranked.length} Active{" "}
+                  {analysis.ranked.length === 1
+                    ? "Opportunity"
+                    : "Opportunities"}
+                </BrainPill>
+              </div>
+
+              {analysis.ranked.length > 0 ? (
+                <div className="brain-stack">
+                  {analysis.ranked.map(
+                    (opportunity, index) => (
+                      <BrainAlert
+                        key={opportunity.id}
+                        title={`${index + 1}. ${opportunity.title}`}
+                        tone={
+                          getPriorityTone(
+                            opportunity.priority,
+                          ) === "danger"
+                            ? "danger"
+                            : getPriorityTone(
+                                  opportunity.priority,
+                                ) === "warning"
+                              ? "warning"
+                              : getPriorityTone(
+                                    opportunity.priority,
+                                  ) === "success"
+                                ? "success"
+                                : "info"
+                        }
+                      >
+                        <div className="brain-stack">
+                          <div>
+                            <BrainPill
+                              tone={getPriorityTone(
+                                opportunity.priority,
+                              )}
+                            >
+                              {formatPriority(
+                                opportunity.priority,
+                              )}{" "}
+                              Priority
+                            </BrainPill>
+                          </div>
+
+                          <p>
+                            {opportunity.description}
+                          </p>
+
+                          <BrainGrid columns={3}>
+                            <BrainMetric
+                              label="Source"
+                              value={
+                                opportunity.source
+                              }
+                              helper="Opportunity engine"
+                            />
+
+                            <BrainMetric
+                              label="Estimated Profit"
+                              value={formatGbp(
+                                opportunity
+                                  .estimatedProfit,
+                              )}
+                              helper="Potential commercial return"
+                              tone="success"
+                            />
+
+                            <BrainMetric
+                              label="Confidence"
+                              value={`${opportunity.confidence}%`}
+                              helper="Advisor confidence score"
+                            />
+                          </BrainGrid>
                         </div>
+                      </BrainAlert>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <BrainAlert
+                  title="More catalogue data required"
+                  tone="info"
+                >
+                  <p>
+                    Add trusted commercial costs,
+                    supplier rules and reorder settings
+                    to allow Vault Brain to discover
+                    more opportunities.
+                  </p>
 
-                        <strong>
-                          {opportunity.confidence}%
-                        </strong>
-                      </div>
-
-                      <p>
-                        {opportunity.description}
-                      </p>
-
-                      <footer>
-                        <span>
-                          Estimated profit
-                        </span>
-
-                        <strong>
-                          {formatGbp(
-                            opportunity
-                              .estimatedProfit,
-                          )}
-                        </strong>
-                      </footer>
-                    </div>
-                  </article>
-                ),
+                  <p>
+                    <a
+                      className="catalogue-back"
+                      href="/catalogue"
+                    >
+                      Open Product Intelligence →
+                    </a>
+                  </p>
+                </BrainAlert>
               )}
             </div>
-          ) : (
-            <div className="advisor-empty-list">
-              <p>
-                Add trusted commercial costs, supplier
-                rules and reorder settings to allow
-                Vault Brain to discover more
-                opportunities.
-              </p>
-
-              <a href="/catalogue">
-                Open Product Intelligence →
-              </a>
-            </div>
-          )}
-        </section>
+          </BrainCard>
+        </BrainSection>
       </main>
     );
   } catch (error) {

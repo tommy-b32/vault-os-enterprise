@@ -27,3 +27,77 @@ export type ProductCommercialCost = {
   last_supplier_price_update: string | null;
   commercial_notes: string | null;
 };
+
+export type InventoryStrategy =
+  | "stocked"
+  | "dropship"
+  | "do_not_restock"
+  | "discontinued"
+  | "service";
+
+export type PackProfile =
+  | "single"
+  | "pack"
+  | "mixed"
+  | null;
+
+export type CatalogueSupplier = {
+  id: string;
+  supplier_name: string;
+};
+
+export type CatalogueProduct = {
+  product_id: string;
+  product_name: string;
+
+  product_type: string | null;
+  status: string | null;
+
+  supplier_id: string | null;
+  supplier_company: string | null;
+
+  inventory_strategy: InventoryStrategy;
+
+  restock_enabled: boolean;
+
+  pack_profile: PackProfile;
+
+  supplier_moq_packs: number | null;
+
+  target_stock_days: number | null;
+
+  decision_reason: string | null;
+
+  notes: string | null;
+
+  stock_on_hand: number;
+
+  complete_packs: number;
+
+  loose_units: number;
+
+  configuration_score: number;
+
+  configuration_state: ConfigurationState;
+
+  missing_requirements: string[];
+
+  missing_requirement_count: number;
+
+  configuration_trusted: boolean;
+
+  trusted_for_reorder: boolean;
+
+  brain_confidence: string;
+
+  commercial_cost: ProductCommercialCost;
+};
+
+export type ConfigurationState =
+  | "ready"
+  | "almost_ready"
+  | "needs_configuration"
+  | "dropship_ready"
+  | "do_not_restock"
+  | "discontinued"
+  | "service";
