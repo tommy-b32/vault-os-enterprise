@@ -1,0 +1,353 @@
+import { OpportunityCollector } from "@/lib/brain/OpportunityCollector";
+import type {
+  Opportunity,
+  OpportunityEngineResult,
+} from "@/lib/brain/OpportunityEngine";
+import { OpportunityEngine } from "@/lib/brain/OpportunityEngine";
+
+import type {
+  CommercialOpportunityInput,
+} from "@/lib/brain/CommercialOpportunityEngine";
+
+import type {
+  CatalogueProduct,
+} from "@/types/catalogue";
+
+export type AdvisorDiagnostics = {
+  productsScanned: number;
+
+  stockedProducts: number;
+  restockEnabled: number;
+  supplierAssigned: number;
+
+  configurationTrusted: number;
+  trustedForReorder: number;
+  commercialCostTrusted: number;
+
+  commercialDataComplete: number;
+  commercialDataMissing: number;
+
+  lowStock: number;
+  marginThresholdPassed: number;
+  returnThresholdPassed: number;
+
+  productsQualifying: number;
+};
+
+export type AdvisorExclusionReason =
+  | "not_stocked"
+  | "restock_disabled"
+  | "supplier_missing"
+  | "configuration_untrusted"
+  | "reorder_untrusted"
+  | "commercial_cost_untrusted"
+  | "commercial_data_missing"
+  | "stock_above_threshold"
+  | "margin_below_threshold"
+  | "return_below_threshold";
+
+export type AdvisorExcludedProduct = {
+  productId: string;
+  productName: string;
+  reasons: AdvisorExclusionReason[];
+};
+
+export type AdvisorEngineInput = {
+  products: CatalogueProduct[];
+};
+
+export type AdvisorEngineResult = {
+  diagnostics: AdvisorDiagnostics;
+
+  commercialInputs: CommercialOpportunityInput[];
+
+  opportunities: Opportunity[];
+  analysis: OpportunityEngineResult;
+
+  excludedProducts: AdvisorExcludedProduct[];
+};
+
+const LOW_STOCK_THRESHOLD = 10;
+const MINIMUM_MARGIN_PERCENT = 45;
+const MINIMUM_RETURN_ON_CAPITAL_PERCENT = 100;
+
+function hasCommercialData(
+  product: CatalogueProduct,
+): boolean {
+  const commercial =
+    product.commercial_cost;
+
+  return (
+    commercial.estimated_margin_percent !== null &&
+    commercial
+      .estimated_return_on_pack_capital_percent !==
+      null &&
+    commercial.estimated_gross_profit_per_unit !== null
+  );
+}
+
+function getExclusionReasons(
+  product: CatalogueProduct,
+): AdvisorExclusionReason[] {
+  const commercial =
+    product.commercial_cost;
+
+  const reasons: AdvisorExclusionReason[] = [];
+
+  if (product.inventory_strategy !== "stocked") {
+    reasons.push("not_stocked");
+  }
+
+  if (!product.restock_enabled) {
+    reasons.push("restock_disabled");
+  }
+
+  if (!product.supplier_id) {
+    reasons.push("supplier_missing");
+  }
+
+  if (!product.configuration_trusted) {
+    reasons.push("configuration_untrusted");
+  }
+
+  if (!product.trusted_for_reorder) {
+    reasons.push("reorder_untrusted");
+  }
+
+  if (!commercial.commercial_cost_trusted) {
+    reasons.push("commercial_cost_untrusted");
+  }
+
+  if (!hasCommercialData(product)) {
+    reasons.push("commercial_data_missing");
+
+    return reasons;
+  }
+
+  if (
+    product.stock_on_hand >
+    LOW_STOCK_THRESHOLD
+  ) {
+    reasons.push("stock_above_threshold");
+  }
+
+  if (
+    commercial.estimated_margin_percent !== null &&
+    commercial.estimated_margin_percent <
+      MINIMUM_MARGIN_PERCENT
+  ) {
+    reasons.push("margin_below_threshold");
+  }
+
+  if (
+    commercial
+      .estimated_return_on_pack_capital_percent !==
+      null &&
+    commercial
+      .estimated_return_on_pack_capital_percent <
+      MINIMUM_RETURN_ON_CAPITAL_PERCENT
+  ) {
+    reasons.push("return_below_threshold");
+  }
+
+  return reasons;
+}
+
+function buildCommercialInput(
+  product: CatalogueProduct,
+): CommercialOpportunityInput {
+  const commercial =
+    product.commercial_cost;
+
+  const recommendedOrderQuantity =
+    Math.max(
+      1,
+      product.supplier_moq_packs ?? 1,
+    );
+
+  return {
+    productId: product.product_id,
+
+    productName:
+      product.product_name,
+
+    supplierName:
+      product.supplier_company ??
+      "Supplier not named",
+
+    marginPercent:
+      commercial.estimated_margin_percent,
+
+    returnOnCapital:
+      commercial
+        .estimated_return_on_pack_capital_percent,
+
+    grossProfitPerUnit:
+      commercial
+        .estimated_gross_profit_per_unit,
+
+    stockRemaining:
+      product.stock_on_hand,
+
+    recommendedOrderQuantity,
+
+    purchaseCost:
+      commercial
+        .landed_cost_per_pack_gbp ?? 0,
+  };
+}
+
+function buildDiagnostics(
+  products: CatalogueProduct[],
+  qualifyingProducts: CatalogueProduct[],
+): AdvisorDiagnostics {
+  const commercialDataComplete =
+    products.filter(hasCommercialData).length;
+
+  return {
+    productsScanned:
+      products.length,
+
+    stockedProducts:
+      products.filter(
+        (product) =>
+          product.inventory_strategy ===
+          "stocked",
+      ).length,
+
+    restockEnabled:
+      products.filter(
+        (product) =>
+          product.restock_enabled,
+      ).length,
+
+    supplierAssigned:
+      products.filter(
+        (product) =>
+          Boolean(product.supplier_id),
+      ).length,
+
+    configurationTrusted:
+      products.filter(
+        (product) =>
+          product.configuration_trusted,
+      ).length,
+
+    trustedForReorder:
+      products.filter(
+        (product) =>
+          product.trusted_for_reorder,
+      ).length,
+
+    commercialCostTrusted:
+      products.filter(
+        (product) =>
+          product.commercial_cost
+            .commercial_cost_trusted,
+      ).length,
+
+    commercialDataComplete,
+
+    commercialDataMissing:
+      products.length -
+      commercialDataComplete,
+
+    lowStock:
+      products.filter(
+        (product) =>
+          product.stock_on_hand <=
+          LOW_STOCK_THRESHOLD,
+      ).length,
+
+    marginThresholdPassed:
+      products.filter((product) => {
+        const margin =
+          product.commercial_cost
+            .estimated_margin_percent;
+
+        return (
+          margin !== null &&
+          margin >=
+            MINIMUM_MARGIN_PERCENT
+        );
+      }).length,
+
+    returnThresholdPassed:
+      products.filter((product) => {
+        const returnOnCapital =
+          product.commercial_cost
+            .estimated_return_on_pack_capital_percent;
+
+        return (
+          returnOnCapital !== null &&
+          returnOnCapital >=
+            MINIMUM_RETURN_ON_CAPITAL_PERCENT
+        );
+      }).length,
+
+    productsQualifying:
+      qualifyingProducts.length,
+  };
+}
+
+export function analyseAdvisor({
+  products,
+}: AdvisorEngineInput): AdvisorEngineResult {
+  const excludedProducts =
+    products
+      .map((product) => ({
+        productId:
+          product.product_id,
+
+        productName:
+          product.product_name,
+
+        reasons:
+          getExclusionReasons(product),
+      }))
+      .filter(
+        (product) =>
+          product.reasons.length > 0,
+      );
+
+  const qualifyingProducts =
+    products.filter(
+      (product) =>
+        getExclusionReasons(product)
+          .length === 0,
+    );
+
+  const commercialInputs =
+    qualifyingProducts.map(
+      buildCommercialInput,
+    );
+
+  const opportunities =
+    OpportunityCollector.collect({
+      commercial:
+        commercialInputs,
+    });
+
+  const analysis =
+    OpportunityEngine.analyse({
+      opportunities,
+    });
+
+  const diagnostics =
+    buildDiagnostics(
+      products,
+      qualifyingProducts,
+    );
+
+  return {
+    diagnostics,
+    commercialInputs,
+    opportunities,
+    analysis,
+    excludedProducts,
+  };
+}
+
+export const AdvisorEngine = {
+  analyse: analyseAdvisor,
+} as const;
