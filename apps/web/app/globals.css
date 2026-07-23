@@ -4726,3 +4726,850 @@ grid-template-columns:1fr;
     padding: 13px;
   }
 }
+
+/* ============================================================
+   VAULT BRAIN — MISSION CONTROL
+   ============================================================ */
+
+.brain-mission-control {
+  position: relative;
+  overflow: hidden;
+  padding: 24px;
+  background:
+    radial-gradient(
+      circle at 90% 10%,
+      rgba(217, 173, 74, 0.13),
+      transparent 34%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(17, 19, 18, 0.99),
+      rgba(7, 9, 8, 0.99)
+    );
+  border: 1px solid rgba(217, 173, 74, 0.35);
+  border-radius: var(--vault-radius-lg);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.brain-mission-control::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      rgba(255, 255, 255, 0.012) 1px,
+      transparent 1px
+    );
+  background-size: 42px 42px;
+  mask-image:
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.45),
+      transparent 78%
+    );
+}
+
+.brain-mission-control::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 14%;
+  left: 14%;
+  height: 1px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(240, 196, 93, 0.75),
+      transparent
+    );
+}
+
+.brain-mission-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.brain-mission-header h2 {
+  margin: 6px 0 0;
+  color: var(--vault-text);
+  font-size: clamp(22px, 2.4vw, 34px);
+  font-weight: 620;
+  letter-spacing: -0.03em;
+}
+
+.brain-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 6px 11px;
+  color: var(--vault-warning);
+  background: rgba(232, 181, 77, 0.1);
+  border: 1px solid rgba(232, 181, 77, 0.28);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.brain-status-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 12px currentColor;
+  animation: mission-status-pulse 2.2s ease-in-out infinite;
+}
+
+.brain-mission-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.7fr)
+    minmax(0, 1fr)
+    minmax(150px, 0.55fr)
+    minmax(0, 1.2fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.brain-mission-grid article {
+  min-width: 0;
+  min-height: 138px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 17px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(13, 15, 14, 0.94),
+      rgba(8, 10, 9, 0.94)
+    );
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 11px;
+}
+
+.brain-mission-grid article:first-child {
+  border-color: rgba(217, 173, 74, 0.28);
+  background:
+    radial-gradient(
+      circle at 100% 0,
+      rgba(217, 173, 74, 0.09),
+      transparent 46%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(18, 19, 16, 0.97),
+      rgba(8, 10, 9, 0.97)
+    );
+}
+
+.brain-mission-grid article span {
+  color: var(--vault-gold-bright);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+.brain-mission-grid article strong {
+  color: var(--vault-text);
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 1.5;
+}
+
+.brain-mission-grid article:nth-child(3) strong {
+  color: var(--vault-gold-bright);
+  font-size: clamp(34px, 4vw, 52px);
+  font-weight: 520;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.brain-metric-row {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.brain-mini-metric {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 15px;
+  background: rgba(8, 10, 9, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 10px;
+}
+
+.brain-mini-metric small {
+  color: var(--vault-muted);
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.brain-mini-metric h3 {
+  margin: 0;
+  color: var(--vault-text);
+  font-size: 19px;
+  font-weight: 580;
+}
+
+.brain-mini-metric p {
+  margin: 0;
+  color: var(--vault-muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.brain-mini-metric.tone-success {
+  border-color: rgba(107, 201, 120, 0.18);
+}
+
+.brain-mini-metric.tone-success h3 {
+  color: var(--vault-success);
+}
+
+.brain-mini-metric.tone-warning {
+  border-color: rgba(232, 181, 77, 0.2);
+}
+
+.brain-mini-metric.tone-warning h3 {
+  color: var(--vault-warning);
+}
+
+.brain-mini-metric.tone-danger {
+  border-color: rgba(239, 101, 79, 0.22);
+}
+
+.brain-mini-metric.tone-danger h3 {
+  color: var(--vault-error);
+}
+
+.brain-mini-metric.tone-info {
+  border-color: rgba(112, 174, 232, 0.18);
+}
+
+.brain-mini-metric.tone-info h3 {
+  color: var(--vault-info);
+}
+
+@keyframes mission-status-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+@media (max-width: 1200px) {
+  .brain-mission-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .brain-mission-control {
+    padding: 17px;
+  }
+
+  .brain-mission-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .brain-status-pill {
+    align-self: flex-start;
+  }
+
+  .brain-mission-grid,
+  .brain-metric-row {
+    grid-template-columns: 1fr;
+  }
+
+  .brain-mission-grid article {
+    min-height: 112px;
+  }
+}
+
+/* ============================================================
+   VAULT BRAIN — SCAN SEQUENCE
+   ============================================================ */
+
+.brain-scan-sequence {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 18px;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(11, 13, 12, 0.94),
+      rgba(7, 9, 8, 0.94)
+    );
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 12px;
+}
+
+.brain-scan-sequence::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(217, 173, 74, 0.045),
+      transparent
+    );
+  transform: translateX(-100%);
+  animation: brain-scan-sweep 4.8s ease-in-out infinite;
+}
+
+.brain-scan-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.brain-scan-header h2 {
+  margin: 5px 0 0;
+  color: var(--vault-text);
+  font-size: 16px;
+  font-weight: 620;
+}
+
+.brain-scan-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 5px 9px;
+  color: var(--vault-warning);
+  background: rgba(232, 181, 77, 0.08);
+  border: 1px solid rgba(232, 181, 77, 0.2);
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 760;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.brain-scan-live > span {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 12px currentColor;
+  animation: brain-scan-live-pulse 1.7s ease-in-out infinite;
+}
+
+.brain-scan-sequence.is-complete .brain-scan-live {
+  color: var(--vault-success);
+  background: rgba(107, 201, 120, 0.08);
+  border-color: rgba(107, 201, 120, 0.2);
+}
+
+.brain-scan-progress {
+  position: relative;
+  z-index: 1;
+  height: 5px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: 999px;
+}
+
+.brain-scan-progress-fill {
+  height: 100%;
+  background:
+    linear-gradient(
+      90deg,
+      var(--vault-gold-muted),
+      var(--vault-gold-bright)
+    );
+  border-radius: inherit;
+  box-shadow: 0 0 14px rgba(217, 173, 74, 0.34);
+  transition: width 420ms ease;
+}
+
+.brain-scan-list {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.brain-scan-item {
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  color: var(--vault-muted);
+  background: rgba(255, 255, 255, 0.018);
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: 8px;
+  font-size: 10px;
+  transition:
+    color 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.brain-scan-item.is-current {
+  color: var(--vault-text);
+  background: rgba(217, 173, 74, 0.055);
+  border-color: rgba(217, 173, 74, 0.22);
+  transform: translateY(-1px);
+}
+
+.brain-scan-item.is-complete {
+  color: var(--vault-text-soft);
+  border-color: rgba(107, 201, 120, 0.14);
+}
+
+.brain-scan-indicator {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--vault-muted);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.brain-scan-item.is-current .brain-scan-indicator {
+  color: var(--vault-gold-bright);
+  border-color: rgba(217, 173, 74, 0.26);
+  box-shadow: 0 0 12px rgba(217, 173, 74, 0.2);
+  animation: brain-scan-node-pulse 1.3s ease-in-out infinite;
+}
+
+.brain-scan-item.is-complete .brain-scan-indicator {
+  color: var(--vault-success);
+  background: rgba(107, 201, 120, 0.08);
+  border-color: rgba(107, 201, 120, 0.2);
+  box-shadow: 0 0 10px rgba(107, 201, 120, 0.14);
+}
+
+/* ============================================================
+   VAULT BRAIN — NEURAL CONFIDENCE
+   ============================================================ */
+
+.brain-neural-confidence {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 0.85fr)
+    minmax(260px, 1.15fr);
+  align-items: center;
+  gap: 24px;
+  margin-top: 16px;
+  padding: 20px;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 78% 50%,
+      rgba(217, 173, 74, 0.09),
+      transparent 30%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(12, 14, 13, 0.93),
+      rgba(7, 9, 8, 0.93)
+    );
+  border: 1px solid rgba(217, 173, 74, 0.18);
+  border-radius: 12px;
+}
+
+.brain-neural-confidence::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(217, 173, 74, 0.35),
+      transparent
+    );
+}
+
+.brain-neural-copy {
+  min-width: 0;
+}
+
+.brain-neural-copy h3 {
+  margin: 5px 0 12px;
+  color: var(--vault-text);
+  font-size: 20px;
+  font-weight: 620;
+}
+
+.brain-neural-copy > strong {
+  display: block;
+  color: var(--vault-gold-bright);
+  font-size: clamp(44px, 6vw, 72px);
+  font-weight: 520;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+}
+
+.brain-neural-copy > p:last-child {
+  max-width: 420px;
+  margin: 14px 0 0;
+  color: var(--vault-muted);
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.brain-neural-map {
+  position: relative;
+  width: 100%;
+  min-height: 260px;
+  overflow: hidden;
+}
+
+.brain-neural-map svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.brain-neural-map line {
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 0.6;
+  transition:
+    stroke 420ms ease,
+    filter 420ms ease;
+}
+
+.brain-neural-map line.is-active {
+  stroke: rgba(217, 173, 74, 0.52);
+  filter:
+    drop-shadow(
+      0 0 3px rgba(217, 173, 74, 0.42)
+    );
+  animation: brain-neural-line-pulse 2.8s ease-in-out infinite;
+}
+
+.brain-neural-node {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  background: #171a18;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition:
+    background 420ms ease,
+    border-color 420ms ease,
+    box-shadow 420ms ease,
+    transform 420ms ease;
+}
+
+.brain-neural-node.is-active {
+  background: var(--vault-gold-bright);
+  border-color: rgba(240, 196, 93, 0.85);
+  box-shadow:
+    0 0 8px rgba(217, 173, 74, 0.55),
+    0 0 18px rgba(217, 173, 74, 0.22);
+  animation:
+    brain-neural-node-pulse 2.4s ease-in-out infinite;
+}
+
+.brain-neural-core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  color: var(--vault-gold-bright);
+  background:
+    radial-gradient(
+      circle,
+      rgba(217, 173, 74, 0.16),
+      rgba(10, 12, 11, 0.96) 62%
+    );
+  border: 1px solid rgba(217, 173, 74, 0.35);
+  border-radius: 50%;
+  box-shadow:
+    0 0 28px rgba(217, 173, 74, 0.16);
+  transform: translate(-50%, -50%);
+}
+
+.brain-neural-core::before,
+.brain-neural-core::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border: 1px solid rgba(217, 173, 74, 0.16);
+  border-radius: 50%;
+  animation: brain-neural-core-pulse 3s ease-out infinite;
+}
+
+.brain-neural-core::after {
+  animation-delay: 1.5s;
+}
+
+.brain-neural-core span {
+  position: relative;
+  z-index: 1;
+  font-size: 18px;
+  font-weight: 720;
+}
+
+/* ============================================================
+   VAULT BRAIN — ENTRANCE POLISH
+   ============================================================ */
+
+.brain-mission-control {
+  animation: brain-mission-enter 520ms ease both;
+}
+
+.brain-scan-sequence {
+  animation:
+    brain-mission-enter 520ms 90ms ease both;
+}
+
+.brain-mission-grid article {
+  animation: brain-metric-enter 440ms ease both;
+}
+
+.brain-mission-grid article:nth-child(1) {
+  animation-delay: 160ms;
+}
+
+.brain-mission-grid article:nth-child(2) {
+  animation-delay: 220ms;
+}
+
+.brain-mission-grid article:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+.brain-mission-grid article:nth-child(4) {
+  animation-delay: 340ms;
+}
+
+.brain-neural-confidence {
+  animation:
+    brain-mission-enter 520ms 380ms ease both;
+}
+
+.brain-mini-metric {
+  animation: brain-metric-enter 420ms ease both;
+}
+
+.brain-mini-metric:nth-child(1) {
+  animation-delay: 430ms;
+}
+
+.brain-mini-metric:nth-child(2) {
+  animation-delay: 500ms;
+}
+
+.brain-mini-metric:nth-child(3) {
+  animation-delay: 570ms;
+}
+
+/* ============================================================
+   VAULT BRAIN — ANIMATIONS
+   ============================================================ */
+
+@keyframes brain-scan-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  48%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes brain-scan-live-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.88);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes brain-scan-node-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 7px rgba(217, 173, 74, 0.14);
+  }
+
+  50% {
+    box-shadow: 0 0 17px rgba(217, 173, 74, 0.42);
+  }
+}
+
+@keyframes brain-neural-line-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes brain-neural-node-pulse {
+  0%,
+  100% {
+    transform:
+      translate(-50%, -50%)
+      scale(0.94);
+  }
+
+  50% {
+    transform:
+      translate(-50%, -50%)
+      scale(1.14);
+  }
+}
+
+@keyframes brain-neural-core-pulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.75);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes brain-mission-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes brain-metric-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+   VAULT BRAIN — RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1050px) {
+  .brain-scan-list {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .brain-neural-confidence {
+    grid-template-columns: 1fr;
+  }
+
+  .brain-neural-map {
+    min-height: 230px;
+  }
+}
+
+@media (max-width: 650px) {
+  .brain-scan-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .brain-scan-live {
+    align-self: flex-start;
+  }
+
+  .brain-scan-list {
+    grid-template-columns: 1fr;
+  }
+
+  .brain-neural-confidence {
+    padding: 16px;
+  }
+
+  .brain-neural-map {
+    min-height: 210px;
+  }
+
+  .brain-neural-core {
+    width: 66px;
+    height: 66px;
+  }
+}

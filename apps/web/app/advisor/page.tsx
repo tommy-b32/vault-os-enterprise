@@ -11,6 +11,11 @@ import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
 import { InsightEngine } from "@/lib/brain/InsightEngine";
 import type { Insight } from "@/lib/brain/InsightEngine";
 import { getCatalogueData } from "@/lib/catalogue";
+import type { BrainSnapshot } from "@/lib/brain/BrainSnapshot";
+import { MemoryEngine } from "@/lib/brain/MemoryEngine";
+import { BrainMissionControl } from "@/components/brain/BrainMissionControl";
+import { MissionControlEngine } from "@/lib/brain/MissionControlEngine";
+import { ReasoningEngine } from "@/lib/brain/ReasoningEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +131,60 @@ export default async function AdvisorPage() {
           summary.catalogue_completion_percentage,
         userName: "Tom",
       });
+      const currentSnapshot: BrainSnapshot = {
+  createdAt: new Date().toISOString(),
+  productsScanned:
+    diagnostics.productsScanned,
+  catalogueCompletion:
+    summary.catalogue_completion_percentage,
+  commercialTrust:
+    calculatePercentage(
+      diagnostics.commercialCostTrusted,
+      diagnostics.productsScanned,
+    ),
+  supplierCoverage:
+    calculatePercentage(
+      diagnostics.supplierAssigned,
+      diagnostics.productsScanned,
+    ),
+  lowStock: diagnostics.lowStock,
+  opportunities: analysis.ranked.length,
+  confidence:
+    morningBriefing.readinessPercentage,
+};
+
+const memory = MemoryEngine.create(
+  currentSnapshot,
+);
+const reasoning = ReasoningEngine.analyse({
+  diagnostics: {
+    commercialDataMissing:
+      diagnostics.commercialDataMissing,
+    supplierAssigned:
+      diagnostics.supplierAssigned,
+    productsScanned:
+      diagnostics.productsScanned,
+    productsQualifying:
+      diagnostics.productsQualifying,
+    lowStock:
+      diagnostics.lowStock,
+    commercialCostTrusted:
+      diagnostics.commercialCostTrusted,
+  },
+});
+const missionControl =
+  MissionControlEngine.analyse({
+    briefing: morningBriefing,
+    memory,
+    productsMissingSuppliers:
+      Math.max(
+        0,
+        diagnostics.productsScanned -
+          diagnostics.supplierAssigned,
+      ),
+    productsMissingCommercialData:
+      diagnostics.commercialDataMissing,
+  });
 
     const productsScanned =
       diagnostics.productsScanned;
@@ -183,6 +242,11 @@ export default async function AdvisorPage() {
           title="Commercial Advisor"
           description="AI-powered analysis of catalogue readiness, supplier configuration, stock exposure and commercial opportunity."
         >
+          <BrainMissionControl
+            mission={missionControl}
+            reasoning={reasoning}
+          />
+
           <MorningBriefing
             briefing={morningBriefing}
           />
