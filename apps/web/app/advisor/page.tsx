@@ -1,3 +1,5 @@
+import { MorningBriefing } from "@/components/brain/MorningBriefing";
+import { MorningBriefingEngine } from "@/lib/brain/MorningBriefingEngine";
 import { BrainAlert } from "@/components/ui/BrainAlert";
 import { BrainCard } from "@/components/ui/BrainCard";
 import { BrainGrid } from "@/components/ui/BrainGrid";
@@ -115,6 +117,16 @@ export default async function AdvisorPage() {
       diagnostics,
     });
 
+    const morningBriefing =
+      MorningBriefingEngine.analyse({
+        diagnostics,
+        analysis,
+        insights: insights.insights,
+        catalogueCompletionPercentage:
+          summary.catalogue_completion_percentage,
+        userName: "Tom",
+      });
+
     const productsScanned =
       diagnostics.productsScanned;
 
@@ -171,6 +183,10 @@ export default async function AdvisorPage() {
           title="Commercial Advisor"
           description="AI-powered analysis of catalogue readiness, supplier configuration, stock exposure and commercial opportunity."
         >
+          <MorningBriefing
+            briefing={morningBriefing}
+          />
+
           <BrainCard
             title="Commercial Overview"
             subtitle="Live Intelligence"
