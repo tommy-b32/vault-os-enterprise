@@ -4,6 +4,7 @@ export type ProductEditorTab =
   | "business"
   | "commercial"
   | "inventory"
+  | "suppliers"
   | "purchasing"
   | "history";
 
@@ -20,7 +21,7 @@ const tabs: {
   {
     id: "business",
     label: "Business",
-    description: "Supplier and purchasing rules",
+    description: "Product rules and strategy",
   },
   {
     id: "commercial",
@@ -31,6 +32,11 @@ const tabs: {
     id: "inventory",
     label: "Inventory",
     description: "Stock position and size runs",
+  },
+  {
+    id: "suppliers",
+    label: "Suppliers",
+    description: "Sources, pricing and lead time",
   },
   {
     id: "purchasing",
@@ -52,6 +58,7 @@ export function ProductEditorTabs({
     <nav
       aria-label="Product intelligence sections"
       className="product-editor-tabs"
+      role="tablist"
     >
       {tabs.map((tab) => {
         const selected = activeTab === tab.id;
