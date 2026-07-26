@@ -1,5 +1,14 @@
+import { CatalogueMatchCard } from "@/components/suppliers/CatalogueMatchCard";
 import { SupplierCatalogueCard } from "@/components/suppliers/SupplierCatalogueCard";
 import { SupplierCatalogueDropzone } from "@/components/suppliers/SupplierCatalogueDropzone";
+
+import type {
+  CatalogueMatchingResult,
+} from "@/lib/brain/CatalogueMatchingEngine";
+
+import type {
+  CatalogueProduct,
+} from "@/types/catalogue";
 
 import type {
   SupplierCatalogueCardData,
@@ -16,13 +25,13 @@ const demoCatalogueCard: SupplierCatalogueCardData = {
 
   pageNumber: 4,
 
-  brand: "Supplier catalogue item",
-  officialProductName: null,
+  brand: "Balencia",
+  officialProductName: "Balenciaga Logo T-Shirt",
   internalReference: "Exclusive catalogue page 4",
 
-  colour: null,
+  colour: "Black",
 
-  packCost: null,
+  packCost: 60,
   packSize: 5,
   currency: "EUR",
 
@@ -39,6 +48,122 @@ const demoCatalogueCard: SupplierCatalogueCardData = {
 
   notes:
     "Demo visual catalogue card based on the uploaded Exclusive Summer 2026 PDF.",
+};
+
+const demoProduct: CatalogueProduct = {
+  product_id: "demo-balencia-black-tee",
+  product_name: "Balencia Logo Tee Black",
+
+  product_type: "T-Shirt",
+  status: "active",
+
+  supplier_id: "exclusive",
+  supplier_company: "Exclusive",
+
+  inventory_strategy: "stocked",
+
+  restock_enabled: true,
+
+  pack_profile: "pack",
+
+  supplier_moq_packs: null,
+
+  target_stock_days: 21,
+
+  decision_reason:
+    "Core catalogue product supplied by Exclusive.",
+
+  notes: null,
+
+  stock_on_hand: 12,
+
+  complete_packs: 2,
+
+  loose_units: 2,
+
+  configuration_score: 82,
+
+  configuration_state: "ready",
+
+  missing_requirements: [],
+
+  missing_requirement_count: 0,
+
+  configuration_trusted: true,
+
+  trusted_for_reorder: true,
+
+  brain_confidence: "high",
+
+  commercial_cost: {
+    currency: "EUR",
+    exchange_rate_to_gbp: 0.86,
+
+    pack_cost: 60,
+    shipping_cost_per_pack: 8,
+    import_cost_per_pack: 2,
+
+    units_per_pack: 5,
+
+    landed_cost_per_pack: 70,
+    landed_cost_per_pack_gbp: 60.2,
+    landed_cost_per_unit: 12.04,
+
+    average_selling_price: 35,
+
+    estimated_gross_profit_per_unit: 22.96,
+    estimated_margin_percent: 65.6,
+
+    estimated_return_on_pack_capital_percent:
+      190.7,
+
+    commercial_cost_trusted: true,
+    missing_commercial_requirements: [],
+
+    last_supplier_price_update:
+      "2026-07-26T00:00:00.000Z",
+
+    commercial_notes:
+      "Demonstration commercial data for catalogue matching preview.",
+  },
+};
+
+const demoMatchingResult: CatalogueMatchingResult = {
+  catalogueCardId: demoCatalogueCard.id,
+
+  bestMatch: {
+    product: demoProduct,
+    confidence: 86,
+
+    signals: [
+      {
+        reason: "same_supplier",
+        label: "Same supplier",
+        score: 20,
+      },
+      {
+        reason: "brand_match",
+        label: "Brand appears in product name",
+        score: 20,
+      },
+      {
+        reason: "name_similarity",
+        label: "Product naming similarity",
+        score: 31,
+      },
+      {
+        reason: "colour_match",
+        label: "Colour appears in product name",
+        score: 15,
+      },
+    ],
+  },
+
+  alternatives: [],
+
+  requiresReview: false,
+
+  status: "matched",
 };
 
 const catalogueStats = [
@@ -286,21 +411,31 @@ export default function SupplierCataloguePage() {
         <header className="supplier-catalogue-section-header">
           <div>
             <p className="vault-eyebrow">
-              Catalogue Card Preview
+              Catalogue Matching Preview
             </p>
 
-            <h2>Visual supplier item</h2>
+            <h2>
+              Supplier item and suggested match
+            </h2>
 
             <p>
-              This is the foundation of image-first
-              purchasing inside Vault OS.
+              Vault Brain compares the visual supplier
+              catalogue item with your Fabric Vault
+              product catalogue and explains its
+              recommendation.
             </p>
           </div>
+
+          <span>86% confidence</span>
         </header>
 
-        <div className="supplier-catalogue-demo-grid">
+        <div className="supplier-catalogue-match-preview">
           <SupplierCatalogueCard
             card={demoCatalogueCard}
+          />
+
+          <CatalogueMatchCard
+            result={demoMatchingResult}
           />
         </div>
       </section>
@@ -317,8 +452,8 @@ export default function SupplierCataloguePage() {
 
           <p>
             The next stage will turn every PDF page into
-            a visual supplier catalogue card that can be
-            linked to Fabric Vault products and added to
+            a visual supplier catalogue card, suggest
+            Fabric Vault product matches and prepare
             WhatsApp-ready purchase orders.
           </p>
         </div>
