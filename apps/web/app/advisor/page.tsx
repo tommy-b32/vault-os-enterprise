@@ -1,3 +1,4 @@
+import VaultAppShell from "@/components/layout/VaultAppShell";
 import { MorningBriefing } from "@/components/brain/MorningBriefing";
 import { MorningBriefingEngine } from "@/lib/brain/MorningBriefingEngine";
 import { BrainAlert } from "@/components/ui/BrainAlert";
@@ -214,28 +215,26 @@ const missionControl =
       );
 
     return (
-      <main className="catalogue-page advisor-page">
-        <header className="catalogue-header advisor-header">
-          <div>
-            <p className="vault-eyebrow">
-              Vault Brain
-            </p>
+      <VaultAppShell
+        searchPlaceholder="Search advisor..."
+        notificationCount={diagnostics.lowStock}
+        systemStatusLabel="Commercial intelligence online"
+      >
+        <main className="catalogue-page advisor-page">
+          <header className="catalogue-header advisor-header">
+            <div>
+              <p className="vault-eyebrow">
+                Vault Brain
+              </p>
 
-            <h1>Intelligence Centre</h1>
+              <h1>Intelligence Centre</h1>
 
-            <p>
-              Live commercial opportunities generated
-              from catalogue, stock and cost data.
-            </p>
-          </div>
-
-          <a
-            className="catalogue-back"
-            href="/"
-          >
-            ← Command Centre
-          </a>
-        </header>
+              <p>
+                Live commercial opportunities generated
+                from catalogue, stock and cost data.
+              </p>
+            </div>
+          </header>
 
         <BrainSection
           eyebrow="Vault AI"
@@ -666,8 +665,9 @@ const missionControl =
               )}
             </div>
           </BrainCard>
-        </BrainSection>
-      </main>
+          </BrainSection>
+        </main>
+      </VaultAppShell>
     );
   } catch (error) {
     const message =
@@ -676,11 +676,16 @@ const missionControl =
         : "An unknown advisor error occurred.";
 
     return (
-      <main className="catalogue-error">
-        <h1>Vault Advisor unavailable</h1>
+      <VaultAppShell
+        searchPlaceholder="Search advisor..."
+        systemStatusLabel="Commercial intelligence unavailable"
+      >
+        <main className="catalogue-error">
+          <h1>Vault Advisor unavailable</h1>
 
-        <p>{message}</p>
-      </main>
+          <p>{message}</p>
+        </main>
+      </VaultAppShell>
     );
   }
 }

@@ -1,3 +1,4 @@
+import VaultAppShell from "@/components/layout/VaultAppShell";
 import { CatalogueWorkspace } from "@/components/catalogue/CatalogueWorkspace";
 import { getCatalogueData } from "@/lib/catalogue";
 
@@ -27,73 +28,86 @@ export default async function CataloguePage() {
       summary.catalogue_completion_percentage ?? 0;
 
     return (
-      <main className="catalogue-page">
-        <header className="catalogue-header">
-          <div>
-            <p className="vault-eyebrow">
-              Vault Product Master
-            </p>
-
-            <h1>Product Intelligence</h1>
-
-            <p>
-              Search, configure and review every Shopify
-              product from one workspace.
-            </p>
-          </div>
-
-          <a className="catalogue-back" href="/">
-            ← Command Centre
-          </a>
-        </header>
-
-        <section className="catalogue-summary">
-          <article>
-            <span>Total products</span>
-            <strong>{totalProducts}</strong>
-          </article>
-
-          <article>
-            <span>Fully configured</span>
-            <strong>{fullyConfiguredProducts}</strong>
-          </article>
-
-          <article>
-            <span>Almost ready</span>
-            <strong>{almostReadyProducts}</strong>
-          </article>
-
-          <article>
-            <span>Catalogue health</span>
-            <strong>{completionPercentage}%</strong>
-          </article>
-        </section>
-
-        {productsNeedingConfiguration > 0 && (
-          <section className="catalogue-alert">
+      <VaultAppShell
+        searchPlaceholder="Search catalogue..."
+        notificationCount={
+          productsNeedingConfiguration
+        }
+        systemStatusLabel="Catalogue intelligence online"
+      >
+        <main className="catalogue-page">
+          <header className="catalogue-header">
             <div>
-              <strong>
-                {productsNeedingConfiguration} products need
-                configuring
-              </strong>
+              <p className="vault-eyebrow">
+                Vault Product Master
+              </p>
+
+              <h1>Product Intelligence</h1>
 
               <p>
-                {fullyConfiguredProducts} ready and{" "}
-                {almostReadyProducts} almost ready. Complete
-                the missing business rules before Vault Brain
-                uses these products for recommendations.
+                Search, configure and review every Shopify
+                product from one workspace.
               </p>
             </div>
+          </header>
 
-            <span>Configuration required</span>
+          <section className="catalogue-summary">
+            <article>
+              <span>Total products</span>
+              <strong>{totalProducts}</strong>
+            </article>
+
+            <article>
+              <span>Fully configured</span>
+              <strong>
+                {fullyConfiguredProducts}
+              </strong>
+            </article>
+
+            <article>
+              <span>Almost ready</span>
+              <strong>
+                {almostReadyProducts}
+              </strong>
+            </article>
+
+            <article>
+              <span>Catalogue health</span>
+              <strong>
+                {completionPercentage}%
+              </strong>
+            </article>
           </section>
-        )}
 
-        <CatalogueWorkspace
-          products={products}
-          suppliers={suppliers}
-        />
-      </main>
+          {productsNeedingConfiguration > 0 ? (
+            <section className="catalogue-alert">
+              <div>
+                <strong>
+                  {productsNeedingConfiguration} products
+                  need configuring
+                </strong>
+
+                <p>
+                  {fullyConfiguredProducts} ready and{" "}
+                  {almostReadyProducts} almost ready.
+                  Complete the missing business rules before
+                  Vault Brain uses these products for
+                  recommendations.
+                </p>
+              </div>
+
+              <span>
+                Configuration required
+              </span>
+            </section>
+          ) : null}
+
+          <CatalogueWorkspace
+            products={products}
+            suppliers={suppliers}
+          />
+        </main>
+      </VaultAppShell>
     );
   } catch (error) {
     const message =
@@ -102,10 +116,15 @@ export default async function CataloguePage() {
         : "An unknown catalogue error occurred.";
 
     return (
-      <main className="catalogue-error">
-        <h1>Catalogue unavailable</h1>
-        <p>{message}</p>
-      </main>
+      <VaultAppShell
+        searchPlaceholder="Search catalogue..."
+        systemStatusLabel="Catalogue intelligence unavailable"
+      >
+        <main className="catalogue-error">
+          <h1>Catalogue unavailable</h1>
+          <p>{message}</p>
+        </main>
+      </VaultAppShell>
     );
   }
 }

@@ -197,3 +197,198 @@ export type RecommendationEngineResult = {
   warnings: string[];
   missingInputs: string[];
 };
+
+/* ============================================================
+   VAULT BRAIN OPERATIONAL SNAPSHOT
+============================================================ */
+
+export type VaultBrainDataSource =
+  | "shopify"
+  | "inventory"
+  | "commercial"
+  | "supplier"
+  | "catalogue"
+  | "capital"
+  | "missions"
+  | "system";
+
+export type VaultBrainSignalTone =
+  | "positive"
+  | "neutral"
+  | "warning"
+  | "critical"
+  | "info";
+
+export type VaultBrainConnectionStatus =
+  | "healthy"
+  | "degraded"
+  | "offline"
+  | "unknown";
+
+export type VaultBrainSourceStatus = {
+  source: VaultBrainDataSource;
+  label: string;
+  status: VaultBrainConnectionStatus;
+  lastUpdatedAt: string | null;
+  message?: string;
+};
+
+export type OvernightTradingSnapshot = {
+  periodStartedAt: string;
+  periodEndedAt: string;
+
+  orderCount: number;
+  grossRevenueGbp: number;
+  netRevenueGbp: number | null;
+  profitGbp: number | null;
+
+  itemsSold: number;
+  averageOrderValueGbp: number;
+
+  newCustomerCount: number | null;
+  returningCustomerCount: number | null;
+
+  comparisonOrderCountPercentage: number | null;
+  comparisonRevenuePercentage: number | null;
+  comparisonProfitPercentage: number | null;
+};
+
+export type InventoryHealthState =
+  | "excellent"
+  | "healthy"
+  | "attention"
+  | "critical"
+  | "unknown";
+
+export type InventoryHealthSnapshot = {
+  state: InventoryHealthState;
+  score: number | null;
+
+  totalProducts: number;
+  healthyProducts: number;
+  lowStockProducts: number;
+  outOfStockProducts: number;
+
+  estimatedStockValueGbp: number | null;
+};
+
+export type StockImpact = {
+  productId: string;
+  productName: string;
+
+  unitsSold: number;
+  stockRemaining: number | null;
+  estimatedStockDaysRemaining: number | null;
+
+  reorderRequired: boolean;
+  urgency: InventoryUrgency;
+
+  supplierId?: string | null;
+  supplierName?: string | null;
+  supplierLeadTimeDays?: number | null;
+
+  estimatedRevenueAtRiskGbp?: number | null;
+  confidence: number;
+};
+
+export type MissionBriefingSnapshot = {
+  actionable: number;
+  critical: number;
+  high: number;
+
+  highestPriorityMissionId: string | null;
+  highestPriorityMissionTitle: string | null;
+
+  averageConfidence: number;
+};
+
+export type CashPositionSnapshot = {
+  availableCashGbp: number | null;
+  protectedReserveGbp: number | null;
+  committedPurchasingGbp: number | null;
+  availablePurchasingPowerGbp: number | null;
+};
+
+export type VaultBrainOperationalSnapshot = {
+  generatedAt: string;
+  organisationId?: string;
+  userName: string;
+
+  trading: OvernightTradingSnapshot;
+  inventory: InventoryHealthSnapshot;
+  stockImpacts: StockImpact[];
+  missions: MissionBriefingSnapshot;
+  cash: CashPositionSnapshot;
+
+  sourceStatuses: VaultBrainSourceStatus[];
+};
+
+/* ============================================================
+   MORNING BRIEFING OUTPUT
+============================================================ */
+
+export type MorningBriefingMetricId =
+  | "orders"
+  | "revenue"
+  | "profit"
+  | "items-sold"
+  | "average-order"
+  | "cash"
+  | "inventory-health";
+
+export type MorningBriefingMetric = {
+  id: MorningBriefingMetricId;
+  label: string;
+  value: string;
+  supportingText?: string;
+  tone: VaultBrainSignalTone;
+};
+
+export type MorningBriefingImpact = {
+  id: string;
+  title: string;
+  description: string;
+
+  tone: VaultBrainSignalTone;
+  source: VaultBrainDataSource;
+
+  confidence: number;
+  missionId?: string | null;
+};
+
+export type MorningBriefingRecommendationAuthority =
+  | "automatic"
+  | "prepared"
+  | "advisory";
+
+export type MorningBriefingRecommendation = {
+  id: string;
+  title: string;
+  explanation: string;
+
+  authority: MorningBriefingRecommendationAuthority;
+  confidence: number;
+
+  missionId?: string | null;
+  actionLabel?: string;
+  actionHref?: string;
+};
+
+export type MorningBriefingResult = {
+  generatedAt: string;
+
+  greeting: string;
+  headline: string;
+  summary: string;
+
+  narrative: string[];
+  metrics: MorningBriefingMetric[];
+  impacts: MorningBriefingImpact[];
+  recommendations: MorningBriefingRecommendation[];
+
+  inventoryHealth: InventoryHealthSnapshot;
+  missionSummary: MissionBriefingSnapshot;
+  sourceStatuses: VaultBrainSourceStatus[];
+
+  confidence: number;
+};

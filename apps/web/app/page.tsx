@@ -1,3 +1,5 @@
+import VaultAppShell from "@/components/layout/VaultAppShell";
+
 type IconName =
   | "home"
   | "inventory"
@@ -177,21 +179,6 @@ function Icon({
   return <svg {...common}>{paths[name]}</svg>;
 }
 
-const navigation = [
-  { label: "Command Centre", icon: "home", active: true },
-  { label: "Inventory", icon: "inventory" },
-  { label: "Catalogue", icon: "catalogue" },
-  { label: "Partners", icon: "partners" },
-  { label: "Orders", icon: "orders" },
-  { label: "Analytics", icon: "analytics" },
-  { label: "Advisor", icon: "advisor" },
-  { label: "Settings", icon: "settings" },
-] satisfies Array<{
-  label: string;
-  icon: IconName;
-  active?: boolean;
-}>;
-
 const metrics = [
   {
     label: "Revenue Today",
@@ -241,72 +228,12 @@ const topProducts = [
 
 export default function Home() {
   return (
-    <main className="vault-shell">
-      <aside className="vault-sidebar">
-        <div className="vault-brand">
-          <span className="vault-brand-mark">V</span>
-          <span>VAULT OS</span>
-        </div>
-
-        <nav className="vault-nav" aria-label="Primary navigation">
-          {navigation.map((item) => (
-            <button
-              className={`vault-nav-item ${
-                item.active ? "is-active" : ""
-              }`}
-              key={item.label}
-              type="button"
-            >
-              <Icon name={item.icon} />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="vault-company">
-          <div className="vault-company-mark">✦</div>
-          <div>
-            <strong>The Fabric Vault</strong>
-            <span>Where Luxury Meets Affordability</span>
-          </div>
-        </div>
-      </aside>
-
-      <section className="vault-workspace">
-        <header className="vault-topbar">
-          <label className="vault-search">
-            <Icon name="search" size={19} />
-            <input
-              aria-label="Search Vault OS"
-              placeholder="Search anything..."
-              type="search"
-            />
-            <kbd>⌘K</kbd>
-          </label>
-
-          <div className="vault-topbar-actions">
-            <button
-              aria-label="Notifications"
-              className="vault-icon-button"
-              type="button"
-            >
-              <Icon name="bell" />
-              <span className="vault-notification-count">3</span>
-            </button>
-
-            <div className="vault-heartbeat" title="Vault systems healthy">
-              <span />
-            </div>
-
-            <button className="vault-user" type="button">
-              <span className="vault-avatar">T</span>
-              <span>Tom</span>
-              <span className="vault-user-arrow">⌄</span>
-            </button>
-          </div>
-        </header>
-
-        <div className="vault-content">
+    <VaultAppShell
+      searchPlaceholder="Search anything..."
+      notificationCount={3}
+      systemStatusLabel="Vault systems healthy"
+    >
+      <div className="vault-content">
           <section className="vault-main-column">
             <div className="vault-page-heading">
               <p className="vault-eyebrow">Vault Command</p>
@@ -575,7 +502,6 @@ export default function Home() {
             <button type="button">⌁ View analytics</button>
           </div>
         </footer>
-      </section>
-    </main>
+    </VaultAppShell>
   );
 }

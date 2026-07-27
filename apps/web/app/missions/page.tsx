@@ -1,7 +1,124 @@
 import MissionControlWorkspace from "@/components/brain/MissionControlWorkspace";
-import { createMissions } from "@/lib/missions/MissionEngine";
 
-import type { MissionDraft } from "@/types/missions";
+import {
+  getLiveInventorySnapshot,
+} from "@/lib/brain/getLiveInventorySnapshot";
+
+import {
+  createMissions,
+} from "@/lib/missions/MissionEngine";
+
+import type {
+  MissionDraft,
+} from "@/types/missions";
+
+export const dynamic = "force-dynamic";
+
+function createInventoryMission({
+  productsRequiringAttention,
+  lowStockProducts,
+  outOfStockProducts,
+  negativeStockProducts,
+  healthScore,
+}: Awaited<
+  ReturnType<
+    typeof getLiveInventorySnapshot
+  >
+>): MissionDraft | null {
+  if (productsRequiringAttention === 0) {
+    return null;
+  }
+
+  const severeProducts =
+    outOfStockProducts +
+    negativeStockProducts;
+
+  return {
+    id: "live-inventory-attention",
+    type: "restock",
+    source: "inventory",
+
+    title:
+      severeProducts > 0
+        ? "Resolve live inventory exposure"
+        : "Review developing inventory risks",
+
+    summary:
+      `${productsRequiringAttention} actively monitored ${
+        productsRequiringAttention === 1
+          ? "product requires"
+          : "products require"
+      } attention. ` +
+      `${lowStockProducts} are low stock, ` +
+      `${outOfStockProducts} are out of stock and ` +
+      `${negativeStockProducts} have negative available stock.`,
+
+    outcome:
+      "Reviewing the affected stocked products will protect availability while respecting dropship, service, do-not-restock and discontinued catalogue rules.",
+
+    status: "new",
+
+    score: {
+      impact:
+        severeProducts > 0
+          ? 88
+          : 74,
+
+      urgency:
+        severeProducts > 0
+          ? 92
+          : 76,
+
+      confidence: 98,
+    },
+
+    actions: [
+      {
+        id: "open-live-inventory",
+        label: "Review inventory",
+        href: "/inventory",
+        kind: "primary",
+      },
+    ],
+
+    evidence: [
+      {
+        label: "Products affected",
+        value: String(
+          productsRequiringAttention,
+        ),
+      },
+      {
+        label: "Inventory health",
+        value: `${healthScore}%`,
+      },
+      {
+        label: "Low stock",
+        value: String(
+          lowStockProducts,
+        ),
+      },
+      {
+        label: "Unavailable",
+        value: String(
+          outOfStockProducts +
+            negativeStockProducts,
+        ),
+      },
+    ],
+
+    metadata: {
+      affectedProducts:
+        productsRequiringAttention,
+
+      healthScore,
+
+      lowStockProducts,
+      outOfStockProducts,
+      negativeStockProducts,
+    },
+  };
+}
 
 const DEMONSTRATION_MISSIONS: MissionDraft[] = [
   {
@@ -94,48 +211,6 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
     },
   },
   {
-    id: "inventory-restock-opportunity",
-    type: "restock",
-    source: "inventory",
-    title: "Review a developing restock opportunity",
-    summary:
-      "Inventory levels are becoming constrained across several products while recent demand remains healthy.",
-    outcome:
-      "Early review can protect availability and reduce the risk of losing sales before stock reaches zero.",
-    status: "new",
-    score: {
-      impact: 76,
-      urgency: 78,
-      confidence: 84,
-    },
-    actions: [
-      {
-        id: "open-inventory-intelligence",
-        label: "Review inventory",
-        href: "/inventory",
-        kind: "primary",
-      },
-    ],
-    evidence: [
-      {
-        label: "Products affected",
-        value: "6",
-      },
-      {
-        label: "Average stock cover",
-        value: "8 days",
-      },
-      {
-        label: "Confidence",
-        value: "84%",
-      },
-    ],
-    metadata: {
-      affectedProducts: 6,
-      stockCoverDays: 8,
-    },
-  },
-  {
     id: "catalogue-quality-review",
     type: "catalogue-update",
     source: "catalogue",
@@ -178,16 +253,41 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
   },
 ];
 
-export default function MissionsPage() {
-  const missions = createMissions(
-    DEMONSTRATION_MISSIONS,
-  );
+export default async function MissionsPage() {
+  const inventorySnapshot =
+    await getLiveInventorySnapshot();
+
+  const inventoryMission =
+    createInventoryMission(
+      inventorySnapshot,
+    );
+
+  const missionDrafts = [
+    ...DEMONSTRATION_MISSIONS,
+
+    ...(inventoryMission
+      ? [inventoryMission]
+      : []),
+  ];
+
+  const missions =
+    createMissions(missionDrafts);
+
+  const description =
+    inventorySnapshot
+      .productsRequiringAttention > 0
+      ? `Good morning Tom. Vault Brain is now using live inventory data. ${inventorySnapshot.productsRequiringAttention} monitored ${
+          inventorySnapshot.productsRequiringAttention === 1
+            ? "product requires"
+            : "products require"
+        } attention and inventory health is ${inventorySnapshot.healthScore}%.`
+      : `Good morning Tom. Vault Brain is now using live inventory data. All ${inventorySnapshot.monitoredProducts} monitored products are currently above the attention threshold and inventory health is ${inventorySnapshot.healthScore}%.`;
 
   return (
     <MissionControlWorkspace
       missions={missions}
       title="Vault Brain"
-      description="Good morning Tom. I’ve analysed your supplier, commercial, inventory and catalogue signals and identified four high-value missions requiring attention."
+      description={description}
     />
   );
 }
