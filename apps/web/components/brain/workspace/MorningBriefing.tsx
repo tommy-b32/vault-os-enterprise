@@ -6,15 +6,16 @@ import {
   NarratorEngine,
 } from "@/lib/brain/NarratorEngine";
 
-import {
-  DEMONSTRATION_OPERATIONAL_SNAPSHOT,
-} from "@/lib/brain/demonstrationOperationalSnapshot";
-
 import type {
   MorningBriefingImpact,
   MorningBriefingMetric,
+  VaultBrainOperationalSnapshot,
   VaultBrainSignalTone,
 } from "@/lib/brain/types";
+
+type MorningBriefingProps = {
+  snapshot: VaultBrainOperationalSnapshot;
+};
 
 function getMetricToneClass(
   tone: VaultBrainSignalTone,
@@ -189,32 +190,25 @@ function ImpactIcon({
   );
 }
 
-/*
- * MorningBriefingEngine remains responsible for structured
- * operational outputs such as metrics, impacts and actions.
- */
-const operationalBriefing =
-  MorningBriefingEngine.analyseOperational(
-    DEMONSTRATION_OPERATIONAL_SNAPSHOT,
-  );
+export default function MorningBriefing({
+  snapshot,
+}: MorningBriefingProps) {
+  const operationalBriefing =
+    MorningBriefingEngine.analyseOperational(
+      snapshot,
+    );
 
-/*
- * NarratorEngine is the single source of truth for the language,
- * ordering and confidence of the business story.
- */
-const narratorStory =
-  NarratorEngine.analyse({
-    snapshot:
-      DEMONSTRATION_OPERATIONAL_SNAPSHOT,
+  const narratorStory =
+    NarratorEngine.analyse({
+      snapshot,
 
-    impacts:
-      operationalBriefing.impacts,
+      impacts:
+        operationalBriefing.impacts,
 
-    recommendations:
-      operationalBriefing.recommendations,
-  });
+      recommendations:
+        operationalBriefing.recommendations,
+    });
 
-export default function MorningBriefing() {
   const primaryMetrics =
     operationalBriefing.metrics.filter(
       (metric) =>

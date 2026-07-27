@@ -25,10 +25,15 @@ import {
   getHighestPriorityMission,
 } from "@/lib/missions/MissionEngine";
 
+import type {
+  VaultBrainOperationalSnapshot,
+} from "@/lib/brain/types";
+
 import type { Mission } from "@/types/missions";
 
 type MissionControlWorkspaceProps = {
   missions: Mission[];
+  snapshot: VaultBrainOperationalSnapshot;
   title?: string;
   description?: string;
 };
@@ -89,6 +94,7 @@ const navigation = [
 
 export default function MissionControlWorkspace({
   missions,
+  snapshot,
   title = "Vault Brain",
   description = "Your retail operating system has analysed the latest business activity and ranked the highest-value actions.",
 }: MissionControlWorkspaceProps) {
@@ -270,7 +276,7 @@ export default function MissionControlWorkspace({
                 </span>
               </section>
 
-              <MorningBriefing />
+              <MorningBriefing snapshot={snapshot} />
 
               {highestPriorityMission ? (
                 <section className="mission-featured-section">

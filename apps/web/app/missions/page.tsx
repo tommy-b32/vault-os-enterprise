@@ -12,6 +12,10 @@ import type {
   MissionDraft,
 } from "@/types/missions";
 
+import {
+  createOperationalSnapshot,
+} from "@/lib/brain/createOperationalSnapshot";
+
 export const dynamic = "force-dynamic";
 
 function createInventoryMission({
@@ -272,6 +276,12 @@ export default async function MissionsPage() {
 
   const missions =
     createMissions(missionDrafts);
+    const operationalSnapshot =
+  createOperationalSnapshot({
+    inventory: inventorySnapshot,
+    missions,
+    userName: "Tom",
+  });
 
   const description =
     inventorySnapshot
@@ -285,9 +295,10 @@ export default async function MissionsPage() {
 
   return (
     <MissionControlWorkspace
-      missions={missions}
-      title="Vault Brain"
-      description={description}
-    />
+  missions={missions}
+  snapshot={operationalSnapshot}
+  title="Vault Brain"
+  description={description}
+/>
   );
 }
