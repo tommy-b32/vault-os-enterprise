@@ -2,6 +2,10 @@ import {
   CatalogueVisionEngine,
 } from "./CatalogueVisionEngine";
 
+import {
+  IdentityConflictEngine,
+} from "./IdentityConflictEngine";
+
 import type {
   CatalogueVisionData,
 } from "@/types/catalogue-vision";
@@ -51,8 +55,9 @@ export type CatalogueMatchingResult = {
     | "unmatched";
 };
 
-const MINIMUM_SUGGESTED_CONFIDENCE = 42;
-const AUTOMATIC_MATCH_CONFIDENCE = 82;
+const MINIMUM_SUGGESTED_CONFIDENCE = 55;
+const AUTOMATIC_MATCH_CONFIDENCE = 92;
+const MAX_NON_MAPPING_CONFIDENCE = 96;
 
 const EMPTY_PRODUCT_INTELLIGENCE:
   ProductIntelligenceProfile = {
@@ -87,11 +92,12 @@ function normaliseText(
 
 function clampScore(
   value: number,
+  maximum = 100,
 ): number {
   return Math.max(
     0,
     Math.min(
-      100,
+      maximum,
       Math.round(value),
     ),
   );
@@ -252,7 +258,7 @@ function calculateFingerprintSimilarity(
   const usefulScores =
     scores.filter(
       (score) =>
-        score >= 35,
+        score >= 40,
     );
 
   if (
@@ -274,43 +280,51 @@ function calculateFingerprintSimilarity(
   );
 }
 
-function hasIdentityEvidence(
-  signals: CatalogueMatchSignal[],
-): boolean {
-  return signals.some(
-    (signal) =>
-      signal.reason ===
-        "existing_mapping" ||
-      signal.reason ===
-        "brand_match" ||
-      (
-        signal.reason ===
-          "name_similarity" &&
-        signal.score >= 15
-      ) ||
-      (
-        signal.reason ===
-          "image_similarity" &&
-        signal.score >= 12
-      ),
-  );
-}
-
 function addSignal(
   signals: CatalogueMatchSignal[],
   signal: CatalogueMatchSignal,
 ): void {
-  if (signal.score <= 0) {
+  const score =
+    clampScore(
+      signal.score,
+    );
+
+  if (score <= 0) {
     return;
   }
 
   signals.push({
     ...signal,
-    score:
-      clampScore(
-        signal.score,
-      ),
+    score,
   });
+}
+
+function hasDistinctiveEvidence(
+  signals: CatalogueMatchSignal[],
+): boolean {
+  return signals.some(
+    (signal) =>
+      (
+        signal.reason ===
+          "image_similarity" &&
+        signal.score >= 12
+      ) ||
+      (
+        signal.reason ===
+          "name_similarity" &&
+        signal.score >= 18
+      ),
+  );
+}
+
+function hasBrandAgreement(
+  signals: CatalogueMatchSignal[],
+): boolean {
+  return signals.some(
+    (signal) =>
+      signal.reason ===
+        "brand_match",
+  );
 }
 
 function buildMatch({
@@ -335,6 +349,46 @@ function buildMatch({
       product,
     );
 
+  const identity =
+    IdentityConflictEngine.verify({
+      supplierVision:
+        vision,
+
+      product,
+
+      productVision,
+
+      productIntelligence:
+        intelligence,
+    });
+
+  if (!identity.valid) {
+    return {
+      product,
+      confidence: 0,
+      signals: [],
+    };
+  }
+
+  if (
+    card.linkedProductId ===
+    product.product_id
+  ) {
+    return {
+      product,
+      confidence: 100,
+      signals: [
+        {
+          reason:
+            "existing_mapping",
+          label:
+            "Existing supplier mapping",
+          score: 100,
+        },
+      ],
+    };
+  }
+
   const supplierName =
     normaliseText(
       card.supplierName,
@@ -358,33 +412,16 @@ function buildMatch({
           "same_supplier",
         label:
           "Same supplier",
-        score: 6,
+        score: 3,
       },
     );
   }
 
-  const supplierBrand =
-    normaliseText(
-      vision.brand,
-    );
-
-  const productBrand =
-    normaliseText(
-      productVision?.brand ??
-      intelligence.brand,
-    );
-
   if (
-    supplierBrand &&
-    (
-      supplierBrand ===
-        productBrand ||
-      normaliseText(
-        product.product_name,
-      ).includes(
-        supplierBrand,
-      )
-    )
+    identity.supplierBrand &&
+    identity.productBrand &&
+    identity.supplierBrand ===
+      identity.productBrand
   ) {
     addSignal(
       signals,
@@ -395,7 +432,7 @@ function buildMatch({
           productVision
             ? "Brand matches Product Vision"
             : "Brand match",
-        score: 28,
+        score: 30,
       },
     );
   }
@@ -414,7 +451,7 @@ function buildMatch({
       productNames,
     );
 
-  if (nameSimilarity >= 20) {
+  if (nameSimilarity >= 30) {
     addSignal(
       signals,
       {
@@ -424,7 +461,7 @@ function buildMatch({
           "Product name or keyword similarity",
         score:
           nameSimilarity *
-          0.28,
+          0.24,
       },
     );
   }
@@ -459,7 +496,7 @@ function buildMatch({
           productVision
             ? "Primary colour matches Product Vision"
             : "Primary colour match",
-        score: 13,
+        score: 8,
       },
     );
   }
@@ -483,7 +520,7 @@ function buildMatch({
           "manual_hint",
         label:
           "Garment type match",
-        score: 10,
+        score: 6,
       },
     );
   }
@@ -506,7 +543,7 @@ function buildMatch({
         ],
       );
 
-    if (logoSimilarity >= 30) {
+    if (logoSimilarity >= 40) {
       addSignal(
         signals,
         {
@@ -567,7 +604,7 @@ function buildMatch({
       ),
     );
 
-  if (graphicSimilarity >= 35) {
+  if (graphicSimilarity >= 45) {
     addSignal(
       signals,
       {
@@ -579,7 +616,7 @@ function buildMatch({
             : "Graphic and logo similarity",
         score:
           graphicSimilarity *
-          0.16,
+          0.18,
       },
     );
   }
@@ -595,7 +632,7 @@ function buildMatch({
     );
 
   if (
-    fingerprintSimilarity >= 28
+    fingerprintSimilarity >= 35
   ) {
     addSignal(
       signals,
@@ -608,7 +645,7 @@ function buildMatch({
             : "Legacy fingerprint similarity",
         score:
           fingerprintSimilarity *
-          0.24,
+          0.26,
       },
     );
   }
@@ -616,8 +653,7 @@ function buildMatch({
   if (productVision) {
     const supplierKeywords = [
       vision.productName,
-      vision.colour,
-      vision.garmentType,
+      ...vision.extractedText,
       vision.chestLogo,
       vision.frontGraphic,
       vision.backGraphic,
@@ -630,6 +666,7 @@ function buildMatch({
     );
 
     const productKeywords = [
+      productVision.brand,
       ...productVision.matching_keywords,
       ...productVision.key_features,
       ...productVision.visual_fingerprint,
@@ -652,7 +689,7 @@ function buildMatch({
       );
 
     if (
-      keywordSimilarity >= 35
+      keywordSimilarity >= 45
     ) {
       addSignal(
         signals,
@@ -667,62 +704,47 @@ function buildMatch({
         },
       );
     }
-
-    if (
-      valuesMatch(
-        vision.garmentType,
-        productVision.subcategory,
-      ) &&
-      valuesMatch(
-        vision.colour,
-        productVision.primary_colour,
-      )
-    ) {
-      addSignal(
-        signals,
-        {
-          reason:
-            "manual_hint",
-          label:
-            "Colour and garment combination match",
-          score: 6,
-        },
-      );
-    }
   }
 
-  if (
-    card.linkedProductId ===
-    product.product_id
-  ) {
-    addSignal(
+  const brandAgreement =
+    hasBrandAgreement(
       signals,
-      {
-        reason:
-          "existing_mapping",
-        label:
-          "Existing supplier mapping",
-        score: 100,
-      },
     );
+
+  const distinctiveEvidence =
+    hasDistinctiveEvidence(
+      signals,
+    );
+
+  if (
+    !brandAgreement ||
+    !distinctiveEvidence
+  ) {
+    return {
+      product,
+      confidence: 0,
+      signals:
+        signals.sort(
+          (left, right) =>
+            right.score -
+            left.score,
+        ),
+    };
   }
 
   const confidence =
-    hasIdentityEvidence(
-      signals,
-    )
-      ? clampScore(
-          signals.reduce(
-            (
-              total,
-              signal,
-            ) =>
-              total +
-              signal.score,
-            0,
-          ),
-        )
-      : 0;
+    clampScore(
+      signals.reduce(
+        (
+          total,
+          signal,
+        ) =>
+          total +
+          signal.score,
+        0,
+      ),
+      MAX_NON_MAPPING_CONFIDENCE,
+    );
 
   return {
     product,
