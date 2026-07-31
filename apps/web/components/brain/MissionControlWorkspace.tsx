@@ -2,22 +2,41 @@
 
 import Link from "next/link";
 
-import MissionControlStyles from "@/components/brain/MissionControlStyles";
+import ExecutiveMemory from "@/components/brain/workspace/ExecutiveMemory";
 import LiveIntelligenceFeed from "@/components/brain/workspace/LiveIntelligenceFeed";
 import MemoryInsights from "@/components/brain/workspace/MemoryInsights";
 import MissionCard from "@/components/brain/workspace/MissionCard";
 import MissionMetric from "@/components/brain/workspace/MissionMetric";
 import MorningBriefing from "@/components/brain/workspace/MorningBriefing";
+import PredictionInsights from "@/components/brain/workspace/PredictionInsights";
 import VaultBrainStartup from "@/components/brain/workspace/VaultBrainStartup";
 import VaultIcon, {
   type VaultIconName,
 } from "@/components/brain/workspace/VaultIcon";
 
+import MissionControlStyles from "@/components/brain/MissionControlStyles";
+
 import LiveIntelligenceFeedStyles from "@/styles/LiveIntelligenceFeedStyles";
 import MemoryInsightsStyles from "@/styles/MemoryInsightsStyles";
 import PredictionInsightsStyles from "@/styles/PredictionInsightsStyles";
-import PredictionInsights from "@/components/brain/workspace/PredictionInsights";
+import ProductVisionWorkspace from "@/components/brain/ProductVisionWorkspace";
 import VaultBrainStartupStyles from "@/styles/VaultBrainStartupStyles";
+
+import type {
+  ExecutiveMemoryResult,
+} from "@/lib/brain/ExecutiveMemoryEngine";
+
+import type {
+  VaultBrainOperationalSnapshot,
+} from "@/lib/brain/types";
+
+import type {
+  BusinessEventResult,
+} from "@/lib/brain/BusinessEventEngine";
+
+import type {
+  LiveIntelligenceFeed as LiveIntelligenceFeedModel,
+} from "@/lib/brain/LiveIntelligenceEngine";
 
 import {
   createMissionSummary,
@@ -26,14 +45,24 @@ import {
 } from "@/lib/missions/MissionEngine";
 
 import type {
-  VaultBrainOperationalSnapshot,
-} from "@/lib/brain/types";
-
-import type { Mission } from "@/types/missions";
+  Mission,
+} from "@/types/missions";
 
 type MissionControlWorkspaceProps = {
   missions: Mission[];
-  snapshot: VaultBrainOperationalSnapshot;
+
+  snapshot:
+    VaultBrainOperationalSnapshot;
+
+  executiveMemory:
+    ExecutiveMemoryResult;
+
+  businessEvents:
+    BusinessEventResult;
+
+  liveIntelligenceFeed:
+    LiveIntelligenceFeedModel;
+
   title?: string;
   description?: string;
 };
@@ -59,6 +88,11 @@ const navigation = [
     label: "Catalogue",
     icon: "catalogue",
     href: "/catalogue",
+  },
+  {
+    label: "Supplier Catalogue",
+    icon: "catalogue",
+    href: "/supplier-catalogue",
   },
   {
     label: "Partners",
@@ -95,23 +129,36 @@ const navigation = [
 export default function MissionControlWorkspace({
   missions,
   snapshot,
+  executiveMemory,
+  businessEvents,
+  liveIntelligenceFeed,
   title = "Vault Brain",
-  description = "Your retail operating system has analysed the latest business activity and ranked the highest-value actions.",
+  description =
+    "...",
 }: MissionControlWorkspaceProps) {
   const actionableMissions =
-    getActionableMissions(missions);
+    getActionableMissions(
+      missions,
+    );
 
   const highestPriorityMission =
-    getHighestPriorityMission(missions);
+    getHighestPriorityMission(
+      missions,
+    );
 
-  const remainingMissions = highestPriorityMission
-    ? actionableMissions.filter(
-        (mission) =>
-          mission.id !== highestPriorityMission.id,
-      )
-    : actionableMissions;
+  const remainingMissions =
+    highestPriorityMission
+      ? actionableMissions.filter(
+          (mission) =>
+            mission.id !==
+            highestPriorityMission.id,
+        )
+      : actionableMissions;
 
-  const summary = createMissionSummary(missions);
+  const summary =
+    createMissionSummary(
+      missions,
+    );
 
   return (
     <main className="vault-shell">
@@ -121,25 +168,44 @@ export default function MissionControlWorkspace({
             V
           </span>
 
-          <span>VAULT OS</span>
+          <span>
+            VAULT OS
+          </span>
         </div>
 
         <nav
           aria-label="Primary navigation"
           className="vault-nav"
         >
-          {navigation.map((item) => (
-            <Link
-              className={`vault-nav-item ${
-                item.active ? "is-active" : ""
-              }`}
-              href={item.href}
-              key={item.label}
-            >
-              <VaultIcon name={item.icon} />
-              <span>{item.label}</span>
-            </Link>
-          ))}
+          {navigation.map(
+            (item) => (
+              <Link
+                className={`vault-nav-item ${
+                  item.active
+                    ? "is-active"
+                    : ""
+                }`}
+                href={
+                  item.href
+                }
+                key={
+                  item.label
+                }
+              >
+                <VaultIcon
+                  name={
+                    item.icon
+                  }
+                />
+
+                <span>
+                  {
+                    item.label
+                  }
+                </span>
+              </Link>
+            ),
+          )}
         </nav>
 
         <div className="vault-company">
@@ -173,7 +239,9 @@ export default function MissionControlWorkspace({
               type="search"
             />
 
-            <kbd>⌘K</kbd>
+            <kbd>
+              ⌘K
+            </kbd>
           </label>
 
           <div className="vault-topbar-actions">
@@ -182,7 +250,9 @@ export default function MissionControlWorkspace({
               className="vault-icon-button"
               type="button"
             >
-              <VaultIcon name="bell" />
+              <VaultIcon
+                name="bell"
+              />
 
               <span className="vault-notification-count">
                 3
@@ -204,7 +274,9 @@ export default function MissionControlWorkspace({
                 T
               </span>
 
-              <span>Tom</span>
+              <span>
+                Tom
+              </span>
 
               <span className="vault-user-arrow">
                 ⌄
@@ -213,7 +285,9 @@ export default function MissionControlWorkspace({
           </div>
         </header>
 
-        <VaultBrainStartup durationMs={900}>
+        <VaultBrainStartup
+          durationMs={900}
+        >
           <div className="vault-content mission-control-content">
             <section className="mission-control-workspace">
               <header className="mission-control-header">
@@ -222,28 +296,38 @@ export default function MissionControlWorkspace({
                     Vault Brain
                   </p>
 
-                  <h1>{title}</h1>
+                  <h1>
+                    {title}
+                  </h1>
 
-                  <p>{description}</p>
+                  <p>
+                    {description}
+                  </p>
                 </div>
 
                 <section className="mission-metrics">
                   <MissionMetric
                     icon="target"
                     label="Active Missions"
-                    value={summary.actionable}
+                    value={
+                      summary.actionable
+                    }
                   />
 
                   <MissionMetric
                     icon="shield"
                     label="Urgent Attention"
-                    value={summary.critical}
+                    value={
+                      summary.critical
+                    }
                   />
 
                   <MissionMetric
                     icon="trend"
                     label="High-Value Actions"
-                    value={summary.high}
+                    value={
+                      summary.high
+                    }
                   />
 
                   <MissionMetric
@@ -257,26 +341,40 @@ export default function MissionControlWorkspace({
               <section className="vault-status-strip">
                 <span>
                   <i />
+
                   Shopify connected
                 </span>
 
                 <span>
                   <i />
+
                   Inventory synced 2 min ago
                 </span>
 
                 <span>
                   <i />
+
                   Vault Brain online
                 </span>
 
                 <span>
                   <i />
+
                   0 sync errors
                 </span>
               </section>
 
-              <MorningBriefing snapshot={snapshot} />
+              <MorningBriefing
+                snapshot={
+                  snapshot
+                }
+              />
+
+              <ExecutiveMemory
+                memory={
+                  executiveMemory
+                }
+              />
 
               {highestPriorityMission ? (
                 <section className="mission-featured-section">
@@ -294,7 +392,9 @@ export default function MissionControlWorkspace({
 
                   <MissionCard
                     featured
-                    mission={highestPriorityMission}
+                    mission={
+                      highestPriorityMission
+                    }
                   />
                 </section>
               ) : (
@@ -314,7 +414,8 @@ export default function MissionControlWorkspace({
                 </section>
               )}
 
-              {remainingMissions.length > 0 ? (
+              {remainingMissions.length >
+              0 ? (
                 <section className="mission-queue-section">
                   <div className="vault-section-heading">
                     <div>
@@ -342,10 +443,16 @@ export default function MissionControlWorkspace({
 
                   <div className="mission-queue-grid">
                     {remainingMissions.map(
-                      (mission) => (
+                      (
+                        mission,
+                      ) => (
                         <MissionCard
-                          key={mission.id}
-                          mission={mission}
+                          key={
+                            mission.id
+                          }
+                          mission={
+                            mission
+                          }
                         />
                       ),
                     )}
@@ -353,9 +460,14 @@ export default function MissionControlWorkspace({
                 </section>
               ) : null}
 
-              <LiveIntelligenceFeed />
+              <LiveIntelligenceFeed
+                feed={liveIntelligenceFeed}
+              />
+
+              <ProductVisionWorkspace />
 
               <MemoryInsights />
+
               <PredictionInsights />
             </section>
           </div>

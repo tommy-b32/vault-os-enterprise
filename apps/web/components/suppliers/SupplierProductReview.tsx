@@ -1,8 +1,33 @@
 "use client";
 
-import { useEffect } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-import { BrainPill } from "@/components/ui/BrainPill";
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useTransform,
+} from "framer-motion";
+
+import {
+  CommercialIntelligenceCard,
+} from "@/components/brain/CommercialIntelligenceCard";
+
+import {
+  AlternativeMatchesCard,
+} from "@/components/suppliers/AlternativeMatchesCard";
+
+import {
+  MatchSummaryCard,
+} from "@/components/suppliers/MatchSummaryCard";
+
+import {
+  BrainPill,
+} from "@/components/ui/BrainPill";
 
 import type {
   CatalogueMatchingResult,
@@ -26,47 +51,28 @@ type Props = {
   onNext?: () => void;
 };
 
-function getPrimaryImage(
-  card: SupplierCatalogueCardData,
-): SupplierCatalogueCardData["images"][number] | null {
-  const roles = [
-    "supplier",
-    "official",
-    "detail",
-    "back",
-    "label",
-    "other",
-  ] as const;
+function getImageRoleLabel(
+  role: SupplierCatalogueCardData["images"][number]["role"],
+): string {
+  switch (role) {
+    case "official":
+      return "Official";
 
-  for (const role of roles) {
-    const image = card.images.find(
-      (candidate) =>
-        candidate.role === role,
-    );
+    case "supplier":
+      return "Supplier";
 
-    if (image) {
-      return image;
-    }
+    case "detail":
+      return "Detail";
+
+    case "label":
+      return "Label";
+
+    case "back":
+      return "Back";
+
+    default:
+      return "Other";
   }
-
-  return card.images[0] ?? null;
-}
-
-function getConfidenceTone(
-  confidence: number,
-):
-  | "success"
-  | "warning"
-  | "danger" {
-  if (confidence >= 80) {
-    return "success";
-  }
-
-  if (confidence >= 50) {
-    return "warning";
-  }
-
-  return "danger";
 }
 
 export function SupplierProductReview({
@@ -80,8 +86,104 @@ export function SupplierProductReview({
   onPrevious,
   onNext,
 }: Props) {
-  const image = getPrimaryImage(card);
-  const bestMatch = match.bestMatch;
+  const [
+    activeImageIndex,
+    setActiveImageIndex,
+  ] = useState(0);
+
+  const [
+    isZoomed,
+    setIsZoomed,
+  ] = useState(false);
+
+  const [
+    isSwiping,
+    setIsSwiping,
+  ] = useState(false);
+
+  const swipeX =
+    useMotionValue(0);
+
+  const swipeY =
+    useMotionValue(0);
+
+  const cardRotation =
+    useTransform(
+      swipeX,
+      [-260, 0, 260],
+      [-10, 0, 10],
+    );
+
+  const linkOpacity =
+    useTransform(
+      swipeX,
+      [30, 150],
+      [0, 1],
+    );
+
+  const ignoreOpacity =
+    useTransform(
+      swipeX,
+      [-150, -30],
+      [1, 0],
+    );
+
+  const createOpacity =
+    useTransform(
+      swipeY,
+      [-150, -30],
+      [1, 0],
+    );
+
+  const bestMatch =
+    match.bestMatch;
+
+  const images =
+    useMemo(
+      () =>
+        [...card.images].sort(
+          (left, right) => {
+            const priority = [
+              "supplier",
+              "official",
+              "detail",
+              "back",
+              "label",
+              "other",
+            ];
+
+            return (
+              priority.indexOf(left.role) -
+              priority.indexOf(right.role)
+            );
+          },
+        ),
+      [card.images],
+    );
+
+  const activeImage =
+    images[activeImageIndex] ??
+    null;
+
+  const unitCost =
+    card.packCost !== null &&
+    card.packSize !== null &&
+    card.packSize > 0
+      ? card.packCost /
+        card.packSize
+      : null;
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+    setIsZoomed(false);
+    setIsSwiping(false);
+    swipeX.set(0);
+    swipeY.set(0);
+  }, [
+    card.id,
+    swipeX,
+    swipeY,
+  ]);
 
   useEffect(() => {
     function handleKeyDown(
@@ -100,7 +202,9 @@ export function SupplierProductReview({
         return;
       }
 
-      switch (event.key.toLowerCase()) {
+      switch (
+        event.key.toLowerCase()
+      ) {
         case "a":
           if (bestMatch) {
             onAccept?.();
@@ -121,6 +225,10 @@ export function SupplierProductReview({
 
         case "arrowright":
           onNext?.();
+          break;
+
+        case "escape":
+          setIsZoomed(false);
           break;
       }
     }
@@ -145,280 +253,458 @@ export function SupplierProductReview({
     onSkip,
   ]);
 
+  async function handleSwipeEnd() {
+    if (isSwiping) {
+      return;
+    }
+
+    const horizontal =
+      swipeX.get();
+
+    const vertical =
+      swipeY.get();
+
+    const absHorizontal =
+      Math.abs(horizontal);
+
+    if (
+      vertical < -120 &&
+      absHorizontal < 170
+    ) {
+      setIsSwiping(true);
+
+      await animate(
+        swipeY,
+        -window.innerHeight,
+        {
+          duration: 0.24,
+          ease: "easeIn",
+        },
+      );
+
+      onCreateProduct?.();
+      return;
+    }
+
+    if (
+      horizontal > 140 &&
+      bestMatch
+    ) {
+      setIsSwiping(true);
+
+      await animate(
+        swipeX,
+        window.innerWidth,
+        {
+          duration: 0.24,
+          ease: "easeIn",
+        },
+      );
+
+      onAccept?.();
+      return;
+    }
+
+    if (horizontal < -140) {
+      setIsSwiping(true);
+
+      await animate(
+        swipeX,
+        -window.innerWidth,
+        {
+          duration: 0.24,
+          ease: "easeIn",
+        },
+      );
+
+      onSkip?.();
+      return;
+    }
+
+    await Promise.all([
+      animate(
+        swipeX,
+        0,
+        {
+          type: "spring",
+          stiffness: 420,
+          damping: 32,
+        },
+      ),
+
+      animate(
+        swipeY,
+        0,
+        {
+          type: "spring",
+          stiffness: 420,
+          damping: 32,
+        },
+      ),
+    ]);
+  }
+
   return (
-    <section className="supplier-product-review">
-      <header className="supplier-product-review-header">
-        <div>
-          <p className="vault-eyebrow">
-            Supplier Product Review
-          </p>
+    <>
+      <motion.div
+        className="supplier-product-review-swipe-shell supplier-product-review-v2-shell"
+        drag
+        dragConstraints={{
+          bottom: 0,
+          left: 0,
+          right: 0,
+          top: 0,
+        }}
+        dragElastic={0.72}
+        dragMomentum={false}
+        onDragEnd={() => {
+          void handleSwipeEnd();
+        }}
+        style={{
+          rotate: cardRotation,
+          x: swipeX,
+          y: swipeY,
+        }}
+      >
+        <motion.div
+          className="supplier-product-review-swipe-label supplier-product-review-swipe-label-link"
+          style={{
+            opacity: linkOpacity,
+          }}
+        >
+          ✓ Link Product
+        </motion.div>
 
-          <h2>
-            Review detected catalogue item
-          </h2>
+        <motion.div
+          className="supplier-product-review-swipe-label supplier-product-review-swipe-label-ignore"
+          style={{
+            opacity: ignoreOpacity,
+          }}
+        >
+          Ignore
+        </motion.div>
 
-          <p>
-            Accept Vault Brain&apos;s suggestion,
-            link another product or create a new
-            catalogue product.
-          </p>
-        </div>
+        <motion.div
+          className="supplier-product-review-swipe-label supplier-product-review-swipe-label-create"
+          style={{
+            opacity: createOpacity,
+          }}
+        >
+          ＋ Create Product
+        </motion.div>
 
-        <div className="supplier-product-review-progress">
-          <span>
-            Item {currentIndex + 1}
-          </span>
-
-          <strong>
-            {totalItems}
-          </strong>
-        </div>
-      </header>
-
-      <div className="supplier-product-review-layout">
-        <article className="supplier-product-review-visual">
-          <div className="supplier-product-review-image">
-            {image ? (
-              <img
-                alt={image.alt}
-                src={image.url}
-              />
-            ) : (
-              <div className="supplier-product-review-placeholder">
-                <span>V</span>
-
-                <p>
-                  Supplier image will appear here
-                  after PDF extraction.
-                </p>
-              </div>
-            )}
-
-            <div className="supplier-product-review-badges">
-              <BrainPill tone="default">
-                {card.supplierName}
-              </BrainPill>
-
-              {card.pageNumber !== null ? (
-                <BrainPill tone="default">
-                  Page {card.pageNumber}
-                </BrainPill>
-              ) : null}
-
-              {card.status === "new" ? (
-                <BrainPill tone="warning">
-                  New item
-                </BrainPill>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="supplier-product-review-item-copy">
-            <span>
-              {card.brand ??
-                "Supplier catalogue item"}
-            </span>
-
-            <h3>
-              {card.officialProductName ??
-                card.internalReference ??
-                "Unnamed supplier item"}
-            </h3>
-
-            <p>
-              {card.colour ??
-                "Colour not recorded"}
-            </p>
-          </div>
-        </article>
-
-        <article className="supplier-product-review-match">
-          <header>
+        <section className="supplier-product-review-v2">
+          <header className="supplier-product-review-v2-header">
             <div>
               <p className="vault-eyebrow">
-                Vault Brain Suggests
+                Vault Brain Review
               </p>
 
-              <h3>
-                {bestMatch
-                  ? bestMatch.product
-                      .product_name
-                  : "No suitable match found"}
-              </h3>
-            </div>
-
-            {bestMatch ? (
-              <BrainPill
-                tone={getConfidenceTone(
-                  bestMatch.confidence,
-                )}
-              >
-                {bestMatch.confidence}% match
-              </BrainPill>
-            ) : (
-              <BrainPill tone="danger">
-                Manual review
-              </BrainPill>
-            )}
-          </header>
-
-          {bestMatch ? (
-            <>
-              <div className="supplier-product-review-signals">
-                {bestMatch.signals.map(
-                  (signal) => (
-                    <div
-                      key={`${signal.reason}-${signal.label}`}
-                    >
-                      <span aria-hidden="true">
-                        ✓
-                      </span>
-
-                      <div>
-                        <strong>
-                          {signal.label}
-                        </strong>
-
-                        <small>
-                          +{signal.score}
-                        </small>
-                      </div>
-                    </div>
-                  ),
-                )}
-              </div>
-
-              <div className="supplier-product-review-summary">
-                <span>
-                  Suggested Fabric Vault product
-                </span>
-
-                <strong>
-                  {
-                    bestMatch.product
-                      .product_name
-                  }
-                </strong>
-
-                <small>
-                  Vault Brain recommends accepting
-                  this match based on the strongest
-                  available catalogue signals.
-                </small>
-              </div>
-            </>
-          ) : (
-            <div className="supplier-product-review-empty">
-              <h4>
-                Create or link manually
-              </h4>
+              <h2>
+                {card.officialProductName ??
+                  card.internalReference ??
+                  "Unnamed supplier item"}
+              </h2>
 
               <p>
-                Vault Brain could not identify a
-                suitable existing Fabric Vault
-                product for this supplier item.
+                {card.brand ??
+                  "Supplier catalogue item"}{" "}
+                ·{" "}
+                {card.colour ??
+                  "Colour not recorded"}
               </p>
             </div>
-          )}
 
-          {match.alternatives.length > 0 ? (
-            <div className="supplier-product-review-alternatives">
+            <div className="supplier-product-review-v2-progress">
               <span>
-                Alternative matches
+                Item {currentIndex + 1}
               </span>
 
-              {match.alternatives.map(
-                (alternative) => (
-                  <button
-                    key={
-                      alternative.product
-                        .product_id
-                    }
-                    type="button"
-                  >
-                    <strong>
-                      {
-                        alternative.product
-                          .product_name
-                      }
-                    </strong>
-
-                    <small>
-                      {alternative.confidence}%
-                    </small>
-                  </button>
-                ),
-              )}
+              <strong>
+                {totalItems}
+              </strong>
             </div>
-          ) : null}
-        </article>
-      </div>
+          </header>
 
-      <footer className="supplier-product-review-actions">
-        <button
-          className="review-action review-action-ignore"
-          onClick={onSkip}
-          type="button"
-        >
-          <span>←</span>
+          <div className="supplier-product-review-v2-stage">
+            <section className="supplier-product-review-v2-visual">
+              <div className="supplier-product-review-v2-image">
+                {activeImage ? (
+                  <>
+                    <img
+                      alt={activeImage.alt}
+                      src={activeImage.url}
+                    />
 
-          <div>
-            <strong>Ignore</strong>
-            <small>S</small>
+                    <button
+                      className="supplier-product-review-v2-zoom"
+                      onClick={() =>
+                        setIsZoomed(true)
+                      }
+                      type="button"
+                    >
+                      Zoom
+                    </button>
+                  </>
+                ) : (
+                  <div className="supplier-product-review-placeholder">
+                    <span>V</span>
+
+                    <p>
+                      No supplier image is available for this
+                      catalogue item.
+                    </p>
+                  </div>
+                )}
+
+                <div className="supplier-product-review-v2-badges">
+                  <BrainPill tone="default">
+                    {card.supplierName}
+                  </BrainPill>
+
+                  {card.pageNumber !== null ? (
+                    <BrainPill tone="default">
+                      Page {card.pageNumber}
+                    </BrainPill>
+                  ) : null}
+
+                  {activeImage ? (
+                    <BrainPill tone="default">
+                      {getImageRoleLabel(
+                        activeImage.role,
+                      )}
+                    </BrainPill>
+                  ) : null}
+                </div>
+              </div>
+
+              {images.length > 1 ? (
+                <div className="supplier-product-review-v2-thumbnails">
+                  {images.map(
+                    (
+                      image,
+                      index,
+                    ) => (
+                      <button
+                        aria-label={`Show ${getImageRoleLabel(
+                          image.role,
+                        )} image`}
+                        aria-pressed={
+                          activeImageIndex ===
+                          index
+                        }
+                        className={
+                          activeImageIndex ===
+                          index
+                            ? "is-active"
+                            : ""
+                        }
+                        key={image.id}
+                        onClick={() =>
+                          setActiveImageIndex(
+                            index,
+                          )
+                        }
+                        type="button"
+                      >
+                        <img
+                          alt=""
+                          src={image.url}
+                        />
+
+                        <span>
+                          {getImageRoleLabel(
+                            image.role,
+                          )}
+                        </span>
+                      </button>
+                    ),
+                  )}
+                </div>
+              ) : null}
+            </section>
+
+            <section className="supplier-product-review-v2-intelligence">
+              <MatchSummaryCard
+                bestMatch={
+                  bestMatch
+                }
+              />
+
+              {bestMatch ? (
+                <CommercialIntelligenceCard
+                  product={
+                    bestMatch.product
+                  }
+                  supplierCard={
+                    card
+                  }
+                />
+              ) : null}
+
+              <div className="supplier-product-review-v2-commercial">
+                <article>
+                  <span>Supplier</span>
+                  <strong>
+                    {card.supplierName}
+                  </strong>
+                </article>
+
+                <article>
+                  <span>Pack Cost</span>
+                  <strong>
+                    {card.packCost !== null
+                      ? `${card.currency} ${card.packCost.toFixed(2)}`
+                      : "Not entered"}
+                  </strong>
+                </article>
+
+                <article>
+                  <span>Pack Size</span>
+                  <strong>
+                    {card.packSize ??
+                      "Not entered"}
+                  </strong>
+                </article>
+
+                <article>
+                  <span>Unit Cost</span>
+                  <strong>
+                    {unitCost !== null
+                      ? `${card.currency} ${unitCost.toFixed(2)}`
+                      : "Not available"}
+                  </strong>
+                </article>
+
+                <article>
+                  <span>Lead Time</span>
+                  <strong>
+                    {card.leadTimeDays !== null
+                      ? `${card.leadTimeDays} days`
+                      : "Not entered"}
+                  </strong>
+                </article>
+
+                <article>
+                  <span>Reference</span>
+                  <strong>
+                    {card.internalReference ??
+                      "Not recorded"}
+                  </strong>
+                </article>
+              </div>
+
+              <AlternativeMatchesCard
+                alternatives={
+                  match.alternatives
+                }
+              />
+            </section>
           </div>
-        </button>
 
-        <button
-          className="review-action review-action-link"
-          disabled={!bestMatch}
-          onClick={onAccept}
-          type="button"
-        >
-          <span>✓</span>
+          <footer className="supplier-product-review-v2-actions">
+            <button
+              className="review-action review-action-ignore"
+              onClick={onSkip}
+              type="button"
+            >
+              <span>←</span>
 
-          <div>
-            <strong>Accept Match</strong>
-            <small>A</small>
+              <div>
+                <strong>Ignore</strong>
+                <small>S</small>
+              </div>
+            </button>
+
+            <button
+              className="review-action review-action-link"
+              disabled={!bestMatch}
+              onClick={onAccept}
+              type="button"
+            >
+              <span>✓</span>
+
+              <div>
+                <strong>
+                  Link Product
+                </strong>
+                <small>A</small>
+              </div>
+            </button>
+
+            <button
+              className="review-action review-action-new"
+              onClick={onCreateProduct}
+              type="button"
+            >
+              <span>＋</span>
+
+              <div>
+                <strong>
+                  Create Product
+                </strong>
+                <small>N</small>
+              </div>
+            </button>
+          </footer>
+
+          <div className="supplier-product-review-v2-navigation">
+            <button
+              disabled={currentIndex <= 0}
+              onClick={onPrevious}
+              type="button"
+            >
+              ← Previous
+            </button>
+
+            <span>
+              Swipe left, right or up
+            </span>
+
+            <button
+              disabled={
+                currentIndex >=
+                totalItems - 1
+              }
+              onClick={onNext}
+              type="button"
+            >
+              Next →
+            </button>
           </div>
-        </button>
+        </section>
+      </motion.div>
 
-        <button
-          className="review-action review-action-new"
-          onClick={onCreateProduct}
-          type="button"
-        >
-          <span>＋</span>
-
-          <div>
-            <strong>Create Product</strong>
-            <small>N</small>
-          </div>
-        </button>
-      </footer>
-
-      <div className="supplier-product-review-navigation">
-        <button
-          disabled={currentIndex <= 0}
-          onClick={onPrevious}
-          type="button"
-        >
-          ← Previous
-        </button>
-
-        <span>
-          Use A, S, N or the arrow keys
-        </span>
-
-        <button
-          disabled={
-            currentIndex >= totalItems - 1
+      {isZoomed &&
+      activeImage ? (
+        <div
+          className="supplier-product-review-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Supplier product image"
+          onClick={() =>
+            setIsZoomed(false)
           }
-          onClick={onNext}
-          type="button"
         >
-          Next →
-        </button>
-      </div>
-    </section>
+          <button
+            aria-label="Close image"
+            onClick={() =>
+              setIsZoomed(false)
+            }
+            type="button"
+          >
+            ×
+          </button>
+
+          <img
+            alt={activeImage.alt}
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            src={activeImage.url}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }

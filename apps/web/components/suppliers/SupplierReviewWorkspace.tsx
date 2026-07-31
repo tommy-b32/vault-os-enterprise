@@ -1,13 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  VaultBrainOverlay,
+} from "@/components/brain/VaultBrainOverlay";
 
 import {
   BuyingBasket,
   type BuyingBasketItem,
 } from "@/components/suppliers/BuyingBasket";
-import { SupplierProductReview } from "@/components/suppliers/SupplierProductReview";
-import { SupplierReviewComplete } from "@/components/suppliers/SupplierReviewComplete";
+
+import {
+  SupplierProductCreationWorkspace,
+  type SupplierProductDraft,
+} from "@/components/suppliers/SupplierProductCreationWorkspace";
+
+import {
+  SupplierProductReview,
+} from "@/components/suppliers/SupplierProductReview";
+
+import {
+  SupplierReviewComplete,
+} from "@/components/suppliers/SupplierReviewComplete";
+
+import {
+  ProductLinkRepository,
+  type ProductLink,
+} from "@/lib/supplier/ProductLinkRepository";
 
 import type {
   CatalogueMatchingResult,
@@ -31,20 +55,137 @@ type Decision =
   | "skipped"
   | "create_product";
 
+type WorkspaceMode =
+  | "review"
+  | "create-product";
+
+type MemoryToast = {
+  title: string;
+  message: string;
+} | null;
+
+function wait(
+  milliseconds: number,
+): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(
+      resolve,
+      milliseconds,
+    );
+  });
+}
+
+function buildProductLink(
+  item: ReviewItem,
+): ProductLink | null {
+  const bestMatch =
+    item.match.bestMatch;
+
+  if (!bestMatch) {
+    return null;
+  }
+
+  const supplierProductName =
+    item.card.officialProductName ??
+    item.card.internalReference ??
+    "Unnamed supplier product";
+
+  return {
+    id:
+      `${item.card.supplierId}:${item.card.id}`,
+
+    supplierName:
+      item.card.supplierName,
+
+    supplierProductName,
+
+    supplierReference:
+      item.card.internalReference,
+
+    fabricVaultProductId:
+      bestMatch.product.product_id,
+
+    fabricVaultProductName:
+      bestMatch.product.product_name,
+
+    confidence:
+      bestMatch.confidence,
+
+    createdAt:
+      new Date().toISOString(),
+  };
+}
+
 export function SupplierReviewWorkspace({
   items,
 }: Props) {
   const [currentIndex, setCurrentIndex] =
     useState(0);
 
+  const [mode, setMode] =
+    useState<WorkspaceMode>("review");
+
   const [decisions, setDecisions] =
     useState<Record<string, Decision>>({});
+
+  const [
+    createdProducts,
+    setCreatedProducts,
+  ] = useState<
+    Record<string, SupplierProductDraft>
+  >({});
+
+  const [
+    rememberedLinks,
+    setRememberedLinks,
+  ] = useState<ProductLink[]>([]);
+
+  const [memoryToast, setMemoryToast] =
+    useState<MemoryToast>(null);
+
+  const [
+    isAcceptingMatch,
+    setIsAcceptingMatch,
+  ] = useState(false);
+
+  const [
+    acceptanceStatus,
+    setAcceptanceStatus,
+  ] = useState(
+    "Preparing product link...",
+  );
+
+  const [
+    acceptanceProgress,
+    setAcceptanceProgress,
+  ] = useState(0);
 
   const [basketItems, setBasketItems] =
     useState<BuyingBasketItem[]>([]);
 
   const currentItem =
     items[currentIndex] ?? null;
+
+  useEffect(() => {
+    setRememberedLinks(
+      ProductLinkRepository.getAll(),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!memoryToast) {
+      return;
+    }
+
+    const timer =
+      window.setTimeout(() => {
+        setMemoryToast(null);
+      }, 2600);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [memoryToast]);
 
   const reviewedCount =
     Object.keys(decisions).length;
@@ -126,6 +267,22 @@ export function SupplierReviewWorkspace({
     return null;
   }
 
+  function moveToNextItem(
+    decisionsAfterUpdate: Record<
+      string,
+      Decision
+    >,
+  ) {
+    const nextIndex =
+      getNextUnreviewedIndex(
+        decisionsAfterUpdate,
+      );
+
+    if (nextIndex !== null) {
+      setCurrentIndex(nextIndex);
+    }
+  }
+
   function addAcceptedItemToBasket(
     item: ReviewItem,
   ) {
@@ -138,13 +295,58 @@ export function SupplierReviewWorkspace({
 
     const basketItem: BuyingBasketItem = {
       id: item.card.id,
+
       productName:
         bestMatch.product.product_name,
+
       supplierName:
         item.card.supplierName,
+
       packs: 1,
-      packCost: item.card.packCost,
-      currency: item.card.currency,
+
+      packCost:
+        item.card.packCost,
+
+      currency:
+        item.card.currency,
+    };
+
+    setBasketItems((current) => {
+      const existing = current.find(
+        (entry) =>
+          entry.id === basketItem.id,
+      );
+
+      if (existing) {
+        return current;
+      }
+
+      return [
+        ...current,
+        basketItem,
+      ];
+    });
+  }
+
+  function addCreatedItemToBasket(
+    draft: SupplierProductDraft,
+  ) {
+    const basketItem: BuyingBasketItem = {
+      id: draft.id,
+
+      productName:
+        draft.productName,
+
+      supplierName:
+        draft.supplierName,
+
+      packs: 1,
+
+      packCost:
+        draft.packCost,
+
+      currency:
+        draft.currency,
     };
 
     setBasketItems((current) => {
@@ -169,13 +371,193 @@ export function SupplierReviewWorkspace({
   ) {
     setBasketItems((current) =>
       current.filter(
-        (item) => item.id !== cardId,
+        (item) =>
+          item.id !== cardId,
       ),
     );
   }
 
-  function recordDecision(
-    decision: Decision,
+  async function acceptCurrentMatch() {
+    if (
+      !currentItem ||
+      isAcceptingMatch
+    ) {
+      return;
+    }
+
+    const productLink =
+      buildProductLink(
+        currentItem,
+      );
+
+    if (!productLink) {
+      return;
+    }
+
+    setIsAcceptingMatch(
+      true,
+    );
+
+    setAcceptanceProgress(
+      8,
+    );
+
+    setAcceptanceStatus(
+      "Confirming the supplier product match...",
+    );
+
+    try {
+      await wait(280);
+
+      setAcceptanceProgress(
+        28,
+      );
+
+      setAcceptanceStatus(
+        "Saving the supplier-to-product relationship...",
+      );
+
+      ProductLinkRepository.save(
+        productLink,
+      );
+
+      await wait(360);
+
+      setAcceptanceProgress(
+        52,
+      );
+
+      setAcceptanceStatus(
+        "Updating Vault Brain product memory...",
+      );
+
+      setRememberedLinks(
+        ProductLinkRepository.getAll(),
+      );
+
+      await wait(360);
+
+      setAcceptanceProgress(
+        74,
+      );
+
+      setAcceptanceStatus(
+        "Checking inventory and buying context...",
+      );
+
+      await wait(360);
+
+      setAcceptanceProgress(
+        91,
+      );
+
+      setAcceptanceStatus(
+        "Preparing the next review item...",
+      );
+
+      const nextDecisions = {
+        ...decisions,
+
+        [currentItem.card.id]:
+          "accepted" as const,
+      };
+
+      addAcceptedItemToBasket(
+        currentItem,
+      );
+
+      setMemoryToast({
+        title:
+          "Product remembered",
+
+        message:
+          `Future ${currentItem.card.supplierName} catalogues can recognise this product automatically.`,
+      });
+
+      await wait(300);
+
+      setAcceptanceProgress(
+        100,
+      );
+
+      setAcceptanceStatus(
+        "Product linked successfully.",
+      );
+
+      await wait(420);
+
+      setIsAcceptingMatch(
+        false,
+      );
+
+      await wait(160);
+
+      setDecisions(
+        nextDecisions,
+      );
+
+      moveToNextItem(
+        nextDecisions,
+      );
+    } catch (error) {
+      console.error(
+        "Vault OS could not complete the product link.",
+        error,
+      );
+
+      setAcceptanceStatus(
+        "The product link could not be completed.",
+      );
+
+      setAcceptanceProgress(
+        100,
+      );
+
+      await wait(700);
+
+      setIsAcceptingMatch(
+        false,
+      );
+    }
+  }
+
+  function skipCurrentItem() {
+    if (!currentItem) {
+      return;
+    }
+
+    const nextDecisions = {
+      ...decisions,
+
+      [currentItem.card.id]:
+        "skipped" as const,
+    };
+
+    setDecisions(
+      nextDecisions,
+    );
+
+    removeItemFromBasket(
+      currentItem.card.id,
+    );
+
+    moveToNextItem(
+      nextDecisions,
+    );
+  }
+
+  function openProductCreation() {
+    if (!currentItem) {
+      return;
+    }
+
+    setMode(
+      "create-product",
+    );
+  }
+
+  function saveCreatedProduct(
+    draft: SupplierProductDraft,
   ) {
     if (!currentItem) {
       return;
@@ -183,34 +565,45 @@ export function SupplierReviewWorkspace({
 
     const nextDecisions = {
       ...decisions,
-      [currentItem.card.id]: decision,
+
+      [currentItem.card.id]:
+        "create_product" as const,
     };
 
-    setDecisions(nextDecisions);
+    setCreatedProducts(
+      (current) => ({
+        ...current,
 
-    if (decision === "accepted") {
-      addAcceptedItemToBasket(
-        currentItem,
-      );
-    } else {
-      removeItemFromBasket(
-        currentItem.card.id,
-      );
-    }
+        [currentItem.card.id]:
+          draft,
+      }),
+    );
 
-    const nextIndex =
-      getNextUnreviewedIndex(
-        nextDecisions,
-      );
+    setDecisions(
+      nextDecisions,
+    );
 
-    if (nextIndex !== null) {
-      setCurrentIndex(nextIndex);
-    }
+    addCreatedItemToBasket(
+      draft,
+    );
+
+    setMode("review");
+
+    moveToNextItem(
+      nextDecisions,
+    );
+  }
+
+  function cancelProductCreation() {
+    setMode("review");
   }
 
   function goPrevious() {
     setCurrentIndex((current) =>
-      Math.max(0, current - 1),
+      Math.max(
+        0,
+        current - 1,
+      ),
     );
   }
 
@@ -220,6 +613,60 @@ export function SupplierReviewWorkspace({
         items.length - 1,
         current + 1,
       ),
+    );
+  }
+
+  function increaseBasketItemPacks(
+    itemId: string,
+  ) {
+    setBasketItems(
+      (current) =>
+        current.map(
+          (item) =>
+            item.id === itemId
+              ? {
+                  ...item,
+                  packs:
+                    item.packs +
+                    1,
+                }
+              : item,
+        ),
+    );
+  }
+
+  function decreaseBasketItemPacks(
+    itemId: string,
+  ) {
+    setBasketItems(
+      (current) =>
+        current.map(
+          (item) =>
+            item.id === itemId
+              ? {
+                  ...item,
+                  packs:
+                    Math.max(
+                      1,
+                      item.packs -
+                        1,
+                    ),
+                }
+              : item,
+        ),
+    );
+  }
+
+  function removeBasketItem(
+    itemId: string,
+  ) {
+    setBasketItems(
+      (current) =>
+        current.filter(
+          (item) =>
+            item.id !==
+            itemId,
+        ),
     );
   }
 
@@ -241,7 +688,9 @@ export function SupplierReviewWorkspace({
           Review Queue
         </p>
 
-        <h1>No catalogue items to review</h1>
+        <h1>
+          No catalogue items to review
+        </h1>
 
         <p>
           Import a supplier catalogue first.
@@ -256,14 +705,54 @@ export function SupplierReviewWorkspace({
     );
   }
 
+  if (
+    mode === "create-product" &&
+    currentItem
+  ) {
+    return (
+      <SupplierProductCreationWorkspace
+        card={currentItem.card}
+        onCancel={
+          cancelProductCreation
+        }
+        onSave={
+          saveCreatedProduct
+        }
+      />
+    );
+  }
+
   if (reviewComplete) {
     return (
       <main className="supplier-review-workspace">
+        {memoryToast ? (
+          <div
+            className="product-memory-toast"
+            role="status"
+          >
+            <span>✓</span>
+
+            <div>
+              <strong>
+                {memoryToast.title}
+              </strong>
+
+              <p>
+                {memoryToast.message}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <SupplierReviewComplete
           accepted={acceptedCount}
           basketItems={basketItems}
-          newProducts={newProductCount}
-          onOpenBasket={openBasket}
+          newProducts={
+            newProductCount
+          }
+          onOpenBasket={
+            openBasket
+          }
           onReturnToArchive={
             returnToArchive
           }
@@ -280,13 +769,47 @@ export function SupplierReviewWorkspace({
 
   return (
     <main className="supplier-review-workspace">
+      <VaultBrainOverlay
+        progress={
+          acceptanceProgress
+        }
+        status={
+          acceptanceStatus
+        }
+        title="Linking supplier product"
+        visible={
+          isAcceptingMatch
+        }
+      />
+
+      {memoryToast ? (
+        <div
+          className="product-memory-toast"
+          role="status"
+        >
+          <span>✓</span>
+
+          <div>
+            <strong>
+              {memoryToast.title}
+            </strong>
+
+            <p>
+              {memoryToast.message}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <header className="supplier-review-workspace-header">
         <div>
           <p className="vault-eyebrow">
             Vault Brain Review Queue
           </p>
 
-          <h1>Catalogue Match Review</h1>
+          <h1>
+            Catalogue Match Review
+          </h1>
 
           <p>
             Review only the items that require a
@@ -317,6 +840,14 @@ export function SupplierReviewWorkspace({
         </article>
 
         <article>
+          <span>Remembered</span>
+
+          <strong>
+            {rememberedLinks.length}
+          </strong>
+        </article>
+
+        <article>
           <span>Progress</span>
 
           <strong>
@@ -325,7 +856,9 @@ export function SupplierReviewWorkspace({
         </article>
 
         <article>
-          <span>Estimated time</span>
+          <span>
+            Estimated time
+          </span>
 
           <strong>
             {estimatedMinutes} min
@@ -336,7 +869,8 @@ export function SupplierReviewWorkspace({
       <div className="supplier-review-progress-track">
         <span
           style={{
-            width: `${progressPercentage}%`,
+            width:
+              `${progressPercentage}%`,
           }}
         />
       </div>
@@ -344,27 +878,40 @@ export function SupplierReviewWorkspace({
       <div className="supplier-review-workspace-layout">
         <SupplierProductReview
           card={currentItem.card}
-          currentIndex={currentIndex}
-          match={currentItem.match}
-          onAccept={() =>
-            recordDecision("accepted")
+          currentIndex={
+            currentIndex
           }
-          onCreateProduct={() =>
-            recordDecision(
-              "create_product",
-            )
+          match={currentItem.match}
+          onAccept={
+            acceptCurrentMatch
+          }
+          onCreateProduct={
+            openProductCreation
           }
           onNext={goNext}
           onPrevious={goPrevious}
-          onSkip={() =>
-            recordDecision("skipped")
+          onSkip={
+            skipCurrentItem
           }
-          totalItems={items.length}
+          totalItems={
+            items.length
+          }
         />
 
         <BuyingBasket
           items={basketItems}
-          onOpen={openBasket}
+          onDecreasePacks={
+            decreaseBasketItemPacks
+          }
+          onIncreasePacks={
+            increaseBasketItemPacks
+          }
+          onOpen={
+            openBasket
+          }
+          onRemove={
+            removeBasketItem
+          }
         />
       </div>
 
@@ -380,6 +927,20 @@ export function SupplierReviewWorkspace({
         <span>
           New products:{" "}
           {newProductCount}
+        </span>
+
+        <span>
+          Drafts stored:{" "}
+          {
+            Object.keys(
+              createdProducts,
+            ).length
+          }
+        </span>
+
+        <span>
+          Product memory:{" "}
+          {rememberedLinks.length}
         </span>
       </footer>
     </main>

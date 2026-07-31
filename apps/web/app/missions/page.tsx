@@ -1,8 +1,33 @@
 import MissionControlWorkspace from "@/components/brain/MissionControlWorkspace";
 
 import {
+  createBusinessEvents,
+} from "@/lib/brain/BusinessEventEngine";
+
+import {
+  createBusinessNarration,
+} from "@/lib/brain/BusinessEventNarrator";
+
+import {
+  createExecutiveMemory,
+} from "@/lib/brain/ExecutiveMemoryEngine";
+
+import {
+  createOperationalSnapshot,
+} from "@/lib/brain/createOperationalSnapshot";
+
+import {
   getLiveInventorySnapshot,
 } from "@/lib/brain/getLiveInventorySnapshot";
+
+import {
+  LiveIntelligenceEngine,
+} from "@/lib/brain/LiveIntelligenceEngine";
+
+import {
+  getPreviousOperationalSnapshot,
+  saveOperationalSnapshot,
+} from "@/lib/brain/OperationalMemoryRepository";
 
 import {
   createMissions,
@@ -11,10 +36,6 @@ import {
 import type {
   MissionDraft,
 } from "@/types/missions";
-
-import {
-  createOperationalSnapshot,
-} from "@/lib/brain/createOperationalSnapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -129,17 +150,24 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
     id: "supplier-review-queue",
     type: "supplier-review",
     source: "supplier",
-    title: "Complete the supplier review queue",
+
+    title:
+      "Complete the supplier review queue",
+
     summary:
       "Several detected supplier products are waiting for approval before they can move into the buying workflow.",
+
     outcome:
       "Reviewed products can progress into the buying basket with cleaner catalogue and supplier data.",
+
     status: "new",
+
     score: {
       impact: 86,
       urgency: 92,
       confidence: 96,
     },
+
     actions: [
       {
         id: "open-review-queue",
@@ -154,40 +182,53 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
         kind: "secondary",
       },
     ],
+
     evidence: [
       {
-        label: "Products awaiting review",
+        label:
+          "Products awaiting review",
         value: "18",
       },
       {
-        label: "Estimated review time",
+        label:
+          "Estimated review time",
         value: "12 minutes",
       },
       {
-        label: "Detection confidence",
+        label:
+          "Detection confidence",
         value: "96%",
       },
     ],
+
     metadata: {
       queueSize: 18,
       estimatedMinutes: 12,
     },
   },
+
   {
     id: "commercial-data-gaps",
     type: "data-quality",
     source: "commercial",
-    title: "Resolve missing commercial data",
+
+    title:
+      "Resolve missing commercial data",
+
     summary:
       "A group of active products does not yet have complete cost information, preventing accurate margin analysis.",
+
     outcome:
       "Completing cost data will unlock reliable product margin and purchasing decisions.",
+
     status: "new",
+
     score: {
       impact: 82,
       urgency: 70,
       confidence: 91,
     },
+
     actions: [
       {
         id: "open-commercial-intelligence",
@@ -196,6 +237,7 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
         kind: "primary",
       },
     ],
+
     evidence: [
       {
         label: "Products affected",
@@ -210,25 +252,34 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
         value: "91%",
       },
     ],
+
     metadata: {
       affectedProducts: 9,
     },
   },
+
   {
     id: "catalogue-quality-review",
     type: "catalogue-update",
     source: "catalogue",
-    title: "Improve catalogue completeness",
+
+    title:
+      "Improve catalogue completeness",
+
     summary:
       "Some catalogue records are missing information needed for stronger product matching and future automation.",
+
     outcome:
       "Improved catalogue records will increase matching accuracy and reduce manual review in later supplier uploads.",
+
     status: "new",
+
     score: {
       impact: 64,
       urgency: 48,
       confidence: 88,
     },
+
     actions: [
       {
         id: "open-catalogue-intelligence",
@@ -237,6 +288,7 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
         kind: "primary",
       },
     ],
+
     evidence: [
       {
         label: "Records affected",
@@ -244,13 +296,15 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
       },
       {
         label: "Primary issue",
-        value: "Missing product attributes",
+        value:
+          "Missing product attributes",
       },
       {
         label: "Confidence",
         value: "88%",
       },
     ],
+
     metadata: {
       affectedRecords: 14,
     },
@@ -275,30 +329,113 @@ export default async function MissionsPage() {
   ];
 
   const missions =
-    createMissions(missionDrafts);
-    const operationalSnapshot =
-  createOperationalSnapshot({
-    inventory: inventorySnapshot,
-    missions,
-    userName: "Tom",
-  });
+    createMissions(
+      missionDrafts,
+    );
+
+  const operationalSnapshot =
+    createOperationalSnapshot({
+      inventory:
+        inventorySnapshot,
+
+      missions,
+
+      userName: "Tom",
+    });
+
+  /*
+   * Retrieve the latest historical state before saving the
+   * newly generated snapshot.
+   */
+  const previousSnapshot =
+    await getPreviousOperationalSnapshot({
+      beforeGeneratedAt:
+        operationalSnapshot.generatedAt,
+    });
+
+  /*
+   * Compare the historical and current operational states.
+   */
+  const executiveMemory =
+    createExecutiveMemory(
+      previousSnapshot,
+      operationalSnapshot,
+    );
+
+  /*
+   * Convert detected changes into structured business events.
+   */
+  const businessEvents =
+    createBusinessEvents(
+      executiveMemory,
+    );
+
+  /*
+   * Convert structured events into consistent executive
+   * language for all presentation surfaces.
+   */
+  const businessNarration =
+    createBusinessNarration(
+      businessEvents,
+    );
+
+  /*
+   * Adapt the real business events to the existing animated
+   * Live Intelligence Feed contract.
+   */
+  const liveIntelligenceFeed =
+    LiveIntelligenceEngine
+      .buildBusinessFeed({
+        result:
+          businessEvents,
+
+        narration:
+          businessNarration,
+
+        maximumEvents: 7,
+      });
+
+  /*
+   * Save the current state only after comparison and event
+   * generation, preventing it from being compared with itself.
+   */
+  await saveOperationalSnapshot(
+    operationalSnapshot,
+  );
 
   const description =
-    inventorySnapshot
-      .productsRequiringAttention > 0
-      ? `Good morning Tom. Vault Brain is now using live inventory data. ${inventorySnapshot.productsRequiringAttention} monitored ${
-          inventorySnapshot.productsRequiringAttention === 1
-            ? "product requires"
-            : "products require"
-        } attention and inventory health is ${inventorySnapshot.healthScore}%.`
-      : `Good morning Tom. Vault Brain is now using live inventory data. All ${inventorySnapshot.monitoredProducts} monitored products are currently above the attention threshold and inventory health is ${inventorySnapshot.healthScore}%.`;
+    executiveMemory.hasPreviousSnapshot
+      ? executiveMemory.summary
+      : inventorySnapshot
+            .productsRequiringAttention >
+          0
+        ? `Vault Brain is now using live inventory data. ${inventorySnapshot.productsRequiringAttention} monitored ${
+            inventorySnapshot.productsRequiringAttention ===
+            1
+              ? "product requires"
+              : "products require"
+          } attention and inventory health is ${inventorySnapshot.healthScore}%.`
+        : `Vault Brain is now using live inventory data. All ${inventorySnapshot.monitoredProducts} monitored products are currently above the attention threshold and inventory health is ${inventorySnapshot.healthScore}%.`;
 
   return (
     <MissionControlWorkspace
-  missions={missions}
-  snapshot={operationalSnapshot}
-  title="Vault Brain"
-  description={description}
-/>
+      missions={missions}
+      snapshot={
+        operationalSnapshot
+      }
+      executiveMemory={
+        executiveMemory
+      }
+      businessEvents={
+        businessEvents
+      }
+      liveIntelligenceFeed={
+        liveIntelligenceFeed
+      }
+      title="Vault Brain"
+      description={
+        description
+      }
+    />
   );
 }

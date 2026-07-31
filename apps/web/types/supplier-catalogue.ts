@@ -18,6 +18,26 @@ export type SupplierCatalogueImage = {
     | "other";
 };
 
+export type SupplierCatalogueVision = {
+  garmentType: string | null;
+
+  secondaryColours: string[];
+
+  chestLogo: string | null;
+  frontGraphic: string | null;
+  backGraphic: string | null;
+  sleeveDetail: string | null;
+  neckLabel: string | null;
+
+  fit: string | null;
+  collection: string | null;
+
+  visualFingerprint: string[];
+  rawVisibleText: string[];
+
+  confidence: number;
+};
+
 export type SupplierCatalogueCardData = {
   id: string;
 
@@ -49,6 +69,8 @@ export type SupplierCatalogueCardData = {
   isPreferredSource: boolean;
 
   images: SupplierCatalogueImage[];
+
+  vision: SupplierCatalogueVision;
 
   notes: string | null;
 };

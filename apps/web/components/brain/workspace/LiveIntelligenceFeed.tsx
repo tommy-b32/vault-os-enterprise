@@ -8,20 +8,9 @@ import {
   useState,
 } from "react";
 
-import {
-  LiveIntelligenceEngine,
-} from "@/lib/brain/LiveIntelligenceEngine";
-
-import {
-  NarratorEngine,
-} from "@/lib/brain/NarratorEngine";
-
-import {
-  DEMONSTRATION_OPERATIONAL_SNAPSHOT,
-} from "@/lib/brain/demonstrationOperationalSnapshot";
-
 import type {
   LiveIntelligenceEvent,
+  LiveIntelligenceFeed as LiveIntelligenceFeedModel,
 } from "@/lib/brain/LiveIntelligenceEngine";
 
 import type {
@@ -33,6 +22,10 @@ const THINKING_DURATION_MS = 420;
 const EVENT_PAUSE_MS = 520;
 const TYPEWRITER_INTERVAL_MS = 12;
 const TYPEWRITER_CHARACTERS_PER_TICK = 2;
+
+type LiveIntelligenceFeedProps = {
+  feed: LiveIntelligenceFeedModel;
+};
 
 type FeedPhase =
   | "waiting"
@@ -191,19 +184,9 @@ function EventIcon({
   );
 }
 
-const narratorStory =
-  NarratorEngine.analyse({
-    snapshot:
-      DEMONSTRATION_OPERATIONAL_SNAPSHOT,
-  });
-
-const liveFeed =
-  LiveIntelligenceEngine.buildFeed({
-    story: narratorStory,
-    maximumEvents: 7,
-  });
-
-export default function LiveIntelligenceFeed() {
+export default function LiveIntelligenceFeed({
+  feed,
+}: LiveIntelligenceFeedProps) {
   /*
    * LiveIntelligenceEngine returns newest-first.
    *
@@ -212,8 +195,8 @@ export default function LiveIntelligenceFeed() {
    * newly revealed update is inserted at the top of the timeline.
    */
   const revealQueue = useMemo(
-    () => [...liveFeed.events].reverse(),
-    [],
+    () => [...feed.events].reverse(),
+    [feed.events],
   );
 
   const [visibleEventCount, setVisibleEventCount] =
@@ -444,7 +427,7 @@ export default function LiveIntelligenceFeed() {
           </div>
 
           <span className="vault-live-confidence">
-            {liveFeed.confidence}% confidence
+            {feed.confidence}% confidence
           </span>
         </div>
 

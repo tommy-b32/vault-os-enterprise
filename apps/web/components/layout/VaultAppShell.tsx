@@ -41,6 +41,16 @@ const navigation = [
     href: "/catalogue",
   },
   {
+    label: "Supplier Catalogue",
+    icon: "catalogue",
+    href: "/supplier-catalogue",
+  },
+  {
+    label: "Match Review",
+    icon: "missions",
+    href: "/supplier-catalogue/review",
+  },
+  {
     label: "Partners",
     icon: "partners",
     href: "/partners",
@@ -80,6 +90,16 @@ function isNavigationItemActive({
 }): boolean {
   if (href === "/") {
     return pathname === "/";
+  }
+
+  /*
+   * Supplier Catalogue is a parent route with a dedicated
+   * Match Review child route. Keep only the exact parent tab
+   * active on /supplier-catalogue so the review page can
+   * highlight its own navigation item.
+   */
+  if (href === "/supplier-catalogue") {
+    return pathname === "/supplier-catalogue";
   }
 
   return (

@@ -11,7 +11,16 @@ export type BuyingBasketItem = {
 
 type Props = {
   items: BuyingBasketItem[];
+  onDecreasePacks?: (
+    itemId: string,
+  ) => void;
+  onIncreasePacks?: (
+    itemId: string,
+  ) => void;
   onOpen?: () => void;
+  onRemove?: (
+    itemId: string,
+  ) => void;
 };
 
 function formatCurrency(
@@ -27,65 +36,96 @@ function formatCurrency(
 
 export function BuyingBasket({
   items,
+  onDecreasePacks,
+  onIncreasePacks,
   onOpen,
+  onRemove,
 }: Props) {
-  const totalProducts = items.length;
+  const totalProducts =
+    items.length;
 
-  const totalPacks = items.reduce(
-    (total, item) => total + item.packs,
-    0,
-  );
+  const totalPacks =
+    items.reduce(
+      (total, item) =>
+        total + item.packs,
+      0,
+    );
 
   const basketCurrency =
-    items[0]?.currency ?? "EUR";
+    items[0]?.currency ??
+    "EUR";
 
-  const estimatedCost = items.reduce(
-    (total, item) => {
-      if (item.packCost === null) {
-        return total;
-      }
+  const estimatedCost =
+    items.reduce(
+      (total, item) => {
+        if (
+          item.packCost ===
+          null
+        ) {
+          return total;
+        }
 
-      return (
-        total +
-        item.packCost * item.packs
-      );
-    },
-    0,
-  );
+        return (
+          total +
+          item.packCost *
+            item.packs
+        );
+      },
+      0,
+    );
 
-  const hasMissingCosts = items.some(
-    (item) => item.packCost === null,
-  );
+  const hasMissingCosts =
+    items.some(
+      (item) =>
+        item.packCost ===
+        null,
+    );
 
   return (
-    <aside className="buying-basket">
+    <aside className="buying-basket buying-basket-interactive">
       <header className="buying-basket-header">
         <div>
           <p className="vault-eyebrow">
             Buying Basket
           </p>
 
-          <h3>Purchase plan</h3>
+          <h3>
+            Purchase plan
+          </h3>
         </div>
 
-        <span>{totalProducts}</span>
+        <span>
+          {totalProducts}
+        </span>
       </header>
 
       {items.length > 0 ? (
         <>
           <div className="buying-basket-metrics">
             <article>
-              <span>Products</span>
-              <strong>{totalProducts}</strong>
+              <span>
+                Products
+              </span>
+
+              <strong>
+                {totalProducts}
+              </strong>
             </article>
 
             <article>
-              <span>Packs</span>
-              <strong>{totalPacks}</strong>
+              <span>
+                Packs
+              </span>
+
+              <strong>
+                {totalPacks}
+              </strong>
             </article>
 
             <article>
-              <span>Estimated cost</span>
+              <span>
+                Estimated cost
+              </span>
 
               <strong>
                 {formatCurrency(
@@ -96,45 +136,114 @@ export function BuyingBasket({
             </article>
           </div>
 
-          <div className="buying-basket-preview">
-            {items.slice(0, 3).map((item) => (
-              <article key={item.id}>
-                <div>
-                  <strong>
-                    {item.productName}
-                  </strong>
+          <div className="buying-basket-preview buying-basket-preview-interactive">
+            {items.map(
+              (item) => {
+                const itemCost =
+                  item.packCost ===
+                  null
+                    ? null
+                    : item.packCost *
+                      item.packs;
 
-                  <small>
-                    {item.supplierName}
-                  </small>
-                </div>
+                return (
+                  <article
+                    key={
+                      item.id
+                    }
+                  >
+                    <div className="buying-basket-item-copy">
+                      <strong>
+                        {
+                          item.productName
+                        }
+                      </strong>
 
-                <span>
-                  {item.packs}{" "}
-                  {item.packs === 1
-                    ? "pack"
-                    : "packs"}
-                </span>
-              </article>
-            ))}
+                      <small>
+                        {
+                          item.supplierName
+                        }
+                      </small>
 
-            {items.length > 3 ? (
-              <p>
-                +{items.length - 3} more items
-              </p>
-            ) : null}
+                      <span>
+                        {itemCost !==
+                        null
+                          ? formatCurrency(
+                              itemCost,
+                              item.currency,
+                            )
+                          : "Cost unavailable"}
+                      </span>
+                    </div>
+
+                    <div className="buying-basket-quantity">
+                      <button
+                        aria-label={`Decrease packs for ${item.productName}`}
+                        disabled={
+                          item.packs <=
+                          1
+                        }
+                        onClick={() =>
+                          onDecreasePacks?.(
+                            item.id,
+                          )
+                        }
+                        type="button"
+                      >
+                        −
+                      </button>
+
+                      <strong>
+                        {
+                          item.packs
+                        }
+                      </strong>
+
+                      <button
+                        aria-label={`Increase packs for ${item.productName}`}
+                        onClick={() =>
+                          onIncreasePacks?.(
+                            item.id,
+                          )
+                        }
+                        type="button"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <button
+                      aria-label={`Remove ${item.productName} from buying basket`}
+                      className="buying-basket-remove"
+                      onClick={() =>
+                        onRemove?.(
+                          item.id,
+                        )
+                      }
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </article>
+                );
+              },
+            )}
           </div>
 
           {hasMissingCosts ? (
             <p className="buying-basket-warning">
-              Some supplier pack costs are missing,
-              so the estimate is incomplete.
+              Some supplier pack
+              costs are missing, so
+              the estimate is
+              incomplete.
             </p>
           ) : null}
 
           <button
             className="buying-basket-button"
-            onClick={onOpen}
+            onClick={
+              onOpen
+            }
             type="button"
           >
             Open Buying Basket →
@@ -143,8 +252,9 @@ export function BuyingBasket({
       ) : (
         <div className="buying-basket-empty">
           <p>
-            Accepted supplier items will appear
-            here while you review the catalogue.
+            Linked supplier items
+            will appear here while
+            you review the catalogue.
           </p>
         </div>
       )}
