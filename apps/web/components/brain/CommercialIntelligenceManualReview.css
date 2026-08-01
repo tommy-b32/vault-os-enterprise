@@ -1,0 +1,32 @@
+/* Commercial Intelligence manual-review action */
+
+.commercial-intelligence-manual-review {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 11px;
+  color: var(--vault-gold-bright);
+  background: rgba(217, 173, 74, 0.08);
+  border: 1px solid rgba(217, 173, 74, 0.3);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 760;
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.commercial-intelligence-manual-review:hover {
+  transform: translateY(-1px);
+  background: rgba(217, 173, 74, 0.14);
+  border-color: rgba(240, 196, 93, 0.56);
+}
+
+.commercial-intelligence-manual-review:focus-visible {
+  outline: 2px solid var(--vault-gold-bright);
+  outline-offset: 2px;
+}

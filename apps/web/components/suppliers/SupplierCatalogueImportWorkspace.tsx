@@ -13,6 +13,10 @@ import {
 } from "@/components/suppliers/SupplierCatalogueImportPanel";
 
 import {
+  CatalogueIntelligenceDashboard,
+} from "@/components/suppliers/CatalogueIntelligenceDashboard";
+
+import {
   CatalogueReviewQueueEngine,
   type CatalogueReviewQueueDetails,
   type CatalogueReviewQueueItem,
@@ -93,6 +97,12 @@ export function SupplierCatalogueImportWorkspace({
     );
 
   const [
+    isPreparingIntelligence,
+    setIsPreparingIntelligence,
+  ] =
+    useState(false);
+
+  const [
     isOpeningReview,
     setIsOpeningReview,
   ] =
@@ -105,24 +115,31 @@ export function SupplierCatalogueImportWorkspace({
     setAnalysisSession(null);
     setReviewItems([]);
     setQueueSaveError(null);
+    setIsPreparingIntelligence(false);
     setIsOpeningReview(false);
 
     void CatalogueReviewQueueRepository.clear();
   }
 
-  async function openReviewQueue(
+  async function prepareCatalogueIntelligence(
     session: CatalogueAnalysisSession,
     details: CatalogueReviewQueueDetails,
   ) {
     if (
       !extractionResult ||
+      isPreparingIntelligence ||
       isOpeningReview
     ) {
       return;
     }
 
-    setIsOpeningReview(true);
-    setQueueSaveError(null);
+    setIsPreparingIntelligence(
+      true,
+    );
+
+    setQueueSaveError(
+      null,
+    );
 
     try {
       const memories =
@@ -137,14 +154,70 @@ export function SupplierCatalogueImportWorkspace({
           memories,
         });
 
-      setAnalysisSession(session);
-      setCatalogueDetails(details);
-      setReviewItems(queue);
+      setAnalysisSession(
+        session,
+      );
 
+      setCatalogueDetails(
+        details,
+      );
+
+      setReviewItems(
+        queue,
+      );
+
+      /*
+       * Do not redirect yet.
+       * The Catalogue Intelligence Dashboard now decides
+       * whether to open only required review items or the
+       * complete queue.
+       */
+      await CatalogueReviewQueueRepository.clear();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Vault OS could not analyse this supplier catalogue.";
+
+      setQueueSaveError(
+        message,
+      );
+    } finally {
+      setIsPreparingIntelligence(
+        false,
+      );
+    }
+  }
+
+  async function saveAndOpenReview(
+    itemsToReview:
+      CatalogueReviewQueueItem[],
+  ) {
+    if (
+      !catalogueDetails ||
+      isOpeningReview ||
+      itemsToReview.length === 0
+    ) {
+      return;
+    }
+
+    setIsOpeningReview(
+      true,
+    );
+
+    setQueueSaveError(
+      null,
+    );
+
+    try {
       const saved =
         await CatalogueReviewQueueRepository.save({
-          items: queue,
-          details,
+          items:
+            itemsToReview,
+
+          details:
+            catalogueDetails,
+
           savedAt:
             new Date().toISOString(),
         });
@@ -163,11 +236,15 @@ export function SupplierCatalogueImportWorkspace({
       const message =
         error instanceof Error
           ? error.message
-          : "Vault OS could not prepare this review queue.";
+          : "Vault OS could not open Match Review.";
 
-      setQueueSaveError(message);
+      setQueueSaveError(
+        message,
+      );
     } finally {
-      setIsOpeningReview(false);
+      setIsOpeningReview(
+        false,
+      );
     }
   }
 
@@ -175,13 +252,37 @@ export function SupplierCatalogueImportWorkspace({
     <div className="supplier-catalogue-import-workspace">
       <SupplierCatalogueDropzone
         onFileSelected={(file) => {
-          setSelectedFile(file);
-          setExtractionResult(null);
-          setCatalogueDetails(null);
-          setAnalysisSession(null);
-          setReviewItems([]);
-          setQueueSaveError(null);
-          setIsOpeningReview(false);
+          setSelectedFile(
+            file,
+          );
+
+          setExtractionResult(
+            null,
+          );
+
+          setCatalogueDetails(
+            null,
+          );
+
+          setAnalysisSession(
+            null,
+          );
+
+          setReviewItems(
+            [],
+          );
+
+          setQueueSaveError(
+            null,
+          );
+
+          setIsPreparingIntelligence(
+            false,
+          );
+
+          setIsOpeningReview(
+            false,
+          );
 
           void CatalogueReviewQueueRepository.clear();
         }}
@@ -189,8 +290,13 @@ export function SupplierCatalogueImportWorkspace({
           result,
           file,
         ) => {
-          setSelectedFile(file);
-          setExtractionResult(result);
+          setSelectedFile(
+            file,
+          );
+
+          setExtractionResult(
+            result,
+          );
         }}
       />
 
@@ -216,7 +322,7 @@ export function SupplierCatalogueImportWorkspace({
             session,
             details,
           ) => {
-            void openReviewQueue(
+            void prepareCatalogueIntelligence(
               session,
               details,
             );
@@ -230,12 +336,29 @@ export function SupplierCatalogueImportWorkspace({
           role="alert"
         >
           <strong>
-            Review queue could not be opened
+            Catalogue intelligence unavailable
           </strong>
 
           <p>
             {queueSaveError}
           </p>
+        </div>
+      ) : null}
+
+      {isPreparingIntelligence ? (
+        <div
+          className="supplier-review-queue-ready"
+          role="status"
+        >
+          <div>
+            <p className="vault-eyebrow">
+              Catalogue Intelligence
+            </p>
+
+            <h3>
+              Loading Vault Brain Memory and analysing the full catalogue...
+            </h3>
+          </div>
         </div>
       ) : null}
 
@@ -250,7 +373,7 @@ export function SupplierCatalogueImportWorkspace({
             </p>
 
             <h3>
-              Loading Vault Brain Memory and preparing review items...
+              Saving the selected review queue...
             </h3>
           </div>
         </div>
@@ -264,7 +387,7 @@ export function SupplierCatalogueImportWorkspace({
             </p>
 
             <h2>
-              Catalogue ready for visual analysis
+              Catalogue analysis complete
             </h2>
 
             <p>
@@ -276,8 +399,8 @@ export function SupplierCatalogueImportWorkspace({
                   catalogueDetails.collectionName
                 }
               </strong>{" "}
-              are ready to be grouped into supplier
-              products.
+              have been grouped and compared with Vault Brain
+              Memory.
             </p>
           </div>
 
@@ -317,29 +440,24 @@ export function SupplierCatalogueImportWorkspace({
 
       {analysisSession &&
       reviewItems.length > 0 &&
-      !isOpeningReview ? (
-        <section className="supplier-review-queue-ready">
-          <div>
-            <p className="vault-eyebrow">
-              Match Review
-            </p>
-
-            <h3>
-              {reviewItems.length}{" "}
-              {reviewItems.length === 1
-                ? "product is"
-                : "products are"}{" "}
-              ready for review
-            </h3>
-          </div>
-
-          <a
-            className="brain-button"
-            href="/supplier-catalogue/review"
-          >
-            Open Match Review →
-          </a>
-        </section>
+      !isPreparingIntelligence ? (
+        <CatalogueIntelligenceDashboard
+          items={
+            reviewItems
+          }
+          onOpenFullReview={() => {
+            void saveAndOpenReview(
+              reviewItems,
+            );
+          }}
+          onOpenReview={(
+            itemsToReview,
+          ) => {
+            void saveAndOpenReview(
+              itemsToReview,
+            );
+          }}
+        />
       ) : null}
     </div>
   );

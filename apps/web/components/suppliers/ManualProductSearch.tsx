@@ -1,5 +1,7 @@
 "use client";
 
+import "./ManualProductSearch.css";
+
 import {
   useMemo,
   useState,

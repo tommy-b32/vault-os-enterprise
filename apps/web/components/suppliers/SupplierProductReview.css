@@ -1,0 +1,521 @@
+/* ============================================================
+   VAULT OS — SUPPLIER PRODUCT REVIEW
+   Consolidated final workstation layout
+   ============================================================ */
+
+/* Page shell */
+
+.supplier-review-workspace {
+  width: 100%;
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+.supplier-review-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  align-items: start;
+  gap: 14px;
+}
+
+.supplier-product-review-v2-shell {
+  min-width: 0;
+}
+
+.supplier-product-review-v2 {
+  overflow: hidden;
+  border-radius: 15px;
+}
+
+.supplier-product-review-v2-header {
+  padding: 14px 18px;
+}
+
+.supplier-product-review-v2-header h2 {
+  margin: 5px 0 4px;
+  font-size: clamp(1.45rem, 2.1vw, 2.1rem);
+}
+
+.buying-basket {
+  position: sticky;
+  top: 82px;
+  max-height: calc(100vh - 104px);
+  overflow: auto;
+}
+
+/* Main workstation */
+
+.supplier-product-review-workstation {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.supplier-product-review-workstation
+  > .supplier-product-review-v2-header {
+  margin: -10px -10px 0;
+}
+
+.supplier-product-review-workstation-top {
+  display: grid;
+  grid-template-columns:
+    minmax(330px, 0.62fr)
+    minmax(620px, 1.38fr);
+  align-items: stretch;
+  gap: 12px;
+}
+
+/* Supplier image */
+
+.supplier-product-review-workstation-visual {
+  position: relative;
+  top: auto;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.supplier-product-review-workstation-visual
+  .supplier-product-review-v2-image {
+  min-height: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+}
+
+.supplier-product-review-workstation-visual
+  .supplier-product-review-v2-image
+  > img {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  max-height: none;
+  object-fit: cover;
+  object-position: center;
+}
+
+.supplier-product-review-workstation-visual
+  .supplier-product-review-v2-zoom,
+.supplier-product-review-workstation-visual
+  .supplier-product-review-v2-badges {
+  z-index: 2;
+}
+
+/* Recommendation, signals and actions */
+
+.supplier-product-review-workstation-summary {
+  min-width: 0;
+  width: 100%;
+  align-self: stretch;
+}
+
+.supplier-product-review-workstation-summary
+  .match-summary-card-layout {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "recommendation"
+    "signals"
+    "actions";
+  align-content: start;
+  gap: 10px;
+}
+
+.supplier-product-review-workstation-summary
+  .supplier-product-review-v2-match {
+  grid-area: recommendation;
+  position: relative;
+  inset: auto;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.supplier-product-review-workstation-summary
+  .supplier-product-review-v2-signals {
+  grid-area: signals;
+  position: relative;
+  inset: auto;
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.supplier-product-review-workstation-summary
+  .supplier-product-review-v2-signals
+  article {
+  position: relative;
+  inset: auto;
+  min-width: 0;
+  min-height: 60px;
+  margin: 0;
+  padding: 9px 11px;
+  box-sizing: border-box;
+}
+
+.supplier-product-review-workstation-summary
+  .supplier-product-review-v3-actions {
+  grid-area: actions;
+  position: relative;
+  inset: auto;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  transform: none;
+}
+
+.supplier-product-review-workstation-summary
+  .supplier-product-review-v3-actions
+  .review-action {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 62px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 9px;
+  transform: none;
+  box-sizing: border-box;
+}
+
+.supplier-product-review-workstation-summary
+  .supplier-product-review-v3-actions
+  .review-action
+  > span {
+  flex: 0 0 auto;
+}
+
+.supplier-product-review-workstation-summary
+  .supplier-product-review-v3-actions
+  .review-action
+  > div {
+  min-width: 0;
+}
+
+/* Alternative matches */
+
+.supplier-product-review-workstation-alternatives {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.supplier-product-review-workstation-alternatives
+  .supplier-product-review-v2-alternatives {
+  width: 100%;
+  margin: 0;
+}
+
+.supplier-product-review-workstation-alternatives
+  .supplier-product-review-v2-alternatives
+  > summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+}
+
+.supplier-product-review-workstation-alternatives
+  .supplier-product-review-v2-alternatives
+  > div {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.supplier-product-review-workstation-alternatives
+  .supplier-product-review-v2-alternatives
+  button {
+  min-width: 0;
+  min-height: 48px;
+}
+
+/* Commercial Intelligence */
+
+.supplier-product-review-workstation-commercial {
+  width: 100%;
+  min-width: 0;
+}
+
+.supplier-product-review-workstation-commercial
+  > .commercial-intelligence-card {
+  width: 100%;
+  max-width: none;
+  display: grid;
+  grid-template-columns:
+    minmax(250px, 0.75fr)
+    minmax(360px, 1.1fr)
+    minmax(0, 1.8fr);
+  grid-template-areas:
+    "header recommendation metrics"
+    "header missing metrics"
+    "header footer metrics";
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.supplier-product-review-workstation-commercial
+  .commercial-intelligence-card-header {
+  grid-area: header;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  padding: 14px;
+}
+
+.supplier-product-review-workstation-commercial
+  .commercial-intelligence-recommendation {
+  grid-area: recommendation;
+  margin: 0;
+  padding: 14px;
+}
+
+.supplier-product-review-workstation-commercial
+  .commercial-intelligence-metrics {
+  grid-area: metrics;
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  align-content: stretch;
+  gap: 8px;
+  margin: 0;
+}
+
+.supplier-product-review-workstation-commercial
+  .commercial-intelligence-metrics
+  article {
+  min-width: 0;
+  min-height: 70px;
+  padding: 10px;
+}
+
+.supplier-product-review-workstation-commercial
+  .commercial-intelligence-missing {
+  grid-area: missing;
+  margin: 0;
+  padding: 12px;
+}
+
+.supplier-product-review-workstation-commercial
+  .commercial-intelligence-footer {
+  grid-area: footer;
+  margin: 0;
+  padding: 12px;
+}
+
+/* Visual Comparison */
+
+.supplier-product-review-workstation-comparison {
+  width: 100%;
+  min-width: 0;
+}
+
+.supplier-product-review-workstation-comparison
+  > .supplier-product-review-v2-comparison {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  padding: 11px;
+  box-sizing: border-box;
+}
+
+.supplier-product-review-workstation-comparison
+  .supplier-product-review-v2-comparison-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.supplier-product-review-workstation-comparison
+  .supplier-product-review-v2-comparison-grid
+  article {
+  min-width: 0;
+  min-height: 96px;
+  padding: 8px 9px;
+}
+
+.supplier-product-review-v2-comparison-grid dl {
+  gap: 4px;
+}
+
+.supplier-product-review-v2-comparison-grid dl > div {
+  grid-template-columns:
+    62px minmax(0, 1fr);
+  gap: 5px;
+}
+
+/* Supplier details */
+
+.supplier-product-review-workstation-lower {
+  display: block;
+  width: 100%;
+}
+
+.supplier-product-review-workstation-lower
+  .supplier-product-review-v2-commercial {
+  width: 100%;
+  margin: 0;
+  gap: 7px;
+  grid-template-columns:
+    repeat(6, minmax(0, 1fr));
+}
+
+.supplier-product-review-workstation-lower
+  .supplier-product-review-v2-commercial
+  article {
+  min-height: 58px;
+  padding: 9px;
+}
+
+/* Navigation */
+
+.supplier-product-review-workstation
+  .supplier-product-review-v2-navigation {
+  margin: 0 -10px -10px;
+  padding: 10px 14px 12px;
+  border-top:
+    1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Responsive */
+
+@media (max-width: 1450px) {
+  .supplier-review-workspace-layout {
+    grid-template-columns:
+      minmax(0, 1fr) 245px;
+  }
+
+  .supplier-product-review-workstation-top {
+    grid-template-columns:
+      minmax(310px, 0.66fr)
+      minmax(560px, 1.34fr);
+  }
+
+  .supplier-product-review-workstation-commercial
+    > .commercial-intelligence-card {
+    grid-template-columns:
+      minmax(220px, 0.72fr)
+      minmax(320px, 1fr)
+      minmax(350px, 1.55fr);
+  }
+
+  .supplier-product-review-workstation-comparison
+    .supplier-product-review-v2-comparison-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .supplier-review-workspace-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .buying-basket {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 1120px) {
+  .supplier-product-review-workstation-top {
+    grid-template-columns: 1fr;
+  }
+
+  .supplier-product-review-workstation-visual {
+    min-height: 0;
+  }
+
+  .supplier-product-review-workstation-visual
+    .supplier-product-review-v2-image
+    > img {
+    object-fit: contain;
+  }
+
+  .supplier-product-review-workstation-commercial
+    > .commercial-intelligence-card {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "header recommendation"
+      "metrics metrics"
+      "missing footer";
+  }
+
+  .supplier-product-review-workstation-alternatives
+    .supplier-product-review-v2-alternatives
+    > div {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .supplier-product-review-workstation-lower
+    .supplier-product-review-v2-commercial {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .supplier-product-review-workstation-summary
+    .supplier-product-review-v2-signals,
+  .supplier-product-review-workstation-summary
+    .supplier-product-review-v3-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .supplier-product-review-workstation-commercial
+    .commercial-intelligence-metrics,
+  .supplier-product-review-workstation-comparison
+    .supplier-product-review-v2-comparison-grid,
+  .supplier-product-review-workstation-alternatives
+    .supplier-product-review-v2-alternatives
+    > div,
+  .supplier-product-review-workstation-lower
+    .supplier-product-review-v2-commercial {
+    grid-template-columns: 1fr;
+  }
+
+  .supplier-product-review-workstation-commercial
+    > .commercial-intelligence-card {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "recommendation"
+      "metrics"
+      "missing"
+      "footer";
+  }
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import "./SupplierProductReview.css";
+
 import {
   useEffect,
   useMemo,
@@ -23,6 +25,7 @@ import {
 
 import {
   MatchSummaryCard,
+  VisualComparisonCard,
 } from "@/components/suppliers/MatchSummaryCard";
 
 import {
@@ -155,16 +158,16 @@ export function SupplierProductReview({
     match.bestMatch,
   );
 
+  const [
+    isManualSearchOpen,
+    setIsManualSearchOpen,
+  ] = useState(false);
+
   useEffect(() => {
     setSelectedMatch(
       match.bestMatch,
     );
   }, [match]);
-
-  const [
-    isManualSearchOpen,
-    setIsManualSearchOpen,
-  ] = useState(false);
 
   useEffect(() => {
     setIsManualSearchOpen(false);
@@ -262,11 +265,7 @@ export function SupplierProductReview({
           break;
 
         case "escape":
-          if (isManualSearchOpen) {
-            setIsManualSearchOpen(false);
-          } else {
-            setIsZoomed(false);
-          }
+          setIsZoomed(false);
           break;
       }
     }
@@ -284,7 +283,6 @@ export function SupplierProductReview({
     };
   }, [
     selectedMatch,
-    isManualSearchOpen,
     onAccept,
     onCreateProduct,
     onNext,
@@ -343,6 +341,7 @@ export function SupplierProductReview({
       onAccept?.(
         selectedMatch,
       );
+
       return;
     }
 
@@ -434,7 +433,7 @@ export function SupplierProductReview({
           ＋ Create Product
         </motion.div>
 
-        <section className="supplier-product-review-v2">
+        <section className="supplier-product-review-v2 supplier-product-review-workstation">
           <header className="supplier-product-review-v2-header">
             <div>
               <p className="vault-eyebrow">
@@ -467,8 +466,8 @@ export function SupplierProductReview({
             </div>
           </header>
 
-          <div className="supplier-product-review-v2-stage">
-            <section className="supplier-product-review-v2-visual">
+          <div className="supplier-product-review-workstation-top">
+            <section className="supplier-product-review-v2-visual supplier-product-review-workstation-visual">
               <div className="supplier-product-review-v2-image">
                 {activeImage ? (
                   <>
@@ -565,161 +564,184 @@ export function SupplierProductReview({
               ) : null}
             </section>
 
-            <section className="supplier-product-review-v2-intelligence">
+            <section className="supplier-product-review-workstation-summary">
               <MatchSummaryCard
+                actions={
+                  <div className="supplier-product-review-v3-actions">
+                    <button
+                      className="review-action review-action-ignore"
+                      onClick={onSkip}
+                      type="button"
+                    >
+                      <span>←</span>
+
+                      <div>
+                        <strong>
+                          Ignore
+                        </strong>
+
+                        <small>
+                          S
+                        </small>
+                      </div>
+                    </button>
+
+                    <button
+                      className="review-action review-action-link"
+                      disabled={!selectedMatch}
+                      onClick={() => {
+                        if (selectedMatch) {
+                          onAccept?.(
+                            selectedMatch,
+                          );
+                        }
+                      }}
+                      type="button"
+                    >
+                      <span>✓</span>
+
+                      <div>
+                        <strong>
+                          Link Product
+                        </strong>
+
+                        <small>
+                          A
+                        </small>
+                      </div>
+                    </button>
+
+                    <button
+                      className="review-action review-action-new"
+                      onClick={onCreateProduct}
+                      type="button"
+                    >
+                      <span>＋</span>
+
+                      <div>
+                        <strong>
+                          Create Product
+                        </strong>
+
+                        <small>
+                          N
+                        </small>
+                      </div>
+                    </button>
+                  </div>
+                }
                 bestMatch={selectedMatch}
-                card={card}
               />
-
-              {selectedMatch ? (
-                <CommercialIntelligenceCard
-                  product={
-                    selectedMatch.product
-                  }
-                  supplierCard={
-                    card
-                  }
-                />
-              ) : null}
-
-              <div className="supplier-product-review-v2-commercial">
-                <article>
-                  <span>Supplier</span>
-                  <strong>
-                    {card.supplierName}
-                  </strong>
-                </article>
-
-                <article>
-                  <span>Pack Cost</span>
-                  <strong>
-                    {card.packCost !== null
-                      ? `${card.currency} ${card.packCost.toFixed(2)}`
-                      : "Not entered"}
-                  </strong>
-                </article>
-
-                <article>
-                  <span>Pack Size</span>
-                  <strong>
-                    {card.packSize ??
-                      "Not entered"}
-                  </strong>
-                </article>
-
-                <article>
-                  <span>Unit Cost</span>
-                  <strong>
-                    {unitCost !== null
-                      ? `${card.currency} ${unitCost.toFixed(2)}`
-                      : "Not available"}
-                  </strong>
-                </article>
-
-                <article>
-                  <span>Lead Time</span>
-                  <strong>
-                    {card.leadTimeDays !== null
-                      ? `${card.leadTimeDays} days`
-                      : "Not entered"}
-                  </strong>
-                </article>
-
-                <article>
-                  <span>Reference</span>
-                  <strong>
-                    {card.internalReference ??
-                      "Not recorded"}
-                  </strong>
-                </article>
-              </div>
-
-              <AlternativeMatchesCard
-                alternatives={
-                  match.alternatives
-                }
-                selectedProductId={
-                  selectedMatch?.product.product_id
-                }
-                onSelect={(
-                  alternative,
-                ) => {
-                  setSelectedMatch(
-                    alternative,
-                  );
-                }}
-              />
-
-              <button
-                className="supplier-product-review-v2-manual-search"
-                disabled={products.length === 0}
-                onClick={() =>
-                  setIsManualSearchOpen(true)
-                }
-                type="button"
-              >
-                <span>
-                  Correct product not shown?
-                </span>
-
-                <strong>
-                  Search full catalogue →
-                </strong>
-              </button>
             </section>
           </div>
 
-          <footer className="supplier-product-review-v2-actions">
-            <button
-              className="review-action review-action-ignore"
-              onClick={onSkip}
-              type="button"
-            >
-              <span>←</span>
-
-              <div>
-                <strong>Ignore</strong>
-                <small>S</small>
-              </div>
-            </button>
-
-            <button
-              className="review-action review-action-link"
-              disabled={!selectedMatch}
-              onClick={() => {
-                if (selectedMatch) {
-                  onAccept?.(
-                    selectedMatch,
-                  );
-                }
+          <section className="supplier-product-review-workstation-alternatives">
+            <AlternativeMatchesCard
+              alternatives={
+                match.alternatives
+              }
+              selectedProductId={
+                selectedMatch?.product.product_id
+              }
+              onSelect={(alternative) => {
+                setSelectedMatch(
+                  alternative,
+                );
               }}
-              type="button"
-            >
-              <span>✓</span>
+            />
+          </section>
 
-              <div>
+          {selectedMatch ? (
+            <section className="supplier-product-review-workstation-commercial">
+              <CommercialIntelligenceCard
+                onManualReview={() =>
+                  setIsManualSearchOpen(true)
+                }
+                product={selectedMatch.product}
+                supplierCard={card}
+              />
+            </section>
+          ) : null}
+
+          <section className="supplier-product-review-workstation-comparison">
+            <VisualComparisonCard
+              bestMatch={selectedMatch}
+              card={card}
+            />
+          </section>
+
+          <section className="supplier-product-review-workstation-lower">
+            <div className="supplier-product-review-v2-commercial">
+              <article>
+                <span>
+                  Supplier
+                </span>
+
                 <strong>
-                  Link Product
+                  {card.supplierName}
                 </strong>
-                <small>A</small>
-              </div>
-            </button>
+              </article>
 
-            <button
-              className="review-action review-action-new"
-              onClick={onCreateProduct}
-              type="button"
-            >
-              <span>＋</span>
+              <article>
+                <span>
+                  Pack Cost
+                </span>
 
-              <div>
                 <strong>
-                  Create Product
+                  {card.packCost !== null
+                    ? `${card.currency} ${card.packCost.toFixed(2)}`
+                    : "Not entered"}
                 </strong>
-                <small>N</small>
-              </div>
-            </button>
-          </footer>
+              </article>
+
+              <article>
+                <span>
+                  Pack Size
+                </span>
+
+                <strong>
+                  {card.packSize ??
+                    "Not entered"}
+                </strong>
+              </article>
+
+              <article>
+                <span>
+                  Unit Cost
+                </span>
+
+                <strong>
+                  {unitCost !== null
+                    ? `${card.currency} ${unitCost.toFixed(2)}`
+                    : "Not available"}
+                </strong>
+              </article>
+
+              <article>
+                <span>
+                  Lead Time
+                </span>
+
+                <strong>
+                  {card.leadTimeDays !== null
+                    ? `${card.leadTimeDays} days`
+                    : "Not entered"}
+                </strong>
+              </article>
+
+              <article>
+                <span>
+                  Reference
+                </span>
+
+                <strong>
+                  {card.internalReference ??
+                    "Not recorded"}
+                </strong>
+              </article>
+            </div>
+
+          </section>
 
           <div className="supplier-product-review-v2-navigation">
             <button
@@ -731,7 +753,7 @@ export function SupplierProductReview({
             </button>
 
             <span>
-              Swipe left, right or up
+              Item {currentIndex + 1} of {totalItems}
             </span>
 
             <button
@@ -791,13 +813,13 @@ export function SupplierProductReview({
       {isZoomed &&
       activeImage ? (
         <div
-          className="supplier-product-review-lightbox"
-          role="dialog"
-          aria-modal="true"
           aria-label="Supplier product image"
+          aria-modal="true"
+          className="supplier-product-review-lightbox"
           onClick={() =>
             setIsZoomed(false)
           }
+          role="dialog"
         >
           <button
             aria-label="Close image"

@@ -1,5 +1,7 @@
 "use client";
 
+import "./CommercialIntelligenceManualReview.css";
+
 import {
   BuyingRecommendationEngine,
   type BuyingRecommendationResult,
@@ -16,6 +18,7 @@ import type {
 type Props = {
   product: CatalogueProduct;
   supplierCard?: SupplierCatalogueCardData | null;
+  onManualReview?: () => void;
 };
 
 function formatCurrency(
@@ -57,6 +60,7 @@ function getUrgencyLabel(
 export function CommercialIntelligenceCard({
   product,
   supplierCard = null,
+  onManualReview,
 }: Props) {
   const recommendation =
     BuyingRecommendationEngine.buildRecommendation({
@@ -233,11 +237,23 @@ export function CommercialIntelligenceCard({
           Reorder trust
         </span>
 
-        <strong>
-          {recommendation.trusted
-            ? "Trusted for reorder"
-            : "Manual review required"}
-        </strong>
+        {recommendation.trusted ? (
+          <strong>
+            Trusted for reorder
+          </strong>
+        ) : onManualReview ? (
+          <button
+            className="commercial-intelligence-manual-review"
+            onClick={onManualReview}
+            type="button"
+          >
+            Search Entire Catalogue →
+          </button>
+        ) : (
+          <strong>
+            Manual review required
+          </strong>
+        )}
       </footer>
     </section>
   );
