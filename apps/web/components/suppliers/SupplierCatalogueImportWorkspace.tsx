@@ -22,6 +22,10 @@ import {
   CatalogueReviewQueueRepository,
 } from "@/lib/supplier/CatalogueReviewQueueRepository";
 
+import {
+  VaultMemoryRepository,
+} from "@/lib/brain/VaultMemoryRepository";
+
 import type {
   CatalogueAnalysisSession,
 } from "@/lib/supplier/catalogue-analysis-types";
@@ -121,12 +125,16 @@ export function SupplierCatalogueImportWorkspace({
     setQueueSaveError(null);
 
     try {
+      const memories =
+        await VaultMemoryRepository.getAll();
+
       const queue =
         CatalogueReviewQueueEngine.buildQueue({
           session,
           extractionResult,
           details,
           products,
+          memories,
         });
 
       setAnalysisSession(session);
@@ -151,6 +159,13 @@ export function SupplierCatalogueImportWorkspace({
 
       window.location.href =
         "/supplier-catalogue/review";
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Vault OS could not prepare this review queue.";
+
+      setQueueSaveError(message);
     } finally {
       setIsOpeningReview(false);
     }
@@ -235,7 +250,7 @@ export function SupplierCatalogueImportWorkspace({
             </p>
 
             <h3>
-              Preparing PDF images and review items...
+              Loading Vault Brain Memory and preparing review items...
             </h3>
           </div>
         </div>

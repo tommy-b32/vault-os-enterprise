@@ -26,25 +26,37 @@ import {
 } from "@/components/suppliers/MatchSummaryCard";
 
 import {
+  ManualProductSearch,
+} from "@/components/suppliers/ManualProductSearch";
+
+import {
   BrainPill,
 } from "@/components/ui/BrainPill";
 
 import type {
   CatalogueMatchingResult,
+  CatalogueProductMatch,
 } from "@/lib/brain/CatalogueMatchingEngine";
 
 import type {
   SupplierCatalogueCardData,
 } from "@/types/supplier-catalogue";
 
+import type {
+  CatalogueProduct,
+} from "@/types/catalogue";
+
 type Props = {
   card: SupplierCatalogueCardData;
   match: CatalogueMatchingResult;
+  products: CatalogueProduct[];
 
   currentIndex: number;
   totalItems: number;
 
-  onAccept?: () => void;
+  onAccept?: (
+    selectedMatch: CatalogueProductMatch,
+  ) => void;
   onSkip?: () => void;
   onCreateProduct?: () => void;
   onPrevious?: () => void;
@@ -78,6 +90,7 @@ function getImageRoleLabel(
 export function SupplierProductReview({
   card,
   match,
+  products,
   currentIndex,
   totalItems,
   onAccept,
@@ -135,8 +148,27 @@ export function SupplierProductReview({
       [1, 0],
     );
 
-  const bestMatch =
-    match.bestMatch;
+  const [
+    selectedMatch,
+    setSelectedMatch,
+  ] = useState(
+    match.bestMatch,
+  );
+
+  useEffect(() => {
+    setSelectedMatch(
+      match.bestMatch,
+    );
+  }, [match]);
+
+  const [
+    isManualSearchOpen,
+    setIsManualSearchOpen,
+  ] = useState(false);
+
+  useEffect(() => {
+    setIsManualSearchOpen(false);
+  }, [card.id]);
 
   const images =
     useMemo(
@@ -206,8 +238,10 @@ export function SupplierProductReview({
         event.key.toLowerCase()
       ) {
         case "a":
-          if (bestMatch) {
-            onAccept?.();
+          if (selectedMatch) {
+            onAccept?.(
+              selectedMatch,
+            );
           }
           break;
 
@@ -228,7 +262,11 @@ export function SupplierProductReview({
           break;
 
         case "escape":
-          setIsZoomed(false);
+          if (isManualSearchOpen) {
+            setIsManualSearchOpen(false);
+          } else {
+            setIsZoomed(false);
+          }
           break;
       }
     }
@@ -245,7 +283,8 @@ export function SupplierProductReview({
       );
     };
   }, [
-    bestMatch,
+    selectedMatch,
+    isManualSearchOpen,
     onAccept,
     onCreateProduct,
     onNext,
@@ -288,7 +327,7 @@ export function SupplierProductReview({
 
     if (
       horizontal > 140 &&
-      bestMatch
+      selectedMatch
     ) {
       setIsSwiping(true);
 
@@ -301,7 +340,9 @@ export function SupplierProductReview({
         },
       );
 
-      onAccept?.();
+      onAccept?.(
+        selectedMatch,
+      );
       return;
     }
 
@@ -526,14 +567,14 @@ export function SupplierProductReview({
 
             <section className="supplier-product-review-v2-intelligence">
               <MatchSummaryCard
-                bestMatch={bestMatch}
+                bestMatch={selectedMatch}
                 card={card}
               />
 
-              {bestMatch ? (
+              {selectedMatch ? (
                 <CommercialIntelligenceCard
                   product={
-                    bestMatch.product
+                    selectedMatch.product
                   }
                   supplierCard={
                     card
@@ -597,7 +638,34 @@ export function SupplierProductReview({
                 alternatives={
                   match.alternatives
                 }
+                selectedProductId={
+                  selectedMatch?.product.product_id
+                }
+                onSelect={(
+                  alternative,
+                ) => {
+                  setSelectedMatch(
+                    alternative,
+                  );
+                }}
               />
+
+              <button
+                className="supplier-product-review-v2-manual-search"
+                disabled={products.length === 0}
+                onClick={() =>
+                  setIsManualSearchOpen(true)
+                }
+                type="button"
+              >
+                <span>
+                  Correct product not shown?
+                </span>
+
+                <strong>
+                  Search full catalogue →
+                </strong>
+              </button>
             </section>
           </div>
 
@@ -617,8 +685,14 @@ export function SupplierProductReview({
 
             <button
               className="review-action review-action-link"
-              disabled={!bestMatch}
-              onClick={onAccept}
+              disabled={!selectedMatch}
+              onClick={() => {
+                if (selectedMatch) {
+                  onAccept?.(
+                    selectedMatch,
+                  );
+                }
+              }}
               type="button"
             >
               <span>✓</span>
@@ -673,6 +747,46 @@ export function SupplierProductReview({
           </div>
         </section>
       </motion.div>
+
+      {isManualSearchOpen ? (
+        <ManualProductSearch
+          onClose={() =>
+            setIsManualSearchOpen(false)
+          }
+          onSelect={(product) => {
+            const manualMatch:
+              CatalogueProductMatch = {
+                product,
+
+                confidence: 100,
+
+                signals: [
+                  {
+                    reason:
+                      "manual_hint",
+
+                    label:
+                      "Manually selected from full catalogue",
+
+                    score: 100,
+                  },
+                ],
+              };
+
+            setSelectedMatch(
+              manualMatch,
+            );
+
+            setIsManualSearchOpen(
+              false,
+            );
+          }}
+          products={products}
+          selectedProductId={
+            selectedMatch?.product.product_id
+          }
+        />
+      ) : null}
 
       {isZoomed &&
       activeImage ? (

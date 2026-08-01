@@ -28,18 +28,31 @@ import {
   SupplierReviewComplete,
 } from "@/components/suppliers/SupplierReviewComplete";
 
-import {
-  ProductLinkRepository,
-  type ProductLink,
+import type {
+  ProductLink,
 } from "@/lib/supplier/ProductLinkRepository";
+
+import {
+  VaultMemoryRepository,
+  type VaultProductMemory,
+} from "@/lib/brain/VaultMemoryRepository";
+
+import {
+  LinkProductEngine,
+} from "@/lib/brain/LinkProductEngine";
 
 import type {
   CatalogueMatchingResult,
+  CatalogueProductMatch,
 } from "@/lib/brain/CatalogueMatchingEngine";
 
 import type {
   SupplierCatalogueCardData,
 } from "@/types/supplier-catalogue";
+
+import type {
+  CatalogueProduct,
+} from "@/types/catalogue";
 
 type ReviewItem = {
   card: SupplierCatalogueCardData;
@@ -48,6 +61,11 @@ type ReviewItem = {
 
 type Props = {
   items: ReviewItem[];
+};
+
+type CatalogueProductsResponse = {
+  products?: CatalogueProduct[];
+  error?: string;
 };
 
 type Decision =
@@ -116,6 +134,103 @@ function buildProductLink(
   };
 }
 
+function buildVaultMemoryInput(
+  item: ReviewItem,
+) {
+  const bestMatch =
+    item.match.bestMatch;
+
+  if (!bestMatch) {
+    return null;
+  }
+
+  const supplierProductName =
+    item.card.officialProductName ??
+    item.card.internalReference ??
+    "Unnamed supplier product";
+
+  const preferredImage =
+    item.card.images.find(
+      (image) =>
+        image.role === "supplier",
+    ) ??
+    item.card.images.find(
+      (image) =>
+        image.role === "official",
+    ) ??
+    item.card.images[0] ??
+    null;
+
+  return {
+    supplierName:
+      item.card.supplierName,
+
+    supplierProductName,
+
+    supplierReference:
+      item.card.internalReference,
+
+    fabricVaultProductId:
+      bestMatch.product.product_id,
+
+    fabricVaultProductName:
+      bestMatch.product.product_name,
+
+    confidence:
+      bestMatch.confidence,
+
+    visualFingerprint:
+      item.card.vision.visualFingerprint,
+
+    supplierImageUrl:
+      preferredImage?.url ??
+      null,
+
+    lastSupplierCost:
+      item.card.packCost,
+
+    currency:
+      item.card.currency,
+
+    leadTimeDays:
+      item.card.leadTimeDays,
+  };
+}
+
+function buildSupplierMemoryInput(
+  item: ReviewItem,
+) {
+  const bestMatch =
+    item.match.bestMatch;
+
+  if (!bestMatch) {
+    return null;
+  }
+
+  const confirmedBrand =
+    bestMatch.product.product_vision?.brand ??
+    bestMatch.product.product_intelligence.brand ??
+    item.card.brand;
+
+  return {
+    supplierName:
+      item.card.supplierName,
+
+    preferredBrandNames:
+      confirmedBrand
+        ? [
+            confirmedBrand,
+          ]
+        : [],
+
+    packSize:
+      item.card.packSize,
+
+    leadTimeDays:
+      item.card.leadTimeDays,
+  };
+}
+
 export function SupplierReviewWorkspace({
   items,
 }: Props) {
@@ -139,6 +254,26 @@ export function SupplierReviewWorkspace({
     rememberedLinks,
     setRememberedLinks,
   ] = useState<ProductLink[]>([]);
+
+  const [
+    permanentMemories,
+    setPermanentMemories,
+  ] = useState<VaultProductMemory[]>([]);
+
+  const [
+    memoryLoadError,
+    setMemoryLoadError,
+  ] = useState<string | null>(null);
+
+  const [
+    catalogueProducts,
+    setCatalogueProducts,
+  ] = useState<CatalogueProduct[]>([]);
+
+  const [
+    catalogueLoadError,
+    setCatalogueLoadError,
+  ] = useState<string | null>(null);
 
   const [memoryToast, setMemoryToast] =
     useState<MemoryToast>(null);
@@ -167,9 +302,77 @@ export function SupplierReviewWorkspace({
     items[currentIndex] ?? null;
 
   useEffect(() => {
-    setRememberedLinks(
-      ProductLinkRepository.getAll(),
-    );
+    let cancelled = false;
+
+    async function loadPermanentMemory() {
+      try {
+        const memories =
+          await VaultMemoryRepository.getAll();
+
+        if (!cancelled) {
+          setPermanentMemories(memories);
+          setMemoryLoadError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Vault Brain memory could not be loaded.";
+
+          setMemoryLoadError(message);
+        }
+      }
+    }
+
+    async function loadCatalogueProducts() {
+      try {
+        const response =
+          await fetch(
+            "/api/catalogue-products",
+            {
+              method: "GET",
+              cache: "no-store",
+            },
+          );
+
+        const result =
+          (await response.json()) as
+            CatalogueProductsResponse;
+
+        if (!response.ok) {
+          throw new Error(
+            result.error ??
+            "The Fabric Vault catalogue could not be loaded.",
+          );
+        }
+
+        if (!cancelled) {
+          setCatalogueProducts(
+            result.products ?? [],
+          );
+          setCatalogueLoadError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "The Fabric Vault catalogue could not be loaded.";
+
+          setCatalogueLoadError(
+            message,
+          );
+        }
+      }
+    }
+
+    void loadPermanentMemory();
+    void loadCatalogueProducts();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -377,7 +580,9 @@ export function SupplierReviewWorkspace({
     );
   }
 
-  async function acceptCurrentMatch() {
+  async function acceptCurrentMatch(
+    selectedMatch: CatalogueProductMatch,
+  ) {
     if (
       !currentItem ||
       isAcceptingMatch
@@ -385,12 +590,45 @@ export function SupplierReviewWorkspace({
       return;
     }
 
+    const selectedItem: ReviewItem = {
+      ...currentItem,
+
+      match: {
+        ...currentItem.match,
+
+        bestMatch:
+          selectedMatch,
+
+        status:
+          selectedMatch.confidence >= 92
+            ? "matched"
+            : "possible_match",
+
+        requiresReview:
+          selectedMatch.confidence < 92,
+      },
+    };
+
     const productLink =
       buildProductLink(
-        currentItem,
+        selectedItem,
       );
 
-    if (!productLink) {
+    const productMemory =
+      buildVaultMemoryInput(
+        selectedItem,
+      );
+
+    const supplierMemory =
+      buildSupplierMemoryInput(
+        selectedItem,
+      );
+
+    if (
+      !productLink ||
+      !productMemory ||
+      !supplierMemory
+    ) {
       return;
     }
 
@@ -403,56 +641,66 @@ export function SupplierReviewWorkspace({
     );
 
     setAcceptanceStatus(
-      "Confirming the supplier product match...",
+      "Confirming your selected product match...",
     );
 
     try {
-      await wait(280);
+      await wait(220);
 
       setAcceptanceProgress(
         28,
       );
 
       setAcceptanceStatus(
-        "Saving the supplier-to-product relationship...",
+        "Saving product and supplier memory...",
       );
 
-      ProductLinkRepository.save(
-        productLink,
-      );
+      const result =
+        await LinkProductEngine.execute({
+          productLink,
+          productMemory,
+          supplierMemory,
+        });
 
-      await wait(360);
+      setPermanentMemories(
+        (current) => {
+          const existingIndex =
+            current.findIndex(
+              (memory) =>
+                memory.id ===
+                result.productMemory.id,
+            );
 
-      setAcceptanceProgress(
-        52,
-      );
+          if (existingIndex >= 0) {
+            const updated = [
+              ...current,
+            ];
 
-      setAcceptanceStatus(
-        "Updating Vault Brain product memory...",
+            updated[existingIndex] =
+              result.productMemory;
+
+            return updated;
+          }
+
+          return [
+            result.productMemory,
+            ...current,
+          ];
+        },
       );
 
       setRememberedLinks(
-        ProductLinkRepository.getAll(),
+        result.links,
       );
 
-      await wait(360);
+      setMemoryLoadError(null);
 
       setAcceptanceProgress(
-        74,
+        68,
       );
 
       setAcceptanceStatus(
-        "Checking inventory and buying context...",
-      );
-
-      await wait(360);
-
-      setAcceptanceProgress(
-        91,
-      );
-
-      setAcceptanceStatus(
-        "Preparing the next review item...",
+        "Updating buying context...",
       );
 
       const nextDecisions = {
@@ -463,25 +711,25 @@ export function SupplierReviewWorkspace({
       };
 
       addAcceptedItemToBasket(
-        currentItem,
+        selectedItem,
       );
 
       setMemoryToast({
         title:
-          "Product remembered",
+          "Selected product remembered",
 
         message:
-          `Future ${currentItem.card.supplierName} catalogues can recognise this product automatically.`,
+          `${selectedMatch.product.product_name} is now the confirmed match for this ${currentItem.card.supplierName} item.`,
       });
 
-      await wait(300);
+      await wait(280);
 
       setAcceptanceProgress(
         100,
       );
 
       setAcceptanceStatus(
-        "Product linked successfully.",
+        "Selected product linked and supplier memory updated.",
       );
 
       await wait(420);
@@ -489,8 +737,6 @@ export function SupplierReviewWorkspace({
       setIsAcceptingMatch(
         false,
       );
-
-      await wait(160);
 
       setDecisions(
         nextDecisions,
@@ -501,19 +747,32 @@ export function SupplierReviewWorkspace({
       );
     } catch (error) {
       console.error(
-        "Vault OS could not complete the product link.",
+        "Vault OS could not complete the selected product link.",
         error,
       );
 
+      const message =
+        error instanceof Error
+          ? error.message
+          : "The selected product and supplier memory could not be saved.";
+
       setAcceptanceStatus(
-        "The product link could not be completed.",
+        message,
       );
 
       setAcceptanceProgress(
         100,
       );
 
-      await wait(700);
+      setMemoryToast({
+        title:
+          "Product was not linked",
+
+        message:
+          "Vault Brain could not save the selected product relationship. No review decision was recorded.",
+      });
+
+      await wait(1100);
 
       setIsAcceptingMatch(
         false,
@@ -801,6 +1060,21 @@ export function SupplierReviewWorkspace({
         </div>
       ) : null}
 
+      {catalogueLoadError ? (
+        <div
+          className="supplier-review-queue-error"
+          role="alert"
+        >
+          <strong>
+            Full catalogue search unavailable
+          </strong>
+
+          <p>
+            {catalogueLoadError}
+          </p>
+        </div>
+      ) : null}
+
       <header className="supplier-review-workspace-header">
         <div>
           <p className="vault-eyebrow">
@@ -843,7 +1117,7 @@ export function SupplierReviewWorkspace({
           <span>Remembered</span>
 
           <strong>
-            {rememberedLinks.length}
+            {permanentMemories.length}
           </strong>
         </article>
 
@@ -882,6 +1156,7 @@ export function SupplierReviewWorkspace({
             currentIndex
           }
           match={currentItem.match}
+          products={catalogueProducts}
           onAccept={
             acceptCurrentMatch
           }
@@ -940,7 +1215,7 @@ export function SupplierReviewWorkspace({
 
         <span>
           Product memory:{" "}
-          {rememberedLinks.length}
+          {permanentMemories.length}
         </span>
       </footer>
     </main>

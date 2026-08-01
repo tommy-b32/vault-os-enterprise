@@ -4,6 +4,10 @@ import {
 } from "@/lib/brain/CatalogueMatchingEngine";
 
 import type {
+  VaultProductMemory,
+} from "@/lib/brain/VaultMemoryRepository";
+
+import type {
   CatalogueAnalysisSession,
   CatalogueProductGroup,
 } from "@/lib/supplier/catalogue-analysis-types";
@@ -24,6 +28,7 @@ import type {
 export type CatalogueReviewQueueItem = {
   card: SupplierCatalogueCardData;
   match: CatalogueMatchingResult;
+  memory: VaultProductMemory | null;
 };
 
 export type CatalogueReviewQueueDetails = {
@@ -41,6 +46,7 @@ type BuildQueueInput = {
   extractionResult: SupplierExtractionResult;
   details: CatalogueReviewQueueDetails;
   products: CatalogueProduct[];
+  memories?: VaultProductMemory[];
 };
 
 function createSlug(value: string): string {
@@ -49,6 +55,17 @@ function createSlug(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function normaliseText(
+  value: string | null | undefined,
+): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getImageRole(
@@ -248,12 +265,114 @@ function buildCard({
   };
 }
 
+function findRememberedMemory(
+  card: SupplierCatalogueCardData,
+  memories: VaultProductMemory[],
+): VaultProductMemory | null {
+  const supplierName =
+    normaliseText(
+      card.supplierName,
+    );
+
+  const supplierProductName =
+    normaliseText(
+      card.officialProductName ??
+      card.internalReference,
+    );
+
+  const supplierReference =
+    normaliseText(
+      card.internalReference,
+    );
+
+  const exactReferenceMatch =
+    memories.find(
+      (memory) =>
+        normaliseText(
+          memory.supplierName,
+        ) === supplierName &&
+        supplierReference.length > 0 &&
+        normaliseText(
+          memory.supplierReference,
+        ) === supplierReference,
+    );
+
+  if (exactReferenceMatch) {
+    return exactReferenceMatch;
+  }
+
+  return (
+    memories.find(
+      (memory) =>
+        normaliseText(
+          memory.supplierName,
+        ) === supplierName &&
+        normaliseText(
+          memory.supplierProductName,
+        ) === supplierProductName,
+    ) ??
+    null
+  );
+}
+
+function buildRememberedMatch({
+  card,
+  memory,
+  products,
+}: {
+  card: SupplierCatalogueCardData;
+  memory: VaultProductMemory;
+  products: CatalogueProduct[];
+}): CatalogueMatchingResult | null {
+  const product =
+    products.find(
+      (candidate) =>
+        candidate.product_id ===
+        memory.fabricVaultProductId,
+    );
+
+  if (!product) {
+    return null;
+  }
+
+  return {
+    catalogueCardId:
+      card.id,
+
+    bestMatch: {
+      product,
+
+      confidence: 100,
+
+      signals: [
+        {
+          reason:
+            "existing_mapping",
+
+          label:
+            `Known product · confirmed ${memory.acceptedCount} ${memory.acceptedCount === 1 ? "time" : "times"}`,
+
+          score: 100,
+        },
+      ],
+    },
+
+    alternatives: [],
+
+    requiresReview: true,
+
+    status:
+      "matched",
+  };
+}
+
 export const CatalogueReviewQueueEngine = {
   buildQueue({
     session,
     extractionResult,
     details,
     products,
+    memories = [],
   }: BuildQueueInput): CatalogueReviewQueueItem[] {
     const cards =
       session.productGroups.map((group) =>
@@ -265,31 +384,62 @@ export const CatalogueReviewQueueEngine = {
         }),
       );
 
-    const matches =
+    const aiMatches =
       CatalogueMatchingEngine.matchCatalogue({
         cards,
         products,
       });
 
-    const matchesByCardId =
+    const aiMatchesByCardId =
       new Map(
-        matches.map((match) => [
+        aiMatches.map((match) => [
           match.catalogueCardId,
           match,
         ]),
       );
 
-    return cards.map((card) => ({
-      card,
+    return cards.map((card) => {
+      const memory =
+        findRememberedMemory(
+          card,
+          memories,
+        );
 
-      match:
-        matchesByCardId.get(card.id) ?? {
-          catalogueCardId: card.id,
-          bestMatch: null,
-          alternatives: [],
-          requiresReview: true,
-          status: "unmatched",
-        },
-    }));
+      const rememberedMatch =
+        memory
+          ? buildRememberedMatch({
+              card,
+              memory,
+              products,
+            })
+          : null;
+
+      return {
+        card: rememberedMatch?.bestMatch
+          ? {
+              ...card,
+              linkedProductId:
+                rememberedMatch.bestMatch.product.product_id,
+              linkedProductName:
+                rememberedMatch.bestMatch.product.product_name,
+            }
+          : card,
+
+        match:
+          rememberedMatch ??
+          aiMatchesByCardId.get(card.id) ?? {
+            catalogueCardId: card.id,
+            bestMatch: null,
+            alternatives: [],
+            requiresReview: true,
+            status: "unmatched",
+          },
+
+        memory:
+          rememberedMatch
+            ? memory
+            : null,
+      };
+    });
   },
 } as const;

@@ -6,10 +6,18 @@ import type {
 
 type Props = {
   alternatives: CatalogueProductMatch[];
+
+  selectedProductId?: string | null;
+
+  onSelect?: (
+    alternative: CatalogueProductMatch,
+  ) => void;
 };
 
 export function AlternativeMatchesCard({
   alternatives,
+  selectedProductId = null,
+  onSelect,
 }: Props) {
   if (alternatives.length === 0) {
     return null;
@@ -23,29 +31,44 @@ export function AlternativeMatchesCard({
 
       <div>
         {alternatives.map(
-          (alternative) => (
-            <button
-              key={
-                alternative.product
-                  .product_id
-              }
-              type="button"
-            >
-              <span>
-                {
-                  alternative.product
-                    .product_name
-                }
-              </span>
+          (alternative) => {
+            const selected =
+              alternative.product.product_id ===
+              selectedProductId;
 
-              <strong>
-                {
-                  alternative.confidence
+            return (
+              <button
+                aria-pressed={selected}
+                className={
+                  selected
+                    ? "is-selected"
+                    : ""
                 }
-                %
-              </strong>
-            </button>
-          ),
+                key={
+                  alternative.product.product_id
+                }
+                onClick={() =>
+                  onSelect?.(
+                    alternative,
+                  )
+                }
+                type="button"
+              >
+                <span>
+                  {
+                    alternative.product
+                      .product_name
+                  }
+                </span>
+
+                <strong>
+                  {selected
+                    ? "Selected"
+                    : `${alternative.confidence}%`}
+                </strong>
+              </button>
+            );
+          },
         )}
       </div>
     </details>
