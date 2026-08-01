@@ -526,9 +526,8 @@ export function SupplierProductReview({
 
             <section className="supplier-product-review-v2-intelligence">
               <MatchSummaryCard
-                bestMatch={
-                  bestMatch
-                }
+                bestMatch={bestMatch}
+                card={card}
               />
 
               {bestMatch ? (
