@@ -158,6 +158,12 @@ export function BuyingBasket({
         item.packCost === null,
     );
 
+  const hasAnyKnownCost =
+    items.some(
+      (item) =>
+        item.packCost !== null,
+    );
+
   const hasProjectedProfit =
     items.some(
       (item) =>
@@ -223,11 +229,13 @@ export function BuyingBasket({
               </span>
 
               <strong>
-                {formatCurrency(
+               {hasAnyKnownCost
+                  ? formatCurrency(
                   estimatedCost,
                   basketCurrency,
-                )}
-              </strong>
+              )
+              : "Pending supplier costs"}
+            </strong>
             </article>
           </div>
 
@@ -361,7 +369,7 @@ export function BuyingBasket({
                               itemCost,
                               item.currency,
                             )
-                          : "Cost unavailable"}
+                          : "Pack cost not supplied"}
                       </span>
 
                       <small>
