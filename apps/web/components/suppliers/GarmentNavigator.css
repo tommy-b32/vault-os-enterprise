@@ -1,0 +1,258 @@
+/* ============================================================
+   GARMENT NAVIGATOR
+   Multi-product supplier-page review
+   ============================================================ */
+
+.garment-navigator {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border:
+    1px solid rgba(211, 169, 74, 0.2);
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(211, 169, 74, 0.08),
+      rgba(12, 14, 19, 0.94) 42%,
+      rgba(12, 14, 19, 0.98)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  box-sizing: border-box;
+}
+
+.garment-navigator-header {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.garment-navigator-header > div {
+  min-width: 0;
+}
+
+.garment-navigator-header h3 {
+  margin: 4px 0 5px;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.garment-navigator-header p:last-child {
+  max-width: 720px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.garment-navigator-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.garment-navigator-grid > button {
+  min-width: 0;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns:
+    34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  color: inherit;
+  text-align: left;
+  background:
+    rgba(255, 255, 255, 0.025);
+  border:
+    1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 9px;
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.garment-navigator-grid > button:hover {
+  transform: translateY(-1px);
+  background:
+    rgba(255, 255, 255, 0.045);
+  border-color:
+    rgba(211, 169, 74, 0.26);
+}
+
+.garment-navigator-grid > button.is-active {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(211, 169, 74, 0.16),
+      rgba(211, 169, 74, 0.06)
+    );
+  border-color:
+    rgba(230, 190, 92, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(211, 169, 74, 0.1),
+    0 8px 26px rgba(0, 0, 0, 0.18);
+}
+
+.garment-navigator-grid > button:focus-visible {
+  outline:
+    2px solid rgba(230, 190, 92, 0.9);
+  outline-offset: 2px;
+}
+
+.garment-navigator-number {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.72);
+  background:
+    rgba(255, 255, 255, 0.045);
+  border:
+    1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.garment-navigator-grid
+  > button.is-active
+  .garment-navigator-number {
+  color: #12100a;
+  background:
+    linear-gradient(
+      135deg,
+      #f1cc70,
+      #c89937
+    );
+  border-color:
+    rgba(241, 204, 112, 0.9);
+}
+
+.garment-navigator-grid
+  > button
+  > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.garment-navigator-grid strong {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.garment-navigator-grid small {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.65rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.garment-navigator-confidence {
+  min-width: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 7px;
+  color: rgba(231, 195, 104, 0.9);
+  background:
+    rgba(211, 169, 74, 0.08);
+  border:
+    1px solid rgba(211, 169, 74, 0.16);
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+/* Selected-garment overlay, ready for crop refinement. */
+
+.supplier-product-review-v2-image {
+  position: relative;
+}
+
+.garment-selection-overlay {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border:
+    2px solid rgba(236, 195, 92, 0.95);
+  border-radius: 9px;
+  background:
+    rgba(211, 169, 74, 0.04);
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.34),
+    0 0 24px rgba(211, 169, 74, 0.24);
+  transition:
+    left 180ms ease,
+    top 180ms ease,
+    width 180ms ease,
+    height 180ms ease;
+}
+
+.garment-selection-overlay::before {
+  content:
+    attr(data-label);
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  padding: 5px 8px;
+  color: #17130a;
+  background:
+    linear-gradient(
+      135deg,
+      #f2cf78,
+      #c99834
+    );
+  border-radius: 6px;
+  font-size: 0.62rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Responsive navigator */
+
+@media (max-width: 1120px) {
+  .garment-navigator-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .garment-navigator-header {
+    display: grid;
+  }
+
+  .garment-navigator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .garment-navigator-grid > button {
+    grid-template-columns:
+      34px minmax(0, 1fr) auto;
+  }
+}

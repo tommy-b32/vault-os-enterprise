@@ -1,5 +1,7 @@
 "use client";
 
+import "./GarmentNavigator.css";
+
 import {
   BrainPill,
 } from "@/components/ui/BrainPill";
