@@ -1,8 +1,9 @@
 "use client";
 
 import {
-  BuyingIntelligenceEngine,
-} from "@/lib/brain/BuyingIntelligenceEngine";
+  AnimatePresence,
+  motion,
+} from "framer-motion";
 
 export type BuyingBasketItem = {
   id: string;
@@ -31,13 +32,17 @@ export type BuyingBasketItem = {
 
 type Props = {
   items: BuyingBasketItem[];
+
   onDecreasePacks?: (
     itemId: string,
   ) => void;
+
   onIncreasePacks?: (
     itemId: string,
   ) => void;
+
   onOpen?: () => void;
+
   onRemove?: (
     itemId: string,
   ) => void;
@@ -52,6 +57,25 @@ function formatCurrency(
     currency,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function getUrgencyLabel(
+  urgency:
+    | BuyingBasketItem["urgency"],
+): string {
+  switch (urgency) {
+    case "high":
+      return "Urgent";
+
+    case "medium":
+      return "Monitor";
+
+    case "low":
+      return "Healthy";
+
+    default:
+      return "Review";
+  }
 }
 
 export function BuyingBasket({
@@ -77,30 +101,79 @@ export function BuyingBasket({
 
   const estimatedCost =
     items.reduce(
-      (total, item) => {
-        const recommendation =
-          BuyingIntelligenceEngine.analyse(
-            item,
-          );
-
-        return (
-          total +
-          (
-            recommendation.estimatedCost ??
-            0
-          )
-        );
-      },
+      (total, item) =>
+        total +
+        (
+          item.packCost === null
+            ? 0
+            : item.packCost *
+              item.packs
+        ),
       0,
     );
+
+  const projectedProfit =
+    items.reduce(
+      (total, item) =>
+        total +
+        (
+          item.estimatedProfit ??
+          0
+        ),
+      0,
+    );
+
+  const projectedRevenue =
+    items.reduce(
+      (total, item) =>
+        total +
+        (
+          item.estimatedRevenue ??
+          0
+        ),
+      0,
+    );
+
+  const urgentItems =
+    items.filter(
+      (item) =>
+        item.urgency === "high",
+    ).length;
+
+  const monitorItems =
+    items.filter(
+      (item) =>
+        item.urgency === "medium",
+    ).length;
+
+  const healthyItems =
+    items.filter(
+      (item) =>
+        item.urgency === "low",
+    ).length;
 
   const hasMissingCosts =
     items.some(
       (item) =>
-        BuyingIntelligenceEngine.analyse(
-          item,
-        ).estimatedCost ===
-        null,
+        item.packCost === null,
+    );
+
+  const hasProjectedProfit =
+    items.some(
+      (item) =>
+        item.estimatedProfit !==
+          null &&
+        item.estimatedProfit !==
+          undefined,
+    );
+
+  const hasProjectedRevenue =
+    items.some(
+      (item) =>
+        item.estimatedRevenue !==
+          null &&
+        item.estimatedRevenue !==
+          undefined,
     );
 
   return (
@@ -108,7 +181,7 @@ export function BuyingBasket({
       <header className="buying-basket-header">
         <div>
           <p className="vault-eyebrow">
-            Buying Basket
+            Buying Intelligence
           </p>
 
           <h3>
@@ -158,29 +231,122 @@ export function BuyingBasket({
             </article>
           </div>
 
-          <div className="buying-basket-preview buying-basket-preview-interactive">
-            {items.map(
-              (item) => {
-                const recommendation =
-                  BuyingIntelligenceEngine.analyse(
-                    item,
-                  );
+          <div className="buying-basket-intelligence-summary">
+            <article className="is-high">
+              <span>
+                Urgent
+              </span>
 
+              <strong>
+                {urgentItems}
+              </strong>
+            </article>
+
+            <article className="is-medium">
+              <span>
+                Monitor
+              </span>
+
+              <strong>
+                {monitorItems}
+              </strong>
+            </article>
+
+            <article className="is-low">
+              <span>
+                Healthy
+              </span>
+
+              <strong>
+                {healthyItems}
+              </strong>
+            </article>
+          </div>
+
+          <div className="buying-basket-value-summary">
+            <article>
+              <span>
+                Projected revenue
+              </span>
+
+              <strong>
+                {hasProjectedRevenue
+                  ? formatCurrency(
+                      projectedRevenue,
+                      basketCurrency,
+                    )
+                  : "Pending data"}
+              </strong>
+            </article>
+
+            <article>
+              <span>
+                Projected profit
+              </span>
+
+              <strong>
+                {hasProjectedProfit
+                  ? formatCurrency(
+                      projectedProfit,
+                      basketCurrency,
+                    )
+                  : "Pending data"}
+              </strong>
+            </article>
+          </div>
+
+          <div className="buying-basket-preview buying-basket-preview-interactive">
+            <AnimatePresence initial={false}>
+              {items.map(
+              (item) => {
                 const itemCost =
-                  recommendation.estimatedCost;
+                  item.packCost ===
+                  null
+                    ? null
+                    : item.packCost *
+                      item.packs;
 
                 return (
-                  <article
+                  <motion.article
+                    animate={{
+                      opacity: 1,
+                      scale: 1,
+                      y: 0,
+                    }}
+                    exit={{
+                      opacity: 0,
+                      x: 40,
+                    }}
+                    initial={{
+                      opacity: 0,
+                      scale: 0.96,
+                      y: 18,
+                    }}
                     key={
                       item.id
                     }
+                    layout
+                    transition={{
+                      duration: 0.22,
+                      ease: "easeOut",
+                    }}
                   >
                     <div className="buying-basket-item-copy">
-                      <strong>
-                        {
-                          item.productName
-                        }
-                      </strong>
+                      <div className="buying-basket-item-heading">
+                        <strong>
+                          {
+                            item.productName
+                          }
+                        </strong>
+
+                        <span
+                          className={`buying-basket-urgency is-${item.urgency ?? "review"}`}
+                        >
+                          {getUrgencyLabel(
+                            item.urgency,
+                          )}
+                        </span>
+                      </div>
 
                       <small>
                         {
@@ -199,17 +365,25 @@ export function BuyingBasket({
                       </span>
 
                       <small>
-                        Suggested:{" "}
-                        {
-                          recommendation.suggestedPacks
-                        }{" "}
-                        {
-                          recommendation.suggestedPacks ===
-                          1
-                            ? "pack"
-                            : "packs"
-                        }
+                        Recommended quantity:{" "}
+                        {item.packs}{" "}
+                        {item.packs === 1
+                          ? "pack"
+                          : "packs"}
                       </small>
+
+                      {item.estimatedProfit !==
+                      null &&
+                      item.estimatedProfit !==
+                      undefined ? (
+                        <small>
+                          Projected profit:{" "}
+                          {formatCurrency(
+                            item.estimatedProfit,
+                            item.currency,
+                          )}
+                        </small>
+                      ) : null}
                     </div>
 
                     <div className="buying-basket-quantity">
@@ -260,10 +434,11 @@ export function BuyingBasket({
                     >
                       Remove
                     </button>
-                  </article>
+                  </motion.article>
                 );
               },
             )}
+            </AnimatePresence>
           </div>
 
           {hasMissingCosts ? (

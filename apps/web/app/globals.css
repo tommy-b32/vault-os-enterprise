@@ -7904,6 +7904,189 @@ grid-template-columns:1fr;
   cursor: pointer;
 }
 
+/* ============================================================
+   BUYING BASKET — INTELLIGENCE SUMMARY
+   ============================================================ */
+
+.buying-basket-intelligence-summary {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.buying-basket-intelligence-summary article {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 9px;
+  background:
+    rgba(7, 9, 8, 0.72);
+  border: 1px solid
+    rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.buying-basket-intelligence-summary span,
+.buying-basket-value-summary span {
+  color: var(--vault-muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.buying-basket-intelligence-summary strong {
+  font-size: 19px;
+  font-weight: 650;
+}
+
+.buying-basket-intelligence-summary
+  .is-high {
+  border-color:
+    rgba(239, 101, 79, 0.24);
+}
+
+.buying-basket-intelligence-summary
+  .is-high
+  strong {
+  color: var(--vault-error);
+}
+
+.buying-basket-intelligence-summary
+  .is-medium {
+  border-color:
+    rgba(232, 181, 77, 0.24);
+}
+
+.buying-basket-intelligence-summary
+  .is-medium
+  strong {
+  color: var(--vault-warning);
+}
+
+.buying-basket-intelligence-summary
+  .is-low {
+  border-color:
+    rgba(107, 201, 120, 0.24);
+}
+
+.buying-basket-intelligence-summary
+  .is-low
+  strong {
+  color: var(--vault-success);
+}
+
+.buying-basket-value-summary {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.buying-basket-value-summary article {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(217, 173, 74, 0.08),
+      rgba(8, 10, 9, 0.78)
+    );
+  border: 1px solid
+    rgba(217, 173, 74, 0.2);
+  border-radius: 8px;
+}
+
+.buying-basket-value-summary strong {
+  overflow: hidden;
+  color: var(--vault-gold-bright);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.buying-basket-item-heading {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.buying-basket-item-heading > strong {
+  min-width: 0;
+}
+
+.buying-basket-urgency {
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  border-radius: 999px;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.buying-basket-urgency.is-high {
+  color: var(--vault-error);
+  background:
+    rgba(239, 101, 79, 0.11);
+  border: 1px solid
+    rgba(239, 101, 79, 0.22);
+}
+
+.buying-basket-urgency.is-medium {
+  color: var(--vault-warning);
+  background:
+    rgba(232, 181, 77, 0.11);
+  border: 1px solid
+    rgba(232, 181, 77, 0.22);
+}
+
+.buying-basket-urgency.is-low {
+  color: var(--vault-success);
+  background:
+    rgba(107, 201, 120, 0.11);
+  border: 1px solid
+    rgba(107, 201, 120, 0.22);
+}
+
+.buying-basket-urgency.is-review {
+  color: var(--vault-muted);
+  background:
+    rgba(142, 145, 139, 0.09);
+  border: 1px solid
+    rgba(142, 145, 139, 0.18);
+}
+
+@media (max-width: 1180px) {
+  .buying-basket-intelligence-summary,
+  .buying-basket-value-summary {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+
+  .buying-basket-value-summary article:first-child {
+    grid-column:
+      span 2;
+  }
+}
+
+@media (max-width: 680px) {
+  .buying-basket-intelligence-summary,
+  .buying-basket-value-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .buying-basket-value-summary article:first-child {
+    grid-column: auto;
+  }
+}
+
 /* ==========================================================
    SUPPLIER REVIEW — COMPLETION
 ========================================================== */

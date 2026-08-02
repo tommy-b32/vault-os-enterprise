@@ -7,6 +7,10 @@ import {
 } from "react";
 
 import {
+  BuyingRecommendationEngine,
+} from "@/lib/brain/BuyingRecommendationEngine";
+
+import {
   VaultBrainOverlay,
 } from "@/components/brain/VaultBrainOverlay";
 
@@ -502,6 +506,15 @@ export function SupplierReviewWorkspace({
       return;
     }
 
+    const recommendation =
+      BuyingRecommendationEngine.buildRecommendation({
+        product:
+          bestMatch.product,
+
+    supplierCard:
+      item.card,
+    });
+
     const basketItem: BuyingBasketItem = {
       id: item.card.id,
 
@@ -511,13 +524,34 @@ export function SupplierReviewWorkspace({
       supplierName:
         item.card.supplierName,
 
-      packs: 1,
+      packs:
+        recommendation.suggestedPacks !== null &&
+        recommendation.suggestedPacks > 0
+          ? recommendation.suggestedPacks
+          : 1,
 
       packCost:
         item.card.packCost,
 
       currency:
         item.card.currency,
+
+      urgency:
+        recommendation.urgency === "critical"
+          ? "high"
+          : recommendation.urgency === "none"
+            ? "low"
+            : recommendation.urgency,
+
+      estimatedProfit:
+        recommendation.estimatedGrossProfit,
+
+      estimatedRevenue:
+        recommendation.estimatedOrderCost !== null &&
+        recommendation.estimatedGrossProfit !== null
+          ? recommendation.estimatedOrderCost +
+            recommendation.estimatedGrossProfit
+          : null,
     };
 
     setBasketItems((current) => {
@@ -556,6 +590,12 @@ export function SupplierReviewWorkspace({
 
       currency:
         draft.currency,
+
+      urgency: "medium",
+
+      estimatedProfit: null,
+
+      estimatedRevenue: null,
     };
 
     setBasketItems((current) => {
