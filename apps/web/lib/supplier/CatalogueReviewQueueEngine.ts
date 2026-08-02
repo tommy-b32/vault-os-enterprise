@@ -266,34 +266,80 @@ function findRememberedMemory(
       card.internalReference,
     );
 
-  const exactReferenceMatch =
-    memories.find(
+  const supplierColour =
+    normaliseText(
+      card.colour,
+    );
+
+  const belongsToSupplier = (
+    memory: VaultProductMemory,
+  ): boolean =>
+    normaliseText(
+      memory.supplierName,
+    ) === supplierName;
+
+  const matchesColour = (
+    memory: VaultProductMemory,
+  ): boolean => {
+    if (!supplierColour) {
+      return true;
+    }
+
+    return normaliseText(
+      memory.fabricVaultProductName,
+    )
+      .split(" ")
+      .includes(
+        supplierColour,
+      );
+  };
+
+  const exactReferenceMatches =
+    memories.filter(
       (memory) =>
-        normaliseText(
-          memory.supplierName,
-        ) === supplierName &&
+        belongsToSupplier(memory) &&
         supplierReference.length > 0 &&
         normaliseText(
           memory.supplierReference,
         ) === supplierReference,
     );
 
-  if (exactReferenceMatch) {
-    return exactReferenceMatch;
+  const colourSafeReferenceMatch =
+    exactReferenceMatches.find(
+      matchesColour,
+    );
+
+  if (colourSafeReferenceMatch) {
+    return colourSafeReferenceMatch;
   }
 
-  return (
-    memories.find(
+  const productNameMatches =
+    memories.filter(
       (memory) =>
-        normaliseText(
-          memory.supplierName,
-        ) === supplierName &&
+        belongsToSupplier(memory) &&
         normaliseText(
           memory.supplierProductName,
         ) === supplierProductName,
-    ) ??
-    null
-  );
+    );
+
+  const colourSafeProductMatch =
+    productNameMatches.find(
+      matchesColour,
+    );
+
+  if (colourSafeProductMatch) {
+    return colourSafeProductMatch;
+  }
+
+  if (!supplierColour) {
+    return (
+      exactReferenceMatches[0] ??
+      productNameMatches[0] ??
+      null
+    );
+  }
+
+  return null;
 }
 
 function buildRememberedMatch({

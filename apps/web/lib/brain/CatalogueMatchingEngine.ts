@@ -6,6 +6,10 @@ import {
   IdentityConflictEngine,
 } from "./IdentityConflictEngine";
 
+import {
+  VisualSimilarityEngine,
+} from "./VisualSimilarityEngine";
+
 import type {
   CatalogueVisionData,
 } from "@/types/catalogue-vision";
@@ -196,30 +200,6 @@ function getBestSimilarity(
   );
 }
 
-function getBestArraySimilarity(
-  source: string[],
-  candidates: string[],
-): number {
-  if (
-    source.length === 0 ||
-    candidates.length === 0
-  ) {
-    return 0;
-  }
-
-  return source.reduce(
-    (best, sourceValue) =>
-      Math.max(
-        best,
-        getBestSimilarity(
-          sourceValue,
-          candidates,
-        ),
-      ),
-    0,
-  );
-}
-
 function getProductIntelligence(
   product: CatalogueProduct,
 ): ProductIntelligenceProfile {
@@ -233,51 +213,6 @@ function getProductVision(
   product: CatalogueProduct,
 ): ProductVision | null {
   return product.product_vision ?? null;
-}
-
-function calculateFingerprintSimilarity(
-  supplierFingerprint: string[],
-  productFingerprint: string[],
-): number {
-  if (
-    supplierFingerprint.length === 0 ||
-    productFingerprint.length === 0
-  ) {
-    return 0;
-  }
-
-  const scores =
-    supplierFingerprint.map(
-      (supplierToken) =>
-        getBestSimilarity(
-          supplierToken,
-          productFingerprint,
-        ),
-    );
-
-  const usefulScores =
-    scores.filter(
-      (score) =>
-        score >= 40,
-    );
-
-  if (
-    usefulScores.length === 0
-  ) {
-    return 0;
-  }
-
-  return Math.round(
-    usefulScores.reduce(
-      (total, score) =>
-        total + score,
-      0,
-    ) /
-      Math.max(
-        supplierFingerprint.length,
-        productFingerprint.length,
-      ),
-  );
 }
 
 function addSignal(
@@ -379,6 +314,36 @@ function buildMatch({
     getProductVision(
       product,
     );
+
+  const visual =
+    VisualSimilarityEngine.compare({
+      supplierVision:
+        vision,
+
+      productVision,
+
+      productIntelligence:
+        intelligence,
+    });
+
+  for (
+    const signal of
+    visual.signals
+  ) {
+    addSignal(
+      signals,
+      {
+        reason:
+          "image_similarity",
+
+        label:
+          signal.label,
+
+        score:
+          signal.score,
+      },
+    );
+  }
 
   const identity =
     IdentityConflictEngine.verify({
@@ -554,187 +519,6 @@ function buildMatch({
         score: 6,
       },
     );
-  }
-
-  if (
-    productVision &&
-    vision.chestLogo &&
-    productVision.logo_present
-  ) {
-    const logoSimilarity =
-      getBestSimilarity(
-        vision.chestLogo,
-        [
-          productVision.logo_type,
-          productVision.logo_position,
-          productVision.logo_size,
-          productVision.front_description,
-          ...productVision.key_features,
-          ...productVision.visual_fingerprint,
-        ],
-      );
-
-    if (logoSimilarity >= 40) {
-      addSignal(
-        signals,
-        {
-          reason:
-            "image_similarity",
-          label:
-            "Logo type and placement similarity",
-          score:
-            logoSimilarity *
-            0.18,
-        },
-      );
-    }
-  }
-
-  const graphicSimilarity =
-    Math.max(
-      getBestSimilarity(
-        vision.frontGraphic,
-        productVision
-          ? [
-              productVision.front_description,
-              productVision.pattern,
-              ...productVision.key_features,
-              ...productVision.visual_fingerprint,
-            ]
-          : [
-              intelligence.front_graphic,
-              ...intelligence.visual_fingerprint,
-            ],
-      ),
-      getBestSimilarity(
-        vision.chestLogo,
-        productVision
-          ? [
-              productVision.logo_type,
-              productVision.logo_position,
-              productVision.logo_size,
-              ...productVision.visual_fingerprint,
-            ]
-          : [
-              intelligence.chest_logo,
-              ...intelligence.visual_fingerprint,
-            ],
-      ),
-      getBestSimilarity(
-        vision.backGraphic,
-        productVision
-          ? [
-              productVision.back_description,
-              ...productVision.key_features,
-              ...productVision.visual_fingerprint,
-            ]
-          : [
-              intelligence.back_graphic,
-              ...intelligence.visual_fingerprint,
-            ],
-      ),
-    );
-
-  if (graphicSimilarity >= 45) {
-    addSignal(
-      signals,
-      {
-        reason:
-          "image_similarity",
-        label:
-          productVision
-            ? "Graphic details match Product Vision"
-            : "Graphic and logo similarity",
-        score:
-          graphicSimilarity *
-          0.18,
-      },
-    );
-  }
-
-  const productFingerprint =
-    productVision?.visual_fingerprint ??
-    intelligence.visual_fingerprint;
-
-  const fingerprintSimilarity =
-    calculateFingerprintSimilarity(
-      vision.visualFingerprint,
-      productFingerprint,
-    );
-
-  if (
-    fingerprintSimilarity >= 35
-  ) {
-    addSignal(
-      signals,
-      {
-        reason:
-          "image_similarity",
-        label:
-          productVision
-            ? "Visual fingerprint similarity"
-            : "Legacy fingerprint similarity",
-        score:
-          fingerprintSimilarity *
-          0.26,
-      },
-    );
-  }
-
-  if (productVision) {
-    const supplierKeywords = [
-      vision.productName,
-      ...vision.extractedText,
-      vision.chestLogo,
-      vision.frontGraphic,
-      vision.backGraphic,
-      ...vision.visualFingerprint,
-    ].filter(
-      (value): value is string =>
-        Boolean(
-          value?.trim(),
-        ),
-    );
-
-    const productKeywords = [
-      productVision.brand,
-      ...productVision.matching_keywords,
-      ...productVision.key_features,
-      ...productVision.visual_fingerprint,
-      productVision.pattern,
-      productVision.material_appearance,
-      productVision.fit,
-      productVision.neck_type,
-      productVision.sleeve_type,
-    ].filter(
-      (value): value is string =>
-        Boolean(
-          value?.trim(),
-        ),
-    );
-
-    const keywordSimilarity =
-      getBestArraySimilarity(
-        supplierKeywords,
-        productKeywords,
-      );
-
-    if (
-      keywordSimilarity >= 45
-    ) {
-      addSignal(
-        signals,
-        {
-          reason:
-            "image_similarity",
-          label:
-            "Product Vision keyword similarity",
-          score:
-            keywordSimilarity *
-            0.14,
-        },
-      );
-    }
   }
 
   const brandAgreement =
