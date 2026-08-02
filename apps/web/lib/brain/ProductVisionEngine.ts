@@ -1,3 +1,7 @@
+import type {
+  LogoFingerprint,
+} from "@/types/logo-fingerprint";
+
 export type ProductVisionData = {
   brand: string | null;
 
@@ -22,6 +26,9 @@ export type ProductVisionData = {
   logoPosition: string | null;
 
   logoSize: string | null;
+
+  logoFingerprint:
+    LogoFingerprint | null;
 
   pattern: string | null;
 
@@ -78,6 +85,8 @@ export const ProductVisionEngine = {
       logoPosition: null,
 
       logoSize: null,
+
+      logoFingerprint: null,
 
       pattern: null,
 

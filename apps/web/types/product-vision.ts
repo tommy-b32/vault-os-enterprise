@@ -1,3 +1,7 @@
+import type {
+  LogoFingerprint,
+} from "@/types/logo-fingerprint";
+
 export type ProductVision = {
   product_id: string;
 
@@ -23,6 +27,9 @@ export type ProductVision = {
   logo_type: string | null;
   logo_position: string | null;
   logo_size: string | null;
+
+  logo_fingerprint:
+    LogoFingerprint | null;
 
   pattern: string | null;
 
