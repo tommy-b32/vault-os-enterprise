@@ -1,12 +1,32 @@
 "use client";
 
+import {
+  BuyingIntelligenceEngine,
+} from "@/lib/brain/BuyingIntelligenceEngine";
+
 export type BuyingBasketItem = {
   id: string;
+
   productName: string;
+
   supplierName: string;
+
   packs: number;
+
   packCost: number | null;
+
   currency: string;
+
+  urgency?:
+    | "low"
+    | "medium"
+    | "high";
+
+  estimatedProfit?:
+    number | null;
+
+  estimatedRevenue?:
+    number | null;
 };
 
 type Props = {
@@ -58,17 +78,17 @@ export function BuyingBasket({
   const estimatedCost =
     items.reduce(
       (total, item) => {
-        if (
-          item.packCost ===
-          null
-        ) {
-          return total;
-        }
+        const recommendation =
+          BuyingIntelligenceEngine.analyse(
+            item,
+          );
 
         return (
           total +
-          item.packCost *
-            item.packs
+          (
+            recommendation.estimatedCost ??
+            0
+          )
         );
       },
       0,
@@ -77,7 +97,9 @@ export function BuyingBasket({
   const hasMissingCosts =
     items.some(
       (item) =>
-        item.packCost ===
+        BuyingIntelligenceEngine.analyse(
+          item,
+        ).estimatedCost ===
         null,
     );
 
@@ -139,12 +161,13 @@ export function BuyingBasket({
           <div className="buying-basket-preview buying-basket-preview-interactive">
             {items.map(
               (item) => {
+                const recommendation =
+                  BuyingIntelligenceEngine.analyse(
+                    item,
+                  );
+
                 const itemCost =
-                  item.packCost ===
-                  null
-                    ? null
-                    : item.packCost *
-                      item.packs;
+                  recommendation.estimatedCost;
 
                 return (
                   <article
@@ -174,6 +197,19 @@ export function BuyingBasket({
                             )
                           : "Cost unavailable"}
                       </span>
+
+                      <small>
+                        Suggested:{" "}
+                        {
+                          recommendation.suggestedPacks
+                        }{" "}
+                        {
+                          recommendation.suggestedPacks ===
+                          1
+                            ? "pack"
+                            : "packs"
+                        }
+                      </small>
                     </div>
 
                     <div className="buying-basket-quantity">
