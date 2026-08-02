@@ -327,6 +327,37 @@ function hasBrandAgreement(
   );
 }
 
+function hasStrongUnbrandedEvidence(
+  signals: CatalogueMatchSignal[],
+): boolean {
+  const nameSignal =
+    signals.find(
+      (signal) =>
+        signal.reason ===
+          "name_similarity",
+    );
+
+  const imageSignals =
+    signals.filter(
+      (signal) =>
+        signal.reason ===
+          "image_similarity",
+    );
+
+  const imageScore =
+    imageSignals.reduce(
+      (total, signal) =>
+        total + signal.score,
+      0,
+    );
+
+  return (
+    (nameSignal?.score ?? 0) >= 16 &&
+    imageScore >= 12
+  ) ||
+  imageScore >= 24;
+}
+
 function buildMatch({
   card,
   product,
@@ -716,9 +747,26 @@ function buildMatch({
       signals,
     );
 
+  const supplierBrandKnown =
+    normaliseText(
+      vision.brand,
+    ).length > 0;
+
+  const strongUnbrandedEvidence =
+    hasStrongUnbrandedEvidence(
+      signals,
+    );
+
   if (
-    !brandAgreement ||
-    !distinctiveEvidence
+    !distinctiveEvidence ||
+    (
+      supplierBrandKnown &&
+      !brandAgreement
+    ) ||
+    (
+      !supplierBrandKnown &&
+      !strongUnbrandedEvidence
+    )
   ) {
     return {
       product,
@@ -836,4 +884,4 @@ export const CatalogueMatchingEngine = {
         }),
     );
   },
-} as const;
+} as const; 

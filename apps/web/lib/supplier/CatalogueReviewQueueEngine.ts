@@ -7,8 +7,13 @@ import type {
   VaultProductMemory,
 } from "@/lib/brain/VaultMemoryRepository";
 
+import {
+  MultiProductDetectionEngine,
+} from "@/lib/supplier/MultiProductDetectionEngine";
+
 import type {
   CatalogueAnalysisSession,
+  CatalogueMultiProductDetection,
   CatalogueProductGroup,
 } from "@/lib/supplier/catalogue-analysis-types";
 
@@ -29,6 +34,7 @@ export type CatalogueReviewQueueItem = {
   card: SupplierCatalogueCardData;
   match: CatalogueMatchingResult;
   memory: VaultProductMemory | null;
+  multiProductDetection: CatalogueMultiProductDetection;
 };
 
 export type CatalogueReviewQueueDetails = {
@@ -47,6 +53,12 @@ type BuildQueueInput = {
   details: CatalogueReviewQueueDetails;
   products: CatalogueProduct[];
   memories?: VaultProductMemory[];
+};
+
+type QueueCandidate = {
+  group: CatalogueProductGroup;
+  card: SupplierCatalogueCardData;
+  multiProductDetection: CatalogueMultiProductDetection;
 };
 
 function createSlug(value: string): string {
@@ -78,16 +90,12 @@ function getImageRole(
   switch (role) {
     case "official-product":
       return "official";
-
     case "supplier-product":
       return "supplier";
-
     case "detail":
       return "detail";
-
     case "label":
       return "label";
-
     default:
       return "other";
   }
@@ -118,12 +126,9 @@ function buildImages({
         (image, imageIndex) => ({
           id:
             `${group.id}-page-${pageNumber}-image-${imageIndex + 1}`,
-
           url: image.dataUrl,
-
           alt:
             `${group.productName ?? "Supplier product"} catalogue page ${pageNumber}`,
-
           role:
             getImageRole(
               session,
@@ -162,82 +167,58 @@ function buildCard({
 
   return {
     id: group.id,
-
     supplierId: supplierSlug,
     supplierName: details.supplierName,
-
     catalogueId: catalogueSlug,
     catalogueName: details.collectionName,
-
     pageNumber: group.startPage,
-
     brand: group.brand,
     officialProductName: group.productName,
     internalReference:
       group.supplierSku ??
       `${details.supplierName} ${pageRange}`,
-
     colour: group.colour,
-
     packCost: null,
     packSize: group.packQuantity,
     currency: group.currency ?? "GBP",
-
     leadTimeDays: details.leadTimeDays,
-
     status: "review",
-
     linkedProductId: null,
     linkedProductName: null,
-
     isPreferredSource: false,
-
     images:
       buildImages({
         group,
         session,
         extractionResult,
       }),
-
     vision: {
       garmentType:
         group.garmentType ??
         group.productType,
-
       secondaryColours:
         group.secondaryColours,
-
       chestLogo:
         group.chestLogo,
-
       frontGraphic:
         group.frontGraphic,
-
       backGraphic:
         group.backGraphic,
-
       sleeveDetail:
         group.sleeveDetail,
-
       neckLabel:
         group.neckLabel,
-
       fit:
         group.fit,
-
       collection:
         group.collection,
-
       visualFingerprint:
         group.visualFingerprint,
-
       rawVisibleText:
         group.rawVisibleText,
-
       confidence:
         group.confidence,
     },
-
     notes: [
       `${pageRange} from ${details.collectionName}.`,
       `Vault Vision grouping confidence: ${group.confidence}%.`,
@@ -338,31 +319,57 @@ function buildRememberedMatch({
   return {
     catalogueCardId:
       card.id,
-
     bestMatch: {
       product,
-
       confidence: 100,
-
       signals: [
         {
           reason:
             "existing_mapping",
-
           label:
             `Known product · confirmed ${memory.acceptedCount} ${memory.acceptedCount === 1 ? "time" : "times"}`,
-
           score: 100,
         },
       ],
     },
-
     alternatives: [],
-
     requiresReview: true,
-
     status:
       "matched",
+  };
+}
+
+function buildQueueCandidate({
+  group,
+  session,
+  extractionResult,
+  details,
+}: {
+  group: CatalogueProductGroup;
+  session: CatalogueAnalysisSession;
+  extractionResult: SupplierExtractionResult;
+  details: CatalogueReviewQueueDetails;
+}): QueueCandidate {
+  const pageDetection =
+    session.pages[
+      group.startPage
+    ]?.multiProductDetection ??
+    null;
+
+  return {
+    group,
+    card:
+      buildCard({
+        group,
+        session,
+        extractionResult,
+        details,
+      }),
+    multiProductDetection:
+      pageDetection ??
+      MultiProductDetectionEngine.analyseGroup({
+        group,
+      }),
   };
 }
 
@@ -374,14 +381,21 @@ export const CatalogueReviewQueueEngine = {
     products,
     memories = [],
   }: BuildQueueInput): CatalogueReviewQueueItem[] {
+    const candidates =
+      session.productGroups.map(
+        (group) =>
+          buildQueueCandidate({
+            group,
+            session,
+            extractionResult,
+            details,
+          }),
+      );
+
     const cards =
-      session.productGroups.map((group) =>
-        buildCard({
-          group,
-          session,
-          extractionResult,
-          details,
-        }),
+      candidates.map(
+        (candidate) =>
+          candidate.card,
       );
 
     const aiMatches =
@@ -398,48 +412,55 @@ export const CatalogueReviewQueueEngine = {
         ]),
       );
 
-    return cards.map((card) => {
-      const memory =
-        findRememberedMemory(
-          card,
-          memories,
-        );
+    return candidates.map(
+      ({
+        card,
+        multiProductDetection,
+      }) => {
+        const memory =
+          findRememberedMemory(
+            card,
+            memories,
+          );
 
-      const rememberedMatch =
-        memory
-          ? buildRememberedMatch({
-              card,
-              memory,
-              products,
-            })
-          : null;
+        const rememberedMatch =
+          memory
+            ? buildRememberedMatch({
+                card,
+                memory,
+                products,
+              })
+            : null;
 
-      return {
-        card: rememberedMatch?.bestMatch
-          ? {
-              ...card,
-              linkedProductId:
-                rememberedMatch.bestMatch.product.product_id,
-              linkedProductName:
-                rememberedMatch.bestMatch.product.product_name,
-            }
-          : card,
+        return {
+          card: rememberedMatch?.bestMatch
+            ? {
+                ...card,
+                linkedProductId:
+                  rememberedMatch.bestMatch.product.product_id,
+                linkedProductName:
+                  rememberedMatch.bestMatch.product.product_name,
+              }
+            : card,
 
-        match:
-          rememberedMatch ??
-          aiMatchesByCardId.get(card.id) ?? {
-            catalogueCardId: card.id,
-            bestMatch: null,
-            alternatives: [],
-            requiresReview: true,
-            status: "unmatched",
-          },
+          match:
+            rememberedMatch ??
+            aiMatchesByCardId.get(card.id) ?? {
+              catalogueCardId: card.id,
+              bestMatch: null,
+              alternatives: [],
+              requiresReview: true,
+              status: "unmatched",
+            },
 
-        memory:
-          rememberedMatch
-            ? memory
-            : null,
-      };
-    });
+          memory:
+            rememberedMatch
+              ? memory
+              : null,
+
+          multiProductDetection,
+        };
+      },
+    );
   },
 } as const;

@@ -4,6 +4,10 @@ import type {
   CatalogueProductGroup,
 } from "@/lib/supplier/catalogue-analysis-types";
 
+import type {
+  CataloguePageGarmentExtraction,
+} from "@/lib/ai/extractCataloguePage";
+
 type GroupingCandidate = {
   pageNumber: number;
   record: CataloguePageAnalysisRecord;
@@ -12,8 +16,14 @@ type GroupingCandidate = {
 function createId(
   startPage: number,
   endPage: number,
+  garmentId?: string | null,
 ): string {
-  return `catalogue-product-${startPage}-${endPage}`;
+  const baseId =
+    `catalogue-product-${startPage}-${endPage}`;
+
+  return garmentId
+    ? `${baseId}-${garmentId}`
+    : baseId;
 }
 
 function normaliseText(
@@ -286,6 +296,203 @@ function getUniqueStrings(
   }
 
   return result;
+}
+
+function createGarmentGroup({
+  candidate,
+  garment,
+  garmentIndex,
+}: {
+  candidate: GroupingCandidate;
+  garment: CataloguePageGarmentExtraction;
+  garmentIndex: number;
+}): CatalogueProductGroup {
+  const extraction =
+    candidate.record.extraction;
+
+  if (!extraction) {
+    throw new Error(
+      "A completed catalogue page extraction is required.",
+    );
+  }
+
+  const pageNumber =
+    candidate.pageNumber;
+
+  const garmentId =
+    garment.id ||
+    `page-${pageNumber}-garment-${garmentIndex + 1}`;
+
+  const warnings =
+    getUniqueStrings([
+      ...extraction.warnings,
+      ...garment.warnings,
+      `Created from garment ${garmentIndex + 1} of ${extraction.garments.length} detected on page ${pageNumber}.`,
+    ]);
+
+  return {
+    id:
+      createId(
+        pageNumber,
+        pageNumber,
+        garmentId,
+      ),
+
+    startPage:
+      pageNumber,
+
+    endPage:
+      pageNumber,
+
+    pageNumbers: [
+      pageNumber,
+    ],
+
+    brand:
+      garment.brand ??
+      extraction.brand,
+
+    productName:
+      garment.productName ??
+      extraction.productName ??
+      `Garment ${garmentIndex + 1}`,
+
+    productType:
+      garment.productType ??
+      garment.garmentType ??
+      extraction.productType,
+
+    garmentType:
+      garment.garmentType ??
+      garment.productType ??
+      extraction.garmentType,
+
+    colour:
+      garment.colour ??
+      extraction.colour,
+
+    secondaryColours:
+      getUniqueStrings([
+        ...garment.secondaryColours,
+        ...extraction.secondaryColours,
+      ]),
+
+    chestLogo:
+      garment.chestLogo ??
+      extraction.chestLogo,
+
+    frontGraphic:
+      garment.frontGraphic ??
+      extraction.frontGraphic,
+
+    backGraphic:
+      garment.backGraphic ??
+      extraction.backGraphic,
+
+    sleeveDetail:
+      garment.sleeveDetail ??
+      extraction.sleeveDetail,
+
+    neckLabel:
+      garment.neckLabel ??
+      extraction.neckLabel,
+
+    fit:
+      extraction.fit,
+
+    collection:
+      extraction.collection,
+
+    visualFingerprint:
+      getUniqueStrings([
+        ...garment.visualFingerprint,
+        ...extraction.visualFingerprint,
+      ]),
+
+    rawVisibleText:
+      extraction.rawVisibleText,
+
+    displayedPrice:
+      extraction.displayedPrice,
+
+    currency:
+      extraction.currency,
+
+    supplierSku:
+      extraction.supplierSku
+        ? `${extraction.supplierSku}-${garmentIndex + 1}`
+        : null,
+
+    sizes:
+      extraction.sizes,
+
+    packQuantity:
+      extraction.packQuantity,
+
+    confidence:
+      garment.confidence,
+
+    status:
+      garment.confidence >= 85
+        ? "confirmed"
+        : "requires-review",
+
+    warnings,
+
+    sourceDetectedGarmentId:
+      garmentId,
+
+    parentProductGroupId:
+      createId(
+        pageNumber,
+        pageNumber,
+      ),
+
+    cropBoundingBox:
+      garment.boundingBox,
+
+    isSplitChild:
+      true,
+  };
+}
+
+function createGroups(
+  candidates: GroupingCandidate[],
+): CatalogueProductGroup[] {
+  /*
+   * Safe first implementation:
+   * split only a single analysed page containing multiple
+   * garments. Existing multi-page grouping remains unchanged
+   * until supporting-page attachment is introduced.
+   */
+  if (candidates.length === 1) {
+    const candidate =
+      candidates[0];
+
+    const garments =
+      candidate.record.extraction?.garments ??
+      [];
+
+    if (garments.length > 1) {
+      return garments.map(
+        (
+          garment,
+          garmentIndex,
+        ) =>
+          createGarmentGroup({
+            candidate,
+            garment,
+            garmentIndex,
+          }),
+      );
+    }
+  }
+
+  return [
+    createGroup(
+      candidates,
+    ),
+  ];
 }
 
 function createGroup(
@@ -606,9 +813,9 @@ export const CatalogueProductGroupingEngine = {
       ...session,
 
       productGroups:
-        groupedCandidates.map(
+        groupedCandidates.flatMap(
           (group) =>
-            createGroup(group),
+            createGroups(group),
         ),
     };
   },

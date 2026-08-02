@@ -264,9 +264,22 @@ export function CatalogueBatchAnalysisPanel({
     );
 
     const groupedSession =
-      CatalogueProductGroupingEngine.groupSession(
-        analysedSession,
-      );
+  CatalogueProductGroupingEngine.groupSession(
+    analysedSession,
+  );
+
+console.log(
+  "PAGE 384 GARMENTS",
+  analysedSession.pages[384]?.extraction?.garments,
+);
+
+console.log(
+  "PAGE 384 PRODUCT GROUPS",
+  groupedSession.productGroups.filter(
+    (group) =>
+      group.pageNumbers.includes(384),
+  ),
+);
 
     setOverlayStatus(
       `${groupedSession.productGroups.length} ${

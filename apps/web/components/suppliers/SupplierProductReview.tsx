@@ -33,6 +33,10 @@ import {
 } from "@/components/suppliers/ManualProductSearch";
 
 import {
+  GarmentNavigator,
+} from "@/components/suppliers/GarmentNavigator";
+
+import {
   BrainPill,
 } from "@/components/ui/BrainPill";
 
@@ -49,10 +53,16 @@ import type {
   CatalogueProduct,
 } from "@/types/catalogue";
 
+import type {
+  CatalogueMultiProductDetection,
+} from "@/lib/supplier/catalogue-analysis-types";
+
 type Props = {
   card: SupplierCatalogueCardData;
   match: CatalogueMatchingResult;
   products: CatalogueProduct[];
+  multiProductDetection?:
+    CatalogueMultiProductDetection;
 
   currentIndex: number;
   totalItems: number;
@@ -94,6 +104,7 @@ export function SupplierProductReview({
   card,
   match,
   products,
+  multiProductDetection,
   currentIndex,
   totalItems,
   onAccept,
@@ -159,6 +170,11 @@ export function SupplierProductReview({
   );
 
   const [
+    selectedGarmentIndex,
+    setSelectedGarmentIndex,
+  ] = useState(0);
+
+  const [
     isManualSearchOpen,
     setIsManualSearchOpen,
   ] = useState(false);
@@ -197,8 +213,28 @@ export function SupplierProductReview({
     );
 
   const activeImage =
-    images[activeImageIndex] ??
-    null;
+  images[activeImageIndex] ??
+  null;
+
+const effectiveMultiProductDetection:
+  CatalogueMultiProductDetection =
+  multiProductDetection ?? {
+    isMultiProduct: false,
+    detectedCount: 0,
+    confidence: 0,
+    garments: [],
+    splitStatus: "not-required",
+    childReviewCardIds: [],
+    detectedAt: null,
+    splitAt: null,
+    error: null,
+  };
+
+const selectedGarment =
+  effectiveMultiProductDetection.garments[
+    selectedGarmentIndex
+  ] ??
+  null;
 
   const unitCost =
     card.packCost !== null &&
@@ -210,6 +246,7 @@ export function SupplierProductReview({
 
   useEffect(() => {
     setActiveImageIndex(0);
+    setSelectedGarmentIndex(0);
     setIsZoomed(false);
     setIsSwiping(false);
     swipeX.set(0);
@@ -476,6 +513,28 @@ export function SupplierProductReview({
                       src={activeImage.url}
                     />
 
+                    {selectedGarment &&
+                    effectiveMultiProductDetection.isMultiProduct ? (
+                      <div
+                        aria-hidden="true"
+                        className="garment-selection-overlay"
+                        data-label={
+                          selectedGarment.label ||
+                          `Garment ${selectedGarmentIndex + 1}`
+                        }
+                        style={{
+                          height:
+                            `${selectedGarment.boundingBox.height * 100}%`,
+                          left:
+                            `${selectedGarment.boundingBox.x * 100}%`,
+                          top:
+                            `${selectedGarment.boundingBox.y * 100}%`,
+                          width:
+                            `${selectedGarment.boundingBox.width * 100}%`,
+                        }}
+                      />
+                    ) : null}
+
                     <button
                       className="supplier-product-review-v2-zoom"
                       onClick={() =>
@@ -587,6 +646,26 @@ export function SupplierProductReview({
                     </button>
 
                     <button
+                      className="review-action review-action-search"
+                      onClick={() =>
+                        setIsManualSearchOpen(true)
+                      }
+                      type="button"
+                    >
+                      <span>⌕</span>
+
+                      <div>
+                        <strong>
+                          Search Catalogue
+                        </strong>
+
+                        <small>
+                          Choose Product
+                        </small>
+                      </div>
+                    </button>
+
+                    <button
                       className="review-action review-action-link"
                       disabled={!selectedMatch}
                       onClick={() => {
@@ -635,6 +714,29 @@ export function SupplierProductReview({
             </section>
           </div>
 
+          <GarmentNavigator
+            detection={
+              effectiveMultiProductDetection
+            }
+            onSelect={(index) => {
+              setSelectedGarmentIndex(
+                index,
+              );
+
+              /*
+               * Matching remains page-level for this first
+               * navigator step. The next sprint will rerun
+               * matching against the selected garment crop.
+               */
+              setSelectedMatch(
+                match.bestMatch,
+              );
+            }}
+            selectedIndex={
+              selectedGarmentIndex
+            }
+          />
+
           <section className="supplier-product-review-workstation-alternatives">
             <AlternativeMatchesCard
               alternatives={
@@ -651,8 +753,8 @@ export function SupplierProductReview({
             />
           </section>
 
-          {selectedMatch ? (
-            <section className="supplier-product-review-workstation-commercial">
+          <section className="supplier-product-review-workstation-commercial">
+            {selectedMatch ? (
               <CommercialIntelligenceCard
                 onManualReview={() =>
                   setIsManualSearchOpen(true)
@@ -660,14 +762,71 @@ export function SupplierProductReview({
                 product={selectedMatch.product}
                 supplierCard={card}
               />
-            </section>
-          ) : null}
+            ) : (
+              <div className="supplier-product-review-empty-panel">
+                <div>
+                  <p className="vault-eyebrow">
+                    Commercial Intelligence
+                  </p>
+
+                  <h3>
+                    Choose a Fabric Vault product
+                  </h3>
+
+                  <p>
+                    Select the existing catalogue product to calculate
+                    stock position, reorder guidance and projected profit.
+                  </p>
+                </div>
+
+                <button
+                  className="brain-button"
+                  onClick={() =>
+                    setIsManualSearchOpen(true)
+                  }
+                  type="button"
+                >
+                  Search Catalogue →
+                </button>
+              </div>
+            )}
+          </section>
 
           <section className="supplier-product-review-workstation-comparison">
-            <VisualComparisonCard
-              bestMatch={selectedMatch}
-              card={card}
-            />
+            {selectedMatch ? (
+              <VisualComparisonCard
+                bestMatch={selectedMatch}
+                card={card}
+              />
+            ) : (
+              <div className="supplier-product-review-empty-panel">
+                <div>
+                  <p className="vault-eyebrow">
+                    Visual Comparison
+                  </p>
+
+                  <h3>
+                    No comparison product selected
+                  </h3>
+
+                  <p>
+                    Search the Fabric Vault catalogue and choose the
+                    correct product to compare identity, colour, logo,
+                    garment details and Product Vision evidence.
+                  </p>
+                </div>
+
+                <button
+                  className="brain-button brain-button-secondary"
+                  onClick={() =>
+                    setIsManualSearchOpen(true)
+                  }
+                  type="button"
+                >
+                  Choose Product
+                </button>
+              </div>
+            )}
           </section>
 
           <section className="supplier-product-review-workstation-lower">

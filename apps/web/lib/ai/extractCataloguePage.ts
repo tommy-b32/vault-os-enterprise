@@ -2,6 +2,38 @@ import "server-only";
 
 import OpenAI from "openai";
 
+export type CatalogueGarmentBoundingBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type CataloguePageGarmentExtraction = {
+  id: string;
+
+  brand: string | null;
+  productName: string | null;
+  productType: string | null;
+  garmentType: string | null;
+
+  colour: string | null;
+  secondaryColours: string[];
+
+  chestLogo: string | null;
+  frontGraphic: string | null;
+  backGraphic: string | null;
+  sleeveDetail: string | null;
+  neckLabel: string | null;
+
+  visualFingerprint: string[];
+
+  boundingBox: CatalogueGarmentBoundingBox;
+
+  confidence: number;
+  warnings: string[];
+};
+
 export type CataloguePageExtraction = {
   pageNumber: number;
 
@@ -29,6 +61,8 @@ export type CataloguePageExtraction = {
   sizes: string[];
   packQuantity: number | null;
   imageCount: number;
+
+  garments: CataloguePageGarmentExtraction[];
 
   pageRole:
     | "official-product"
@@ -186,6 +220,207 @@ function clampConfidence(
   );
 }
 
+function clampUnitInterval(
+  value: unknown,
+): number {
+  const number =
+    toNullableNumber(
+      value,
+    ) ?? 0;
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      number,
+    ),
+  );
+}
+
+function normaliseBoundingBox(
+  value: unknown,
+): CatalogueGarmentBoundingBox {
+  if (
+    typeof value !== "object" ||
+    value === null
+  ) {
+    return {
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    };
+  }
+
+  const box =
+    value as Record<
+      string,
+      unknown
+    >;
+
+  const x =
+    clampUnitInterval(
+      box.x,
+    );
+
+  const y =
+    clampUnitInterval(
+      box.y,
+    );
+
+  const width =
+    clampUnitInterval(
+      box.width,
+    );
+
+  const height =
+    clampUnitInterval(
+      box.height,
+    );
+
+  return {
+    x,
+    y,
+    width:
+      Math.min(
+        width || 1,
+        1 - x,
+      ),
+
+    height:
+      Math.min(
+        height || 1,
+        1 - y,
+      ),
+  };
+}
+
+function normaliseGarments(
+  value: unknown,
+  pageNumber: number,
+): CataloguePageGarmentExtraction[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map(
+      (
+        item,
+        index,
+      ) => {
+        if (
+          typeof item !== "object" ||
+          item === null
+        ) {
+          return null;
+        }
+
+        const garment =
+          item as Record<
+            string,
+            unknown
+          >;
+
+        const productType =
+          toNullableString(
+            garment.productType,
+          );
+
+        const garmentType =
+          toNullableString(
+            garment.garmentType,
+          ) ??
+          productType;
+
+        return {
+          id:
+            toNullableString(
+              garment.id,
+            ) ??
+            `page-${pageNumber}-garment-${index + 1}`,
+
+          brand:
+            toNullableString(
+              garment.brand,
+            ),
+
+          productName:
+            toNullableString(
+              garment.productName,
+            ),
+
+          productType:
+            productType ??
+            garmentType,
+
+          garmentType,
+
+          colour:
+            toNullableString(
+              garment.colour,
+            ),
+
+          secondaryColours:
+            toStringArray(
+              garment.secondaryColours,
+            ),
+
+          chestLogo:
+            toNullableString(
+              garment.chestLogo,
+            ),
+
+          frontGraphic:
+            toNullableString(
+              garment.frontGraphic,
+            ),
+
+          backGraphic:
+            toNullableString(
+              garment.backGraphic,
+            ),
+
+          sleeveDetail:
+            toNullableString(
+              garment.sleeveDetail,
+            ),
+
+          neckLabel:
+            toNullableString(
+              garment.neckLabel,
+            ),
+
+          visualFingerprint:
+            toStringArray(
+              garment.visualFingerprint,
+            ),
+
+          boundingBox:
+            normaliseBoundingBox(
+              garment.boundingBox,
+            ),
+
+          confidence:
+            clampConfidence(
+              garment.confidence,
+            ),
+
+          warnings:
+            toStringArray(
+              garment.warnings,
+            ),
+        };
+      },
+    )
+    .filter(
+      (
+        garment,
+      ): garment is CataloguePageGarmentExtraction =>
+        garment !== null,
+    );
+}
+
 function normalisePageRole(
   value: unknown,
 ): CataloguePageExtraction["pageRole"] {
@@ -276,6 +511,31 @@ export async function extractCataloguePage({
                 '  "sizes": string[],',
                 '  "packQuantity": number | null,',
                 '  "imageCount": number,',
+                '  "garments": [',
+                '    {',
+                '      "id": string,',
+                '      "brand": string | null,',
+                '      "productName": string | null,',
+                '      "productType": string | null,',
+                '      "garmentType": string | null,',
+                '      "colour": string | null,',
+                '      "secondaryColours": string[],',
+                '      "chestLogo": string | null,',
+                '      "frontGraphic": string | null,',
+                '      "backGraphic": string | null,',
+                '      "sleeveDetail": string | null,',
+                '      "neckLabel": string | null,',
+                '      "visualFingerprint": string[],',
+                '      "boundingBox": {',
+                '        "x": number,',
+                '        "y": number,',
+                '        "width": number,',
+                '        "height": number',
+                '      },',
+                '      "confidence": number,',
+                '      "warnings": string[]',
+                '    }',
+                '  ],',
                 '  "pageRole": "official-product" | "supplier-product" | "detail" | "label" | "mixed" | "unknown",',
                 '  "possibleSameProductAsPreviousPage": boolean,',
                 '  "rawVisibleText": string[],',
@@ -306,7 +566,23 @@ export async function extractCataloguePage({
                 "- Prefer null over guessing.",
                 "- A visible retail website price is not a supplier cost.",
                 "- Do not invent prices, sizes, SKUs, pack quantities, labels or collection names.",
-                "- If multiple distinct products appear, describe the dominant product and set pageRole to mixed.",
+                "- Detect every distinct garment shown on the page and return each one in garments.",
+                "- Analyse every garment independently. Never copy the dominant garment's colour, logo description, name or bounding box into another garment.",
+                "- For every garment, colour must describe that garment itself, not the page background or another nearby garment.",
+                "- When garments are side by side, explicitly distinguish them by position and appearance, for example left black T-Shirt and right white T-Shirt.",
+                "- Every garment must have its own accurate boundingBox tightly surrounding that garment only.",
+                "- Do not return identical bounding boxes for separate garments.",
+                "- Before returning the JSON, verify that each garment's colour agrees with the pixels inside its own boundingBox.",
+                "- If two garments share the same design but have different colours, return two separate garment records with their respective colours.",
+                "- Include position wording such as left, centre or right inside each garment's visualFingerprint.",
+                "- A garment visualFingerprint must include its dominant colour, garment type, visible logo or graphic, and relative page position.",
+                "- Do not merge separate garments, colour variants or side-by-side products into one garment record.",
+                "- Return garments in visual reading order from left to right, then top to bottom.",
+                "- boundingBox values must be percentages from 0 to 1 relative to the full page image.",
+                "- x and y are the top-left position; width and height are the size of the garment region.",
+                "- Include one garment record even when the page contains only one garment.",
+                "- Keep the existing top-level product fields as a summary of the dominant garment for backward compatibility.",
+                "- Set pageRole to mixed when multiple distinct garments or products appear.",
                 "- Confidence must be between 0 and 100 and should reflect confidence in the overall extraction, not image quality alone.",
               ].join(
                 "\n",
@@ -466,6 +742,12 @@ export async function extractCataloguePage({
             parsed.imageCount,
           ) ?? 0,
         ),
+      ),
+
+    garments:
+      normaliseGarments(
+        parsed.garments,
+        pageNumber,
       ),
 
     pageRole:

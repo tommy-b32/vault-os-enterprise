@@ -51,12 +51,18 @@ import type {
 } from "@/types/supplier-catalogue";
 
 import type {
+  CatalogueMultiProductDetection,
+} from "@/lib/supplier/catalogue-analysis-types";
+
+import type {
   CatalogueProduct,
 } from "@/types/catalogue";
 
 type ReviewItem = {
   card: SupplierCatalogueCardData;
   match: CatalogueMatchingResult;
+  multiProductDetection:
+    CatalogueMultiProductDetection;
 };
 
 type Props = {
@@ -1156,6 +1162,9 @@ export function SupplierReviewWorkspace({
             currentIndex
           }
           match={currentItem.match}
+          multiProductDetection={
+            currentItem.multiProductDetection
+          }
           products={catalogueProducts}
           onAccept={
             acceptCurrentMatch
