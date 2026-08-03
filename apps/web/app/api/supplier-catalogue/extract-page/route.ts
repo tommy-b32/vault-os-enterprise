@@ -5,6 +5,7 @@ import {
 import {
   extractCataloguePage,
 } from "@/lib/ai/extractCataloguePage";
+import { authorizeApiRequest } from "@/lib/auth/api";
 
 type ExtractPageRequest = {
   pageNumber?: unknown;
@@ -14,6 +15,8 @@ type ExtractPageRequest = {
 export async function POST(
   request: Request,
 ) {
+  const denied = await authorizeApiRequest(["owner", "operator"]);
+  if (denied) return denied;
   try {
     const body =
       (await request.json()) as ExtractPageRequest;

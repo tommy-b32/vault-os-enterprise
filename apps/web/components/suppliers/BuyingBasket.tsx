@@ -114,23 +114,27 @@ export function BuyingBasket({
 
   const projectedProfit =
     items.reduce(
-      (total, item) =>
-        total +
-        (
-          item.estimatedProfit ??
-          0
-        ),
+      (total, item) => {
+        const scaled =
+          item.estimatedProfit == null
+            ? 0
+            : item.estimatedProfit * item.packs;
+
+        return total + scaled;
+      },
       0,
     );
 
   const projectedRevenue =
     items.reduce(
-      (total, item) =>
-        total +
-        (
-          item.estimatedRevenue ??
-          0
-        ),
+      (total, item) => {
+        const scaled =
+          item.estimatedRevenue == null
+            ? 0
+            : item.estimatedRevenue * item.packs;
+
+        return total + scaled;
+      },
       0,
     );
 
@@ -387,7 +391,8 @@ export function BuyingBasket({
                         <small>
                           Projected profit:{" "}
                           {formatCurrency(
-                            item.estimatedProfit,
+                            item.estimatedProfit *
+                              item.packs,
                             item.currency,
                           )}
                         </small>

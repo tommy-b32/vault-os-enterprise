@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requireOperatorRole } from "@/lib/auth/operators";
 
 export type ProductSettingsActionState = {
   status: "idle" | "success" | "error";
@@ -65,6 +66,7 @@ export async function updateProductSettings(
   _previousState: ProductSettingsActionState,
   formData: FormData,
 ): Promise<ProductSettingsActionState> {
+  await requireOperatorRole("owner", "operator");
   const productId = formData.get("product_id");
   const supplierId = formData.get("supplier_id");
   const strategy = formData.get("inventory_strategy");

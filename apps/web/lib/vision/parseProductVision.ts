@@ -210,6 +210,8 @@ export function parseProductVision({
         "logoSize",
       ),
 
+    logo_fingerprint: null,
+
     pattern:
       readString(
         vision,

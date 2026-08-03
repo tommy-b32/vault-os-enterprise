@@ -60,7 +60,14 @@ Deno.serve(async (request: Request) => {
           privacy_limited_page_views,
           tracked_sessions,
           tracked_view_percentage,
-          privacy_limited_percentage
+          privacy_limited_percentage,
+          tracked_visitors,
+          estimated_privacy_visitors,
+          estimated_total_visitors,
+          tracked_visitor_percentage,
+          estimated_privacy_visitor_percentage,
+          live_tracked_visitors,
+          latest_activity_at
         `,
       )
       .eq("traffic_date", today)
@@ -99,6 +106,26 @@ Deno.serve(async (request: Request) => {
         tracked_view_percentage: 0,
         privacy_limited_percentage: 0,
       },
+      visitors: traffic
+        ? {
+          tracked: traffic.tracked_visitors,
+          estimated_privacy: traffic.estimated_privacy_visitors,
+          estimated_total: traffic.estimated_total_visitors,
+          live_tracked: traffic.live_tracked_visitors,
+          tracked_percentage: traffic.tracked_visitor_percentage,
+          estimated_privacy_percentage:
+            traffic.estimated_privacy_visitor_percentage,
+          latest_activity_at: traffic.latest_activity_at,
+        }
+        : {
+          tracked: 0,
+          estimated_privacy: null,
+          estimated_total: null,
+          live_tracked: null,
+          tracked_percentage: null,
+          estimated_privacy_percentage: null,
+          latest_activity_at: null,
+        },
       page_types: pageTypes ?? [],
     });
   } catch (error) {

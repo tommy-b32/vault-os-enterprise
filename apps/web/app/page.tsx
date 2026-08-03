@@ -1,5 +1,19 @@
 import VaultAppShell from "@/components/layout/VaultAppShell";
 
+import {
+  CommandCentreBrainPriority,
+} from "@/components/brain/CommandCentreBrainPriority";
+import {
+  CommandCentreLiveMetric,
+  CommandCentreLiveTrading,
+  CommandCentreRecentOrderRow,
+} from "@/components/command-centre/CommandCentreLiveTrading";
+
+import {
+  getVaultBusinessState,
+  type VaultBusinessSourceState,
+} from "@/lib/business/VaultBusinessState";
+
 type IconName =
   | "home"
   | "inventory"
@@ -179,60 +193,442 @@ function Icon({
   return <svg {...common}>{paths[name]}</svg>;
 }
 
-const metrics = [
-  {
-    label: "Revenue Today",
-    value: "£420",
-    change: "18%",
-    icon: "pound",
-  },
-  {
-    label: "Orders Today",
-    value: "7",
-    change: "12%",
-    icon: "cart",
-  },
-  {
-    label: "Profit Today",
-    value: "£218",
-    change: "15%",
-    icon: "coins",
-  },
-  {
-    label: "ROAS (Meta)",
-    value: "5.3",
-    change: "24%",
-    icon: "chart",
-  },
-] satisfies Array<{
-  label: string;
-  value: string;
-  change: string;
-  icon: IconName;
-}>;
+function formatCurrency(
+  value: number,
+  currency: string | null,
+): string {
+  if (!currency) {
+    return new Intl.NumberFormat("en-GB", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 
-const recentOrders = [
-  ["#1047", "Sarah", "£80.00", "Paid"],
-  ["#1046", "Michael", "£120.00", "Paid"],
-  ["#1045", "Brad", "£40.00", "Dispatched"],
-  ["#1044", "Chris", "£80.00", "Processing"],
-  ["#1043", "Adam", "£40.00", "Processing"],
-];
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency,
+  }).format(value);
+}
 
-const topProducts = [
-  ["Moncler Black Badge Tee", "123 sold", "£40.00"],
-  ["Dior Atelier Tee", "98 sold", "£40.00"],
-  ["Amiri MA Core Logo Tee", "87 sold", "£40.00"],
-  ["Balmain Paris Tee", "76 sold", "£40.00"],
-];
+function formatRelativeTime(
+  value: string,
+  generatedAt: string,
+): string {
+  const elapsedMilliseconds =
+    new Date(generatedAt).getTime() - new Date(value).getTime();
 
-export default function Home() {
+  if (!Number.isFinite(elapsedMilliseconds)) {
+    return "time unavailable";
+  }
+
+  const elapsedMinutes = Math.max(
+    0,
+    Math.round(elapsedMilliseconds / 60_000),
+  );
+
+  if (elapsedMinutes < 1) {
+    return "just now";
+  }
+
+  if (elapsedMinutes === 1) {
+    return "1 min ago";
+  }
+
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes} mins ago`;
+  }
+
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+
+  if (elapsedHours < 24) {
+    return elapsedHours === 1 ? "1 hour ago" : `${elapsedHours} hours ago`;
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatSourceFreshness(
+  label: string,
+  status: VaultBusinessSourceState,
+  lastUpdatedAt: string | null,
+  generatedAt: string,
+): string {
+  if (status === "unavailable") {
+    return `${label} unavailable`;
+  }
+
+  if (status === "error") {
+    return `${label} error`;
+  }
+
+  const statusLabel = status === "stale" ? "stale" : "live";
+
+  return lastUpdatedAt
+    ? `${label} ${statusLabel} · synced ${formatRelativeTime(lastUpdatedAt, generatedAt)}`
+    : `${label} ${statusLabel}`;
+}
+
+function getSourceStatusColour(status: VaultBusinessSourceState): string {
+  if (status === "live") {
+    return "var(--vault-success)";
+  }
+
+  if (status === "stale") {
+    return "var(--vault-warning)";
+  }
+
+  return "var(--vault-error)";
+}
+
+function formatChartDate(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00.000Z`));
+}
+
+function getSalesChartPaths(
+  days: Array<{ netRevenue: number }>,
+): { line: string; area: string } | null {
+  if (days.length === 0) {
+    return null;
+  }
+
+  const left = 5;
+  const right = 595;
+  const top = 10;
+  const bottom = 180;
+  const maximum = Math.max(0, ...days.map((day) => day.netRevenue));
+  const points = days.map((day, index) => {
+    const x = days.length === 1
+      ? (left + right) / 2
+      : left + (index * (right - left)) / (days.length - 1);
+    const value = Math.max(0, day.netRevenue);
+    const y = maximum > 0
+      ? bottom - (value / maximum) * (bottom - top)
+      : bottom;
+
+    return `${x.toFixed(2)} ${y.toFixed(2)}`;
+  });
+  const line = points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point}`)
+    .join(" ");
+
+  return {
+    line,
+    area: `${line} L${right} 210 L${left} 210 Z`,
+  };
+}
+
+function formatOrderStatus(
+  status: string | null,
+  fallback: string,
+): string {
+  return (status?.trim() || fallback)
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function getFinancialStatusClass(status: string): string {
+  if (status === "PAID") return "order-status-success";
+  if (
+    status === "AUTHORIZED" ||
+    status === "PENDING" ||
+    status === "PARTIALLY_REFUNDED"
+  ) {
+    return "order-status-warning";
+  }
+  if (status === "REFUNDED" || status === "VOIDED") {
+    return "order-status-error";
+  }
+
+  return "order-status-neutral";
+}
+
+function getFulfilmentStatusClass(status: string): string {
+  if (status === "FULFILLED") return "order-status-success";
+  if (
+    status === "UNFULFILLED" ||
+    status === "PARTIALLY_FULFILLED" ||
+    status === "ON_HOLD"
+  ) {
+    return "order-status-warning";
+  }
+  if (status === "SCHEDULED") return "order-status-info";
+  if (status === "CANCELLED") return "order-status-error";
+
+  return "order-status-neutral";
+}
+
+function getPayoutStatusClass(status: string): string {
+  if (status === "PAID") return "cash-payout-success";
+  if (status === "SCHEDULED") return "cash-payout-warning";
+  if (status === "FAILED" || status === "CANCELED") {
+    return "cash-payout-error";
+  }
+
+  return "cash-payout-neutral";
+}
+
+function formatInventoryFreshness(
+  status: VaultBusinessSourceState,
+  lastUpdatedAt: string | null,
+  generatedAt: string,
+): string {
+  if (status === "unavailable") {
+    return "Inventory unavailable";
+  }
+
+  if (status === "error") {
+    return "Inventory error";
+  }
+
+  if (!lastUpdatedAt) {
+    return status === "stale"
+      ? "Inventory stale"
+      : "Inventory live";
+  }
+
+  const elapsedMilliseconds =
+    new Date(generatedAt).getTime() -
+    new Date(lastUpdatedAt).getTime();
+
+  if (!Number.isFinite(elapsedMilliseconds)) {
+    return status === "stale"
+      ? "Inventory stale"
+      : "Inventory live";
+  }
+
+  const elapsedMinutes = Math.max(
+    0,
+    Math.round(elapsedMilliseconds / 60_000),
+  );
+  const freshness =
+    elapsedMinutes < 1
+      ? "just now"
+      : elapsedMinutes === 1
+        ? "1 min ago"
+        : elapsedMinutes < 60
+          ? `${elapsedMinutes} mins ago`
+          : new Intl.DateTimeFormat("en-GB", {
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            }).format(new Date(lastUpdatedAt));
+
+  return status === "stale"
+    ? `Inventory stale · synced ${freshness}`
+    : `Inventory live · synced ${freshness}`;
+}
+
+function getInventoryPercentage(
+  count: number,
+  total: number,
+): number | null {
+  if (total <= 0) {
+    return null;
+  }
+
+  return Math.round((count / total) * 100);
+}
+
+export default async function Home() {
+  const businessState =
+    await getVaultBusinessState({
+      refreshExternalSources: false,
+    });
+  const tradingState = businessState.trading;
+  const trading = tradingState.data;
+  const recentOrdersState = businessState.recentOrders;
+  const recentOrders = recentOrdersState.data;
+  const topProductsState = businessState.topProducts;
+  const topProducts = topProductsState.data;
+  const shopifyStatus =
+    businessState.sourceStatuses.find(
+      (source) => source.source === "shopify-trading",
+    );
+  const shopifyState = shopifyStatus?.status ?? tradingState.status;
+  const shopifyStatusText = formatSourceFreshness(
+    "Shopify trading",
+    shopifyState,
+    shopifyStatus?.lastUpdatedAt ?? tradingState.lastUpdatedAt,
+    businessState.generatedAt,
+  );
+  const shopifyStatusColour = getSourceStatusColour(shopifyState);
+  const tradingFreshness = formatSourceFreshness(
+    "Trading",
+    tradingState.status,
+    tradingState.lastUpdatedAt,
+    businessState.generatedAt,
+  );
+  const sevenDayDays = trading?.sevenDaySummary.days ?? [];
+  const salesChartPaths = getSalesChartPaths(sevenDayDays);
+  const websiteAnalyticsState = businessState.websiteAnalytics;
+  const websiteAnalytics = websiteAnalyticsState.data;
+  const websiteAnalyticsStatus = businessState.sourceStatuses.find(
+    (source) => source.source === "website-analytics",
+  );
+  const websiteAnalyticsSourceState =
+    websiteAnalyticsStatus?.status ?? websiteAnalyticsState.status;
+  const websiteAnalyticsFreshness = formatSourceFreshness(
+    "Website intelligence",
+    websiteAnalyticsSourceState,
+    websiteAnalyticsStatus?.lastUpdatedAt ??
+      websiteAnalyticsState.lastUpdatedAt,
+    businessState.generatedAt,
+  );
+  const websiteAnalyticsStatusColour =
+    websiteAnalyticsSourceState === "unavailable"
+      ? "var(--vault-muted)"
+      : getSourceStatusColour(websiteAnalyticsSourceState);
+  const websiteAnalyticsUnavailableText =
+    websiteAnalyticsState.status === "error"
+      ? "Website intelligence could not be loaded"
+      : "Website intelligence is unavailable";
+  const visitorMetrics = websiteAnalytics?.visitors ?? null;
+  const financeState = businessState.finance;
+  const finance = financeState.data;
+  const metrics = [
+    {
+      label: "Cash Position",
+      value: finance?.businessCash
+        ? formatCurrency(
+          finance.businessCash.amount,
+          finance.businessCash.currency,
+        )
+        : "Unavailable",
+      supportingText: finance?.businessCash
+        ? "Available business cash"
+        : financeState.status === "error"
+          ? "Finance position could not be loaded"
+          : "Awaiting finance position",
+      emphasis: null,
+      liveMetric: null,
+      icon: "coins" as const,
+      cashPosition: true,
+    },
+    {
+      label: "Revenue Today",
+      value: trading
+        ? formatCurrency(trading.netRevenue, trading.currency)
+        : "Unavailable",
+      supportingText: trading
+        ? `Gross ${formatCurrency(trading.grossRevenue, trading.currency)} · Refunds ${formatCurrency(trading.refunds, trading.currency)}`
+        : tradingState.status === "error"
+          ? "Trading data could not be loaded"
+          : "Trading data is not available",
+      emphasis: null,
+      liveMetric: "revenue" as const,
+      icon: "pound" as const,
+    },
+    {
+      label: "Orders Today",
+      value: trading ? String(trading.orderCount) : "Unavailable",
+      supportingText: tradingFreshness,
+      emphasis: null,
+      liveMetric: "orders" as const,
+      icon: "cart" as const,
+    },
+    {
+      label: "Profit Today",
+      value: "Unavailable",
+      supportingText: "Awaiting trusted cost data",
+      emphasis: null,
+      liveMetric: null,
+      icon: "coins" as const,
+    },
+    {
+      label: "Website Intelligence",
+      value: visitorMetrics?.estimatedTotal !== null &&
+          visitorMetrics?.estimatedTotal !== undefined
+        ? visitorMetrics.estimatedTotal.toLocaleString("en-GB")
+        : "Unavailable",
+      supportingText: visitorMetrics
+        ? visitorMetrics.estimatedPrivacy !== null
+          ? `${visitorMetrics.tracked?.toLocaleString("en-GB") ?? "Unavailable"} tracked visitors · ${visitorMetrics.estimatedPrivacy.toLocaleString("en-GB")} estimated privacy visitors`
+          : `${visitorMetrics.tracked?.toLocaleString("en-GB") ?? "Unavailable"} tracked visitors · Privacy estimate unavailable`
+        : websiteAnalyticsUnavailableText,
+      emphasis: null,
+      liveMetric: null,
+      icon: "chart" as const,
+      websiteAnalytics: true,
+    },
+  ];
+  const inventoryState =
+    businessState.inventory;
+  const inventoryStatus =
+    businessState.sourceStatuses.find(
+      (source) => source.source === "inventory",
+    );
+  const inventoryStatusText =
+    formatInventoryFreshness(
+      inventoryState.status,
+      inventoryStatus?.lastUpdatedAt ?? null,
+      businessState.generatedAt,
+    );
+  const inventoryStatusColour =
+    inventoryState.status === "live"
+      ? "var(--vault-success)"
+      : inventoryState.status === "stale"
+        ? "var(--vault-warning)"
+        : "var(--vault-error)";
+  const inventory = inventoryState.data;
+  const unavailableStockProducts = inventory
+    ? inventory.outOfStockProducts +
+      inventory.negativeStockProducts
+    : null;
+  const healthyPercentage = inventory
+    ? getInventoryPercentage(
+        inventory.healthyProducts,
+        inventory.monitoredProducts,
+      )
+    : null;
+  const lowStockPercentage = inventory
+    ? getInventoryPercentage(
+        inventory.lowStockProducts,
+        inventory.monitoredProducts,
+      )
+    : null;
+  const outOfStockPercentage =
+    inventory && unavailableStockProducts !== null
+      ? getInventoryPercentage(
+          unavailableStockProducts,
+          inventory.monitoredProducts,
+        )
+      : null;
+
   return (
     <VaultAppShell
       searchPlaceholder="Search anything..."
       notificationCount={3}
       systemStatusLabel="Vault systems healthy"
     >
+      <CommandCentreLiveTrading
+        revenueToday={trading?.netRevenue ?? null}
+        revenueCurrency={trading?.currency ?? null}
+        ordersToday={trading?.orderCount ?? null}
+        recentOrders={recentOrders?.map((order) => ({
+          identifier: order.id,
+          changeSignature: JSON.stringify({
+            amount: order.amount,
+            currency: order.currency,
+            financialStatus: order.financialStatus,
+            fulfilmentStatus: order.fulfilmentStatus,
+            createdAt: order.createdAt,
+          }),
+        })) ?? []}
+        latestSynchronizationAt={
+          shopifyStatus?.lastUpdatedAt ?? tradingState.lastUpdatedAt
+        }
+        tradingStatus={shopifyState}
+      >
       <div className="vault-content">
           <section className="vault-main-column">
             <div className="vault-page-heading">
@@ -241,9 +637,36 @@ export default function Home() {
               <p>Good morning Tom <span aria-hidden>👋</span></p>
             </div>
 
+            <CommandCentreBrainPriority />
+
             <section className="vault-status-strip">
-              <span><i /> Shopify connected</span>
-              <span><i /> Inventory synced 2 min ago</span>
+              <span>
+                <i
+                  style={{
+                    background: shopifyStatusColour,
+                    boxShadow: `0 0 8px ${shopifyStatusColour}`,
+                  }}
+                />
+                {shopifyStatusText}
+              </span>
+              <span>
+                <i
+                  style={{
+                    background: inventoryStatusColour,
+                    boxShadow: `0 0 8px ${inventoryStatusColour}`,
+                  }}
+                />
+                {inventoryStatusText}
+              </span>
+              <span>
+                <i
+                  style={{
+                    background: websiteAnalyticsStatusColour,
+                    boxShadow: `0 0 8px ${websiteAnalyticsStatusColour}`,
+                  }}
+                />
+                {websiteAnalyticsFreshness}
+              </span>
               <span><i /> Vault Brain online</span>
               <span><i /> 0 sync errors</span>
             </section>
@@ -258,11 +681,89 @@ export default function Home() {
                     <span>{metric.label}</span>
                   </div>
 
-                  <strong>{metric.value}</strong>
+                  <strong>
+                    {metric.liveMetric ? (
+                      <CommandCentreLiveMetric metric={metric.liveMetric} />
+                    ) : (
+                      metric.value
+                    )}
+                  </strong>
 
                   <p>
-                    <span>▲ {metric.change}</span> vs yesterday
+                    {metric.emphasis ? (
+                      <>
+                        <span>{metric.emphasis}</span> {metric.supportingText}
+                      </>
+                    ) : (
+                      metric.supportingText
+                    )}
                   </p>
+                  {metric.websiteAnalytics ? (
+                    <div className="vault-analytics-meta">
+                      <span
+                        className={`vault-live-now is-${websiteAnalyticsState.status}`}
+                      >
+                        <i aria-hidden="true" />
+                        {visitorMetrics?.liveTracked !== null &&
+                            visitorMetrics?.liveTracked !== undefined
+                          ? `Currently browsing · ${visitorMetrics.liveTracked.toLocaleString("en-GB")} tracked`
+                          : "Currently browsing unavailable"}
+                      </span>
+                      {visitorMetrics?.estimatedTotal !== null &&
+                          visitorMetrics?.estimatedTotal !== undefined ? (
+                        <span>Estimated total</span>
+                      ) : null}
+                      {visitorMetrics?.trackedPercentage !== null &&
+                          visitorMetrics?.trackedPercentage !== undefined ? (
+                        <span>
+                          {visitorMetrics.trackedPercentage.toLocaleString(
+                            "en-GB",
+                            { maximumFractionDigits: 1 },
+                          )}% tracked visitors
+                        </span>
+                      ) : null}
+                      {websiteAnalyticsState.status === "stale" ? (
+                        <span className="is-stale">Stale analytics</span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {metric.cashPosition ? (
+                    <div className="vault-cash-meta">
+                      <span>
+                        Shopify balance{" "}
+                        {finance?.shopifyPaymentsBalance
+                          ? formatCurrency(
+                            finance.shopifyPaymentsBalance.amount,
+                            finance.shopifyPaymentsBalance.currency,
+                          )
+                          : "unavailable"}
+                      </span>
+                      <span>
+                        {finance?.todayPayout ? (
+                          <>
+                            Today payout{" "}
+                            {formatCurrency(
+                              finance.todayPayout.amount,
+                              finance.todayPayout.currency,
+                            )}{" "}
+                            <b className={getPayoutStatusClass(finance.todayPayout.status)}>
+                              · {finance.todayPayout.status}
+                            </b>
+                          </>
+                        ) : (
+                          "No payout today"
+                        )}
+                      </span>
+                      {financeState.status === "stale" ? (
+                        <span className="cash-payout-warning">
+                          Finance data partially stale
+                        </span>
+                      ) : null}
+                      <a className="vault-cash-link" href="/commercial">
+                        View finance
+                      </a>
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </section>
@@ -347,40 +848,48 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div className="vault-chart" aria-label="Placeholder sales chart">
+                <div
+                  className="vault-chart"
+                  aria-label={trading
+                    ? `Seven-day net revenue chart. ${tradingFreshness}.`
+                    : `Seven-day sales unavailable. ${tradingFreshness}.`}
+                >
                   <div className="vault-chart-grid" />
-                  <svg
-                    aria-hidden="true"
-                    preserveAspectRatio="none"
-                    viewBox="0 0 600 210"
-                  >
-                    <defs>
-                      <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#d4a846" stopOpacity=".36" />
-                        <stop offset="100%" stopColor="#d4a846" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d="M5 180 L55 150 L105 170 L155 115 L205 130 L255 90 L305 120 L355 75 L405 100 L455 70 L505 30 L555 45 L595 10 L595 210 L5 210 Z"
-                      fill="url(#chartFill)"
-                    />
-                    <path
-                      d="M5 180 L55 150 L105 170 L155 115 L205 130 L255 90 L305 120 L355 75 L405 100 L455 70 L505 30 L555 45 L595 10"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                  </svg>
+                  {salesChartPaths ? (
+                    <>
+                      <svg
+                        aria-hidden="true"
+                        preserveAspectRatio="none"
+                        viewBox="0 0 600 210"
+                      >
+                        <defs>
+                          <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" stopColor="#d4a846" stopOpacity=".36" />
+                            <stop offset="100%" stopColor="#d4a846" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <path d={salesChartPaths.area} fill="url(#chartFill)" />
+                        <path
+                          d={salesChartPaths.line}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                      </svg>
 
-                  <div className="vault-chart-labels">
-                    <span>11 Jul</span>
-                    <span>12 Jul</span>
-                    <span>13 Jul</span>
-                    <span>14 Jul</span>
-                    <span>15 Jul</span>
-                    <span>16 Jul</span>
-                    <span>17 Jul</span>
-                  </div>
+                      <div className="vault-chart-labels">
+                        {sevenDayDays.map((day) => (
+                          <span key={day.date}>{formatChartDate(day.date)}</span>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="vault-muted">
+                      {tradingState.status === "error"
+                        ? "Seven-day sales could not be loaded."
+                        : "Seven-day sales are unavailable."}
+                    </p>
+                  )}
                 </div>
               </article>
 
@@ -397,17 +906,37 @@ export default function Home() {
                 </div>
 
                 <div className="vault-product-list">
-                  {topProducts.map(([name, sold, price], index) => (
-                    <div className="vault-product-row" key={name}>
-                      <span className="vault-product-rank">{index + 1}</span>
-                      <span className="vault-product-thumbnail">TFV</span>
-                      <div>
-                        <strong>{name}</strong>
-                        <span>{sold}</span>
+                  {topProducts && topProducts.length > 0 ? (
+                    topProducts.map((product, index) => (
+                      <div className="vault-product-row" key={product.productId}>
+                        <span className="vault-product-rank">{index + 1}</span>
+                        <span className="vault-product-thumbnail">TFV</span>
+                        <div>
+                          <strong>{product.title}</strong>
+                          <span>{product.quantitySold} sold</span>
+                        </div>
+                        <b>{formatCurrency(product.netRevenue, product.currency)}</b>
                       </div>
-                      <b>{price}</b>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="vault-muted">
+                      {topProductsState.status === "error"
+                        ? "Product performance could not be loaded."
+                        : topProducts
+                          ? "No product sales in the last seven days."
+                          : "Product performance is unavailable."}
+                    </p>
+                  )}
+                  {topProductsState.status === "stale" ? (
+                    <p className="vault-muted">
+                      {formatSourceFreshness(
+                        "Product performance",
+                        topProductsState.status,
+                        topProductsState.lastUpdatedAt,
+                        businessState.generatedAt,
+                      )}
+                    </p>
+                  ) : null}
                 </div>
               </article>
             </section>
@@ -418,40 +947,70 @@ export default function Home() {
               <span className="vault-eyebrow">Inventory Health</span>
 
               <div className="vault-health-content">
-                <div className="vault-health-ring">
+                <div
+                  className="vault-health-ring"
+                  style={
+                    inventory
+                      ? {
+                          background: `conic-gradient(
+                            var(--vault-success) 0 ${healthyPercentage ?? 0}%,
+                            var(--vault-warning) ${healthyPercentage ?? 0}% ${(healthyPercentage ?? 0) + (lowStockPercentage ?? 0)}%,
+                            var(--vault-error) ${(healthyPercentage ?? 0) + (lowStockPercentage ?? 0)}% 100%
+                          )`,
+                        }
+                      : {
+                          background: "var(--vault-border)",
+                        }
+                  }
+                >
                   <div>
-                    <strong>82%</strong>
-                    <span>Healthy</span>
+                    <strong>
+                      {inventory
+                        ? `${inventory.healthScore}%`
+                        : "—"}
+                    </strong>
+                    <span>
+                      {inventory
+                        ? `${inventory.monitoredProducts} monitored`
+                        : inventoryState.status === "error"
+                          ? "Error"
+                          : "Unavailable"}
+                    </span>
                   </div>
                 </div>
 
                 <div className="vault-health-legend">
-                  <span><i className="healthy" /> Healthy <b>82%</b></span>
-                  <span><i className="low" /> Low stock <b>12%</b></span>
-                  <span><i className="out" /> Out of stock <b>6%</b></span>
+                  {inventory ? (
+                    <>
+                      <span>
+                        <i className="healthy" /> Healthy
+                        <b>
+                          {inventory.healthyProducts} · {healthyPercentage === null ? "—" : `${healthyPercentage}%`}
+                        </b>
+                      </span>
+                      <span>
+                        <i className="low" /> Low stock
+                        <b>
+                          {inventory.lowStockProducts} · {lowStockPercentage === null ? "—" : `${lowStockPercentage}%`}
+                        </b>
+                      </span>
+                      <span>
+                        <i className="out" /> Out of stock
+                        <b>
+                          {unavailableStockProducts} · {outOfStockPercentage === null ? "—" : `${outOfStockPercentage}%`}
+                        </b>
+                      </span>
+                    </>
+                  ) : (
+                    <span>
+                      <i className="out" />
+                      {inventoryState.status === "error"
+                        ? "Inventory data could not be loaded"
+                        : "Inventory unavailable"}
+                    </span>
+                  )}
                 </div>
               </div>
-            </article>
-
-            <article className="vault-panel">
-              <span className="vault-eyebrow">Cash Position</span>
-              <strong className="vault-big-number">£12,540</strong>
-              <p className="vault-muted">Available balance</p>
-
-              <div className="vault-mini-chart">
-                <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 220 90">
-                  <path
-                    d="M5 75 35 50 60 65 85 35 110 55 140 25 165 38 215 8"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                  />
-                </svg>
-              </div>
-
-              <button className="vault-secondary-button" type="button">
-                View finance
-              </button>
             </article>
 
             <article className="vault-panel">
@@ -463,16 +1022,61 @@ export default function Home() {
               </div>
 
               <div className="vault-orders-list">
-                {recentOrders.map(([number, name, total, status]) => (
-                  <div className="vault-order-row" key={number}>
-                    <span>{number}</span>
-                    <strong>{name}</strong>
-                    <span>{total}</span>
-                    <em className={`status-${status.toLowerCase()}`}>
-                      {status}
-                    </em>
-                  </div>
-                ))}
+                {recentOrders && recentOrders.length > 0 ? (
+                  recentOrders.map((order) => {
+                    const financialStatus = formatOrderStatus(
+                      order.financialStatus,
+                      "UNKNOWN",
+                    );
+                    const fulfilmentStatus = formatOrderStatus(
+                      order.fulfilmentStatus,
+                      "UNFULFILLED",
+                    );
+
+                    return (
+                      <CommandCentreRecentOrderRow
+                        key={order.id}
+                        orderIdentifier={order.id}
+                      >
+                        <span>{order.orderName}</span>
+                        <strong>
+                          {order.customerName ?? "Customer unavailable"} · {formatRelativeTime(
+                            order.createdAt,
+                            businessState.generatedAt,
+                          )}
+                        </strong>
+                        <span>{formatCurrency(order.amount, order.currency)}</span>
+                        <em className="vault-order-status">
+                          <span className={getFinancialStatusClass(financialStatus)}>
+                            {financialStatus}
+                          </span>
+                          <span className="vault-order-status-separator"> · </span>
+                          <span className={getFulfilmentStatusClass(fulfilmentStatus)}>
+                            {fulfilmentStatus}
+                          </span>
+                        </em>
+                      </CommandCentreRecentOrderRow>
+                    );
+                  })
+                ) : (
+                  <p className="vault-muted">
+                    {recentOrdersState.status === "error"
+                      ? "Recent orders could not be loaded."
+                      : recentOrders
+                        ? "No canonical Shopify orders are available."
+                        : "Recent orders are unavailable."}
+                  </p>
+                )}
+                {recentOrdersState.status === "stale" ? (
+                  <p className="vault-muted">
+                    {formatSourceFreshness(
+                      "Recent orders",
+                      recentOrdersState.status,
+                      recentOrdersState.lastUpdatedAt,
+                      businessState.generatedAt,
+                    )}
+                  </p>
+                ) : null}
               </div>
             </article>
 
@@ -502,6 +1106,7 @@ export default function Home() {
             <button type="button">⌁ View analytics</button>
           </div>
         </footer>
+      </CommandCentreLiveTrading>
     </VaultAppShell>
   );
 }

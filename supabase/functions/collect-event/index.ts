@@ -13,6 +13,8 @@ type CollectorPayload = {
   analytics_allowed?: boolean;
 
   session_id?: string;
+  privacy_visit_id?: string;
+  shopify_event_id?: string;
 
   page_path?: string;
   page_type?: string;
@@ -63,6 +65,9 @@ function safeInteger(value: unknown): number {
   return Math.max(0, Math.floor(parsed));
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", {
@@ -99,6 +104,16 @@ Deno.serve(async (request: Request) => {
 
     const analyticsAllowed =
       payload.analytics_allowed === true;
+    const shopifyEventId = String(
+      payload.shopify_event_id || payload.metadata?.shopify_event_id || "",
+    ).trim();
+
+    if (!shopifyEventId || shopifyEventId.length > 150) {
+      return jsonResponse(
+        { success: false, error: "A valid shopify_event_id is required" },
+        400,
+      );
+    }
 
     const supabaseUrl =
       Deno.env.get("SUPABASE_URL");
@@ -125,11 +140,50 @@ Deno.serve(async (request: Request) => {
       },
     );
 
+    const [trackedDuplicate, privacyDuplicate] = await Promise.all([
+      supabase
+        .from("vault_events")
+        .select("id")
+        .eq("shopify_event_id", shopifyEventId)
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("vault_traffic_counts")
+        .select("id")
+        .eq("shopify_event_id", shopifyEventId)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (trackedDuplicate.error || privacyDuplicate.error) {
+      throw trackedDuplicate.error || privacyDuplicate.error;
+    }
+
+    if (trackedDuplicate.data || privacyDuplicate.data) {
+      return jsonResponse({ success: true, mode: "duplicate_ignored" });
+    }
+
     /*
      * Privacy-limited traffic:
      * no persistent visitor or session identifier.
      */
     if (!analyticsAllowed) {
+      if (eventName !== "PAGE_VIEW") {
+        return jsonResponse(
+          { success: false, error: "Privacy-limited collection accepts PAGE_VIEW only" },
+          400,
+        );
+      }
+
+      const privacyVisitId = String(payload.privacy_visit_id || "").trim();
+
+      if (!UUID_PATTERN.test(privacyVisitId)) {
+        return jsonResponse(
+          { success: false, error: "A valid ephemeral privacy_visit_id is required" },
+          400,
+        );
+      }
+
       const now = new Date();
 
       now.setSeconds(0, 0);
@@ -144,6 +198,8 @@ Deno.serve(async (request: Request) => {
             payload.page_type || null,
           total_views: 1,
           analytics_allowed: false,
+          privacy_visit_id: privacyVisitId,
+          shopify_event_id: shopifyEventId,
           metadata: {
             event_name: eventName,
             ...(payload.metadata || {}),
@@ -178,6 +234,7 @@ Deno.serve(async (request: Request) => {
       .from("vault_events")
       .insert({
         session_id: sessionId,
+        shopify_event_id: shopifyEventId,
         event_name: eventName,
         event_source:
           payload.event_source ||

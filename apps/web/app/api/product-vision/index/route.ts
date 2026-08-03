@@ -13,6 +13,7 @@ import {
 import {
   supabaseAdmin,
 } from "@/lib/supabase-admin";
+import { authorizeApiRequest } from "@/lib/auth/api";
 
 type StyleCatalogueRow =
   Record<string, unknown>;
@@ -329,6 +330,8 @@ function needsAnalysis({
 }
 
 export async function GET() {
+  const denied = await authorizeApiRequest();
+  if (denied) return denied;
   try {
     const [
       catalogue,
@@ -406,6 +409,8 @@ export async function GET() {
 export async function POST(
   request: Request,
 ) {
+  const denied = await authorizeApiRequest(["owner", "operator"]);
+  if (denied) return denied;
   try {
     let body:
       VisionIndexRequest =

@@ -1,12 +1,17 @@
 import { CommercialWorkspace } from "@/components/commercial/CommercialWorkspace";
+import Link from "next/link";
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import type { SupplierPurchasingData } from "@/components/commercial/SupplierPurchasing";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { CashLedgerRepository } from "@/lib/business/CashLedgerRepository";
+import { requireAuthenticatedOperator } from "@/lib/auth/operators";
+import { canCreateCashTransactions } from "@/lib/auth/rules";
 
 export const dynamic = "force-dynamic";
 
 export default async function CommercialPage() {
-  const [walletResponse, supplierResponse] =
+  const operator = await requireAuthenticatedOperator();
+  const [walletResponse, supplierResponse, cashLedgerResult] =
     await Promise.all([
       supabaseAdmin
         .from("vault_purchasing_wallet")
@@ -36,6 +41,13 @@ export default async function CommercialPage() {
         .order("supplier_name", {
           ascending: true,
         }),
+      CashLedgerRepository.getSnapshot(20).then(
+        (data) => ({ data, error: null }),
+        (error: unknown) => ({
+          data: null,
+          error: error instanceof Error ? error.message : "Unable to load the cash ledger.",
+        }),
+      ),
     ]);
 
   const error =
@@ -73,12 +85,15 @@ export default async function CommercialPage() {
           </p>
         </div>
 
-        <a className="catalogue-back" href="/">
+        <Link className="catalogue-back" href="/">
           ← Command Centre
-        </a>
+        </Link>
       </header>
 
       <CommercialWorkspace
+        canCreateCashTransactions={canCreateCashTransactions(operator.role)}
+        cashLedger={cashLedgerResult.data}
+        cashLedgerError={cashLedgerResult.error}
         suppliers={suppliers}
         wallet={wallet}
       />

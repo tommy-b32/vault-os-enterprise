@@ -1,0 +1,337 @@
+/* ============================================================
+   COMMAND CENTRE — VAULT BRAIN PRIORITY
+   ============================================================ */
+
+.command-brain-priority {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+  gap: 22px;
+  align-items: center;
+  padding: 20px 22px;
+  background:
+    radial-gradient(
+      circle at 88% 12%,
+      rgba(218, 174, 72, 0.14),
+      transparent 30%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(18, 20, 18, 0.98),
+      rgba(8, 10, 9, 0.98)
+    );
+  border: 1px solid
+    rgba(218, 174, 72, 0.28);
+  border-radius: 14px;
+  box-shadow:
+    0 18px 46px
+      rgba(0, 0, 0, 0.26),
+    inset 0 1px 0
+      rgba(255,255,255,.03);
+}
+
+.command-brain-priority::after{
+  content:"✦";
+  position:absolute;
+  right:26px;
+  bottom:-34px;
+  color:rgba(218,174,72,.055);
+  font-family:Georgia,serif;
+  font-size:126px;
+  line-height:1;
+  pointer-events:none;
+}
+
+.command-brain-priority-copy{
+  position:relative;
+  z-index:1;
+  min-width:0;
+}
+
+.command-brain-priority-status{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:12px;
+  padding:6px 9px;
+  color:#76d991;
+  background:rgba(64,167,92,.09);
+  border:1px solid rgba(82,190,111,.2);
+  border-radius:999px;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+}
+
+.command-brain-priority-status span{
+  width:7px;
+  height:7px;
+  background:#71db8e;
+  border-radius:50%;
+  box-shadow:
+    0 0 0 4px rgba(75,193,107,.08),
+    0 0 15px rgba(75,193,107,.48);
+  animation:
+    command-brain-status-pulse
+    2.2s ease-in-out infinite;
+}
+
+/* =====================================================
+   NEW AI THINKING
+   ===================================================== */
+
+.vault-brain-thinking{
+  display:grid;
+  gap:8px;
+  margin:18px 0 22px;
+  padding:18px;
+  border-radius:12px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,.02),
+      rgba(255,255,255,.01)
+    );
+  border:1px solid rgba(255,255,255,.05);
+}
+
+.vault-thinking-step{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding-left:28px;
+  color:#b8c0ba;
+  font-size:12px;
+  line-height:1.4;
+}
+
+.vault-thinking-step::before{
+  content:"";
+  position:absolute;
+  left:0;
+  width:10px;
+  height:10px;
+  border-radius:50%;
+}
+
+.vault-thinking-step.complete::before{
+  background:#63d88a;
+  box-shadow:
+    0 0 0 4px rgba(99,216,138,.08),
+    0 0 14px rgba(99,216,138,.5);
+}
+
+.vault-thinking-step.active{
+  color:#f2cb67;
+  font-weight:600;
+}
+
+.vault-thinking-step.active::before{
+  background:#f2cb67;
+  box-shadow:
+    0 0 18px rgba(242,203,103,.8);
+  animation:
+    vault-thinking-pulse
+    1.5s infinite;
+}
+
+.command-brain-priority-label{
+  margin:0 0 6px;
+  color:#d5aa4d;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+.command-brain-priority h2{
+  margin:5px 0 8px;
+  color:#f4f1e9;
+  font-size:
+    clamp(20px,2vw,29px);
+  font-weight:650;
+  letter-spacing:-.025em;
+}
+
+.command-brain-priority-copy>p:last-child{
+  max-width:760px;
+  margin:0;
+  color:var(--vault-muted);
+  font-size:11px;
+  line-height:1.6;
+}
+
+.command-brain-priority-meta{
+  position:relative;
+  z-index:1;
+  display:grid;
+  grid-template-columns:
+    repeat(3,minmax(90px,1fr));
+  gap:9px;
+}
+
+.command-brain-priority-meta article{
+  min-width:0;
+  display:grid;
+  gap:6px;
+  padding:13px 14px;
+  background:
+    rgba(8,10,9,.74);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:9px;
+}
+
+.command-brain-priority-meta span{
+  color:var(--vault-muted);
+  font-size:7px;
+  font-weight:800;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+}
+
+.command-brain-priority-meta strong{
+  color:#f3c85c;
+  font-size:14px;
+  font-weight:700;
+  text-transform:capitalize;
+}
+
+.command-brain-priority-link{
+  position:relative;
+  z-index:1;
+  min-height:39px;
+  grid-column:2;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  justify-self:end;
+  padding:0 15px;
+  color:#17120a;
+  background:
+    linear-gradient(
+      180deg,
+      #f2ca65,
+      #bd8d31
+    );
+  border:1px solid #e4ba56;
+  border-radius:7px;
+  box-shadow:
+    0 7px 18px
+      rgba(217,173,74,.13);
+  font-size:10px;
+  font-weight:800;
+  text-decoration:none;
+  transition:
+    transform .16s ease,
+    background .16s ease;
+}
+
+.command-brain-priority-link:hover{
+  transform:translateY(-1px);
+}
+
+.vault-thinking-step {
+  opacity: 0;
+  transform: translateY(5px);
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
+}
+
+.vault-thinking-step.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.command-brain-priority-result,
+.command-brain-priority-meta,
+.command-brain-priority-link {
+  opacity: 0;
+  transform: translateY(7px);
+  pointer-events: none;
+  transition:
+    opacity 320ms ease,
+    transform 320ms ease;
+}
+
+.command-brain-priority-result.is-visible,
+.command-brain-priority-meta.is-visible,
+.command-brain-priority-link.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+@keyframes command-brain-status-pulse{
+  0%,100%{
+    transform:scale(.92);
+    opacity:.7;
+  }
+  50%{
+    transform:scale(1.08);
+    opacity:1;
+  }
+}
+
+@keyframes vault-thinking-pulse{
+  0%,100%{
+    transform:scale(1);
+  }
+  50%{
+    transform:scale(1.35);
+  }
+}
+
+@media(max-width:1100px){
+
+.command-brain-priority{
+grid-template-columns:1fr;
+}
+
+.command-brain-priority-meta{
+grid-template-columns:
+repeat(3,minmax(0,1fr));
+}
+
+.command-brain-priority-link{
+grid-column:1;
+justify-self:start;
+}
+
+}
+
+@media(max-width:680px){
+
+.command-brain-priority{
+gap:16px;
+padding:17px;
+border-radius:12px;
+}
+
+.command-brain-priority-meta{
+grid-template-columns:1fr;
+}
+
+.command-brain-priority-link{
+width:100%;
+}
+
+}
+
+@media(prefers-reduced-motion:reduce){
+
+.command-brain-priority-status span,
+.vault-thinking-step.active::before{
+animation:none;
+}
+
+.command-brain-priority-link{
+transition:none;
+}
+
+}

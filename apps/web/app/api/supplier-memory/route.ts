@@ -5,6 +5,7 @@ import {
 import {
   supabaseAdmin,
 } from "@/lib/supabase-admin";
+import { authorizeApiRequest } from "@/lib/auth/api";
 
 type SupplierMemoryRequest = {
   supplierName?: unknown;
@@ -311,6 +312,8 @@ function mapSupplierMemory(
 export async function GET(
   request: Request,
 ) {
+  const denied = await authorizeApiRequest();
+  if (denied) return denied;
   try {
     const {
       searchParams,
@@ -416,6 +419,8 @@ export async function GET(
 export async function POST(
   request: Request,
 ) {
+  const denied = await authorizeApiRequest(["owner", "operator"]);
+  if (denied) return denied;
   try {
     const body =
       (await request.json()) as

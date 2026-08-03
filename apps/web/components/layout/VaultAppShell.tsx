@@ -8,6 +8,7 @@ import {
 import VaultIcon, {
   type VaultIconName,
 } from "@/components/brain/workspace/VaultIcon";
+import { OperatorMenu } from "@/components/auth/OperatorMenu";
 
 type VaultAppShellProps = {
   children: React.ReactNode;
@@ -26,8 +27,8 @@ const navigation = [
     href: "/",
   },
   {
-    label: "Missions",
-    icon: "missions",
+    label: "Vault Brain",
+    icon: "advisor",
     href: "/missions",
   },
   {
@@ -407,6 +408,32 @@ function VaultAppShellStyles() {
         font-size: 11px;
       }
 
+      .vault-app-operator {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .vault-app-user-copy,
+      .vault-app-user-role {
+        display: block;
+      }
+
+      .vault-app-user-role {
+        margin-top: 2px;
+        color: #c99f38;
+        font-size: 8px;
+        text-transform: uppercase;
+      }
+
+      .vault-app-sign-out {
+        border: 0;
+        color: #929b95;
+        background: transparent;
+        font-size: 10px;
+        cursor: pointer;
+      }
+
       .vault-app-content {
         min-width: 0;
       }
@@ -598,9 +625,9 @@ export default function VaultAppShell({
               <span />
             </div>
 
-            <button
+            <div
+              hidden
               className="vault-app-user"
-              type="button"
             >
               <span className="vault-app-avatar">
                 {userName
@@ -616,7 +643,9 @@ export default function VaultAppShell({
               <span className="vault-app-user-arrow">
                 ⌄
               </span>
-            </button>
+            </div>
+
+            <OperatorMenu fallbackName={userName} />
           </div>
         </header>
 

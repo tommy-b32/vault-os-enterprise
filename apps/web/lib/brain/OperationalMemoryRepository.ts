@@ -54,6 +54,19 @@ function isOperationalSnapshot(
   );
 }
 
+function isOperationalSnapshotRow(
+  value: unknown,
+): value is OperationalSnapshotRow {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.snapshot_version === "number" &&
+    typeof value.generated_at === "string" &&
+    "snapshot" in value &&
+    typeof value.created_at === "string"
+  );
+}
+
 export async function getPreviousOperationalSnapshot({
   beforeGeneratedAt,
 }: GetPreviousOperationalSnapshotOptions = {}): Promise<
@@ -104,8 +117,15 @@ export async function getPreviousOperationalSnapshot({
     return null;
   }
 
-  const row =
-    data as OperationalSnapshotRow;
+  if (!isOperationalSnapshotRow(data)) {
+    console.warn(
+      "Vault operational memory retrieved an invalid snapshot row.",
+    );
+
+    return null;
+  }
+
+  const row = data;
 
   if (
     !isOperationalSnapshot(

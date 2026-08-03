@@ -440,6 +440,8 @@ function parseVision(
           )
         : null,
 
+    logoFingerprint: null,
+
     pattern:
       cleanNullableString(
         parsed.pattern,

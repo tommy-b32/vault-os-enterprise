@@ -5,11 +5,14 @@ import {
 import {
   getCatalogueProducts,
 } from "@/lib/catalogue";
+import { authorizeApiRequest } from "@/lib/auth/api";
 
 export const dynamic =
   "force-dynamic";
 
 export async function GET() {
+  const denied = await authorizeApiRequest();
+  if (denied) return denied;
   try {
     const products =
       await getCatalogueProducts();

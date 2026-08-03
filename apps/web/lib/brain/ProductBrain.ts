@@ -1,5 +1,4 @@
 import type {
-  BrainConfidence,
   CatalogueProduct,
   ConfigurationState,
   InventoryStrategy,
@@ -54,7 +53,8 @@ export type ProductBrainConfiguration = {
   missingRequirements: string[];
   missingRequirementCount: number;
 
-  brainConfidence: BrainConfidence;
+  brainConfidence:
+    CatalogueProduct["brain_confidence"];
 };
 
 export type ProductBrainCommercial = {

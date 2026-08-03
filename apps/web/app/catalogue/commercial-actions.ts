@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requireOperatorRole } from "@/lib/auth/operators";
 
 export type ProductCommercialActionState = {
   status: "idle" | "success" | "error";
@@ -12,6 +13,7 @@ export async function updateCommercialCosts(
   previousState: ProductCommercialActionState,
   formData: FormData,
 ): Promise<ProductCommercialActionState> {
+  await requireOperatorRole("owner", "operator");
 
   const productId = String(formData.get("product_id"));
 

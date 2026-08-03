@@ -7,8 +7,32 @@ import {
 } from "react";
 
 import {
+  BrainCopilotRepository,
+} from "@/lib/brain/BrainCopilotRepository";
+
+import {
+  BrainCopilotEngine,
+} from "@/lib/brain/BrainCopilotEngine";
+
+import {
+  BrainSignalsEngine,
+} from "@/lib/brain/BrainSignalsEngine";
+
+import {
+  BrainSignalsService,
+} from "@/lib/brain/BrainSignalsService";
+
+import {
   BuyingRecommendationEngine,
 } from "@/lib/brain/BuyingRecommendationEngine";
+
+import {
+  BrainLearningRepository,
+} from "@/lib/brain/BrainLearningRepository";
+
+import type {
+  BrainDecisionReason,
+} from "@/types/brain-learning";
 
 import {
   VaultBrainOverlay,
@@ -515,6 +539,110 @@ export function SupplierReviewWorkspace({
       item.card,
     });
 
+    const copilotRecommendation =
+      BrainCopilotEngine.createRecommendation({
+        productId:
+          bestMatch.product.product_id,
+
+        productName:
+          bestMatch.product.product_name,
+
+        supplierId:
+          item.card.supplierId ?? null,
+
+        supplierName:
+          item.card.supplierName,
+
+        suggestedPacks:
+          recommendation.suggestedPacks,
+
+        estimatedCost:
+          recommendation.estimatedOrderCost,
+
+        estimatedRevenue:
+          recommendation.estimatedOrderCost !== null &&
+          recommendation.estimatedGrossProfit !== null
+            ? recommendation.estimatedOrderCost +
+              recommendation.estimatedGrossProfit
+            : null,
+
+        estimatedProfit:
+          recommendation.estimatedGrossProfit,
+
+        currency:
+          item.card.currency,
+
+        confidence:
+          recommendation.confidence,
+
+        urgency:
+          recommendation.urgency === "none"
+            ? "low"
+            : recommendation.urgency === "critical"
+              ? "critical"
+              : recommendation.urgency,
+
+        reasons:
+          [recommendation.reason],
+      });
+
+        BrainCopilotRepository.save(
+          copilotRecommendation,
+        );
+
+    const severity =
+      copilotRecommendation.priority === "critical"
+        ? "critical"
+        : copilotRecommendation.priority === "high"
+          ? "warning"
+          : copilotRecommendation.priority === "medium"
+            ? "info"
+            : "success";
+
+    const signal =
+      BrainSignalsEngine.createSignal({
+        type: "buying",
+
+        severity,
+
+        title:
+          copilotRecommendation.title,
+
+        message:
+          copilotRecommendation.message,
+
+        confidence:
+          copilotRecommendation.confidence,
+
+        productId:
+          copilotRecommendation.productId,
+
+        productName:
+          copilotRecommendation.productName,
+
+        supplierId:
+          copilotRecommendation.supplierId,
+
+        supplierName:
+          copilotRecommendation.supplierName,
+
+        value:
+          copilotRecommendation.estimatedProfit,
+
+        currency:
+          copilotRecommendation.currency,
+
+        actionHref:
+          "/missions",
+
+        actionLabel:
+          "Review recommendation",
+      });
+
+    BrainSignalsService.publish(
+      signal,
+    );
+
     const basketItem: BuyingBasketItem = {
       id: item.card.id,
 
@@ -707,6 +835,40 @@ export function SupplierReviewWorkspace({
           productMemory,
           supplierMemory,
         });
+
+      const learningReason:
+        BrainDecisionReason =
+        selectedMatch.confidence >= 92
+          ? "recommended"
+          : "manual_override";
+
+      BrainLearningRepository.save({
+        id:
+          `${currentItem.card.id}:${selectedMatch.product.product_id}`,
+
+        createdAt:
+          new Date().toISOString(),
+
+        productId:
+          selectedMatch.product.product_id,
+
+        supplierId:
+          currentItem.card.supplierId ??
+          null,
+
+        recommendationScore:
+          selectedMatch.confidence,
+
+        accepted: true,
+
+        decisionReason:
+          learningReason,
+
+        notes:
+          selectedMatch.confidence >= 92
+            ? "Accepted the recommended catalogue match."
+            : "Accepted a manually selected or lower-confidence match.",
+      });
 
       setPermanentMemories(
         (current) => {

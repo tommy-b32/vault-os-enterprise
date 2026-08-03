@@ -620,7 +620,6 @@ function buildStockImpactDescription(
 
   return (
     parts.join(" ") ||
-    impact.explanation ||
     "Vault Brain detected a material inventory change."
   );
 }

@@ -52,6 +52,8 @@ export type BuyingRecommendationResult = {
 
   currency: string;
 
+  confidence: number;
+
   trusted: boolean;
   missingData: string[];
 };
@@ -194,6 +196,60 @@ function getCurrency({
   );
 }
 
+function calculateConfidence({
+  averageDailySales,
+  supplierLeadTimeDays,
+  unitsPerPack,
+  packCost,
+  product,
+}: {
+  averageDailySales: number | null;
+  supplierLeadTimeDays: number | null;
+  unitsPerPack: number | null;
+  packCost: number | null;
+  product: CatalogueProduct;
+}): number {
+  let score = 0;
+
+  if (averageDailySales !== null) {
+    score += 25;
+  }
+
+  if (supplierLeadTimeDays !== null) {
+    score += 20;
+  }
+
+  if (unitsPerPack !== null) {
+    score += 20;
+  }
+
+  if (packCost !== null) {
+    score += 15;
+  }
+
+  if (
+    product.commercial_cost
+      ?.commercial_cost_trusted
+  ) {
+    score += 10;
+  }
+
+  if (
+    product.trusted_for_reorder &&
+    product.configuration_trusted
+  ) {
+    score += 10;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      score,
+    ),
+  );
+}
+
 export const BuyingRecommendationEngine = {
   buildRecommendation({
     product,
@@ -239,6 +295,15 @@ export const BuyingRecommendationEngine = {
       getCurrency({
         product,
         supplierCard,
+      });
+
+    const confidence =
+      calculateConfidence({
+        averageDailySales,
+        supplierLeadTimeDays,
+        unitsPerPack,
+        packCost,
+        product,
       });
 
     const missingData: string[] = [];
@@ -312,6 +377,7 @@ export const BuyingRecommendationEngine = {
         product.supplier_moq_packs,
 
       currency,
+      confidence,
       trusted,
       missingData,
     };

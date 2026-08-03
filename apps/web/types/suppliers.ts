@@ -9,54 +9,94 @@ export type SupplierStatus =
 
 export type SupplierProfile = {
   id: string;
+
   supplierName: string;
 
   status: SupplierStatus;
 
   currency: string;
 
-  minimumOrderPacks: number | null;
+  minimumOrderPacks:
+    number | null;
+
   moqScope: SupplierMoqScope;
 
-  leadTimeDays: number | null;
+  leadTimeDays:
+    number | null;
 
-  shippingCostPerOrder: number | null;
-  importCostPerOrder: number | null;
+  shippingCostPerOrder:
+    number | null;
 
-  paymentTerms: string | null;
+  importCostPerOrder:
+    number | null;
 
-  reliabilityScore: number | null;
+  paymentTerms:
+    string | null;
 
-  notes: string | null;
+  reliabilityScore:
+    number | null;
+
+  notes:
+    string | null;
 };
 
 export type ProductSupplierSource = {
   id: string;
 
   productId: string;
+
   supplierId: string;
 
   supplierName: string;
 
-  supplierReference: string | null;
+  supplierReference:
+    string | null;
 
-  packCost: number | null;
-  unitsPerPack: number | null;
+  packCost:
+    number | null;
+
+  unitsPerPack:
+    number | null;
 
   currency: string;
 
-  leadTimeDays: number | null;
+  leadTimeDays:
+    number | null;
 
   isPreferred: boolean;
+
   isActive: boolean;
 
-  notes: string | null;
+  notes:
+    string | null;
+};
+
+export type SupplierSourceScore = {
+  supplierId: string;
+
+  supplierName: string;
+
+  overallScore: number;
+
+  costScore:
+    number | null;
+
+  leadTimeScore:
+    number | null;
+
+  reliabilityScore:
+    number | null;
+
+  recommended: boolean;
+
+  reason: string;
 };
 
 export type ProductSupplierComparison = {
   productId: string;
 
-  sources: ProductSupplierSource[];
+  sources:
+    ProductSupplierSource[];
 
   preferredSource:
     | ProductSupplierSource
@@ -67,6 +107,13 @@ export type ProductSupplierComparison = {
     | null;
 
   fastestSource:
+    | ProductSupplierSource
+    | null;
+
+  sourceScores:
+    SupplierSourceScore[];
+
+  recommendedSource:
     | ProductSupplierSource
     | null;
 };

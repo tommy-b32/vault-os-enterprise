@@ -1,0 +1,408 @@
+/* ============================================================
+   VAULT BRAIN — DAILY BRIEF + COPILOT
+   ============================================================ */
+
+/* ============================================================
+   DAILY INTELLIGENCE BRIEF
+   ============================================================ */
+
+.daily-brief-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(217, 173, 74, 0.08),
+      transparent 34%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(18, 20, 19, 0.98),
+      rgba(8, 10, 9, 0.98)
+    );
+  border: 1px solid rgba(217, 173, 74, 0.2);
+  border-radius: 14px;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.daily-brief-card::after {
+  content: "";
+  position: absolute;
+  top: -80px;
+  right: -55px;
+  width: 220px;
+  height: 220px;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle,
+      rgba(240, 196, 93, 0.12),
+      transparent 68%
+    );
+}
+
+.daily-brief-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.daily-brief-header h2 {
+  margin: 5px 0 7px;
+  color: var(--vault-text);
+  font-size: clamp(22px, 2.2vw, 31px);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.daily-brief-header p:last-child {
+  max-width: 760px;
+  margin: 0;
+  color: var(--vault-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.daily-brief-list {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+  gap: 10px;
+}
+
+.daily-brief-item {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 15px 16px 15px 18px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(14, 16, 15, 0.95),
+      rgba(8, 10, 9, 0.92)
+    );
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 10px;
+}
+
+.daily-brief-item::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  bottom: 13px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+}
+
+.daily-brief-item.success::before {
+  background: var(--vault-success);
+  box-shadow: 0 0 12px rgba(107, 201, 120, 0.34);
+}
+
+.daily-brief-item.info::before {
+  background: var(--vault-info);
+  box-shadow: 0 0 12px rgba(112, 174, 232, 0.28);
+}
+
+.daily-brief-item.warning::before {
+  background: var(--vault-warning);
+  box-shadow: 0 0 12px rgba(232, 181, 77, 0.3);
+}
+
+.daily-brief-item strong {
+  color: #f4f1e9;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.daily-brief-item p {
+  margin: 0;
+  color: var(--vault-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+/* ============================================================
+   VAULT BRAIN COPILOT
+   ============================================================ */
+
+.brain-copilot-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  background:
+    radial-gradient(
+      circle at 88% 8%,
+      rgba(217, 173, 74, 0.12),
+      transparent 28%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(19, 20, 18, 0.99),
+      rgba(8, 9, 8, 0.99)
+    );
+  border: 1px solid rgba(217, 173, 74, 0.3);
+  border-radius: 14px;
+  box-shadow:
+    0 20px 52px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.brain-copilot-card::after {
+  content: "✦";
+  position: absolute;
+  right: 28px;
+  bottom: 14px;
+  color: rgba(217, 173, 74, 0.06);
+  font-family: Georgia, serif;
+  font-size: 118px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.brain-copilot-header {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+  align-items: start;
+  gap: 24px;
+}
+
+.brain-copilot-header h2 {
+  margin: 6px 0 8px;
+  color: var(--vault-text);
+  font-size: clamp(20px, 2vw, 29px);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.brain-copilot-header > div:first-child > p:last-child {
+  max-width: 760px;
+  margin: 0;
+  color: var(--vault-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.brain-copilot-confidence {
+  min-width: 154px;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  padding: 15px 17px;
+  background:
+    linear-gradient(
+      150deg,
+      rgba(217, 173, 74, 0.14),
+      rgba(10, 12, 11, 0.88)
+    );
+  border: 1px solid rgba(217, 173, 74, 0.23);
+  border-radius: 11px;
+  text-align: right;
+}
+
+.brain-copilot-confidence span {
+  color: var(--vault-muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.brain-copilot-confidence strong {
+  color: var(--vault-gold-bright);
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+  font-size: 41px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.brain-copilot-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns:
+    repeat(
+      4,
+      minmax(0, 1fr)
+    );
+  gap: 10px;
+}
+
+.brain-copilot-grid article {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 14px 15px;
+  background: rgba(8, 10, 9, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 9px;
+}
+
+.brain-copilot-grid span {
+  color: var(--vault-muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.brain-copilot-grid strong {
+  overflow: hidden;
+  color: #f4f1e9;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.brain-copilot-grid article:nth-child(2) strong {
+  color: var(--vault-warning);
+  text-transform: capitalize;
+}
+
+.brain-copilot-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.brain-copilot-actions button {
+  min-height: 39px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 15px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.brain-copilot-actions button:first-child {
+  color: #17120a;
+  background:
+    linear-gradient(
+      180deg,
+      var(--vault-gold-bright),
+      #b7862e
+    );
+  border: 1px solid #e6bd5a;
+  box-shadow: 0 7px 18px rgba(217, 173, 74, 0.13);
+}
+
+.brain-copilot-actions button:first-child:hover {
+  transform: translateY(-1px);
+  background:
+    linear-gradient(
+      180deg,
+      #f5cf73,
+      #c49335
+    );
+}
+
+.brain-copilot-actions button:last-child:not(:first-child) {
+  color: var(--vault-gold-bright);
+  background: rgba(10, 11, 10, 0.72);
+  border: 1px solid rgba(217, 173, 74, 0.38);
+}
+
+.brain-copilot-actions button:last-child:not(:first-child):hover {
+  transform: translateY(-1px);
+  background: var(--vault-gold-soft);
+  border-color: rgba(217, 173, 74, 0.62);
+}
+
+/* Empty/loading Copilot states */
+.brain-copilot-card > .vault-eyebrow + h2 {
+  margin: 3px 0 0;
+  color: var(--vault-text);
+  font-size: 20px;
+}
+
+.brain-copilot-card > h2 + p {
+  max-width: 720px;
+  margin: -8px 0 0;
+  color: var(--vault-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1100px) {
+  .daily-brief-list {
+    grid-template-columns: 1fr;
+  }
+
+  .brain-copilot-header {
+    grid-template-columns: 1fr;
+  }
+
+  .brain-copilot-confidence {
+    width: 100%;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .brain-copilot-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+}
+
+@media (max-width: 680px) {
+  .daily-brief-card,
+  .brain-copilot-card {
+    gap: 15px;
+    padding: 17px;
+    border-radius: 12px;
+  }
+
+  .brain-copilot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .brain-copilot-actions {
+    display: grid;
+  }
+
+  .brain-copilot-actions button {
+    width: 100%;
+  }
+}

@@ -7,6 +7,13 @@ const VAULT_COLLECTOR_ENDPOINT =
   "https://mzrimaqjyrvtbpaeyooe.supabase.co/functions/v1/collect-event";
 
 let vaultPrivacyStatus = init.customerPrivacy;
+/*
+ * Privacy-limited visit estimation deliberately lives only in this pixel
+ * runtime's memory. It is never persisted and is never sent with tracked
+ * events. A full navigation or reload can therefore start a new estimate.
+ */
+const vaultPrivacyVisitId = crypto.randomUUID();
+const vaultSeenEventIds = new Set();
 
 api.customerPrivacy.subscribe(
   "visitorConsentCollected",
@@ -39,6 +46,10 @@ function sendVaultEvent(payload) {
 }
 
 analytics.subscribe("page_viewed", function (event) {
+  if (vaultSeenEventIds.has(event.id)) return;
+
+  vaultSeenEventIds.add(event.id);
+
   const analyticsAllowed =
     vaultPrivacyStatus &&
     vaultPrivacyStatus.analyticsProcessingAllowed === true;
@@ -53,6 +64,7 @@ analytics.subscribe("page_viewed", function (event) {
       event_source: "storefront",
       analytics_allowed: true,
       session_id: event.clientId,
+      shopify_event_id: event.id,
       page_path: pathname,
       page_type: getPageType(pathname),
       metadata: {
@@ -71,6 +83,8 @@ analytics.subscribe("page_viewed", function (event) {
     event_name: "PAGE_VIEW",
     event_source: "storefront",
     analytics_allowed: false,
+    privacy_visit_id: vaultPrivacyVisitId,
+    shopify_event_id: event.id,
     page_path: pathname,
     page_type: getPageType(pathname),
     metadata: {

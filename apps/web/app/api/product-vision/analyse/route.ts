@@ -1,7 +1,9 @@
 import "server-only";
 
 import OpenAI from "openai";
+import { NextResponse } from "next/server";
 
+import { authorizeApiRequest } from "@/lib/auth/api";
 import type {
   ProductVisionData,
   ProductVisionInput,
@@ -440,6 +442,8 @@ function parseVision(
           )
         : null,
 
+    logoFingerprint: null,
+
     pattern:
       cleanNullableString(
         parsed.pattern,
@@ -654,4 +658,49 @@ export async function analyseProductVision({
     vision,
     model,
   };
+}
+
+export async function POST(request: Request) {
+  const denied = await authorizeApiRequest([
+    "owner",
+    "operator",
+  ]);
+
+  if (denied) {
+    return denied;
+  }
+
+  try {
+    const body = await request.json() as Partial<ProductVisionInput>;
+    const analysis = await analyseProductVision({
+      productId:
+        typeof body.productId === "string"
+          ? body.productId
+          : "",
+      productName:
+        typeof body.productName === "string"
+          ? body.productName
+          : "",
+      imageUrl:
+        typeof body.imageUrl === "string"
+          ? body.imageUrl
+          : "",
+    });
+
+    return NextResponse.json(analysis);
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "Product Vision analysis failed.";
+    const isInputError = message.startsWith("A ");
+
+    return NextResponse.json(
+      {
+        error: isInputError
+          ? message
+          : "Product Vision analysis failed.",
+      },
+      { status: isInputError ? 400 : 500 },
+    );
+  }
 }

@@ -1,0 +1,17 @@
+project_id = "vault-os-enterprise"
+
+# Server-side Shopify secret contract:
+# - SHOPIFY_STORE_DOMAIN identifies the store.
+# - SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET are exchanged for a short-lived
+#   Dev Dashboard Admin API access token.
+# - SHOPIFY_WEBHOOK_SECRET is used only for webhook HMAC verification. It may
+#   contain the same underlying app secret, but remains a separate contract.
+# shopify-order-sync additionally requires VAULT_ORDER_SYNC_SECRET.
+[functions.shopify-order-sync]
+verify_jwt = true
+
+[functions.shopify-order-webhook]
+verify_jwt = false
+
+[functions.shopify-payments-sync]
+verify_jwt = true

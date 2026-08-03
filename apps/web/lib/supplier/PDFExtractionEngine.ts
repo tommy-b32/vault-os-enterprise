@@ -1,6 +1,10 @@
 "use client";
 
 import type {
+  PDFPageProxy,
+} from "pdfjs-dist";
+
+import type {
   SupplierDocumentPage,
   SupplierExtractedImage,
   SupplierExtractionResult,
@@ -77,27 +81,7 @@ async function renderPageImage({
   pageNumber,
   scale,
 }: {
-  page: {
-    getViewport: (
-      options: {
-        scale: number;
-      },
-    ) => {
-      width: number;
-      height: number;
-    };
-
-    render: (options: {
-      canvasContext:
-        CanvasRenderingContext2D;
-      viewport: {
-        width: number;
-        height: number;
-      };
-    }) => {
-      promise: Promise<void>;
-    };
-  };
+  page: PDFPageProxy;
 
   pageNumber: number;
   scale: number;
@@ -132,6 +116,7 @@ async function renderPageImage({
   }
 
   await page.render({
+    canvas: null,
     canvasContext: context,
     viewport,
   }).promise;
