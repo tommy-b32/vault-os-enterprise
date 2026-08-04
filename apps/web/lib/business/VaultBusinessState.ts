@@ -20,6 +20,10 @@ import {
   type FinancePosition,
 } from "@/lib/business/BusinessFinanceRepository";
 import {
+  BusinessActivityRepository,
+  type BusinessActivityEvent,
+} from "@/lib/business/BusinessActivityRepository";
+import {
   ShopifyPaymentsRepository,
   type ShopifyPaymentsPayout,
 } from "@/lib/business/ShopifyPaymentsRepository";
@@ -30,6 +34,7 @@ export type VaultBusinessSource =
   | "website-analytics"
   | "business-finance"
   | "shopify-payments"
+  | "business-activity"
   | "shipments"
   | "trustpilot";
 
@@ -165,6 +170,7 @@ export type VaultBusinessState = {
   topProducts: VaultBusinessDataState<VaultTopProduct[]>;
   websiteAnalytics: VaultBusinessDataState<WebsiteAnalyticsSnapshot>;
   finance: VaultBusinessDataState<VaultFinanceData>;
+  businessActivity: VaultBusinessDataState<BusinessActivityEvent[]>;
   shipments: VaultBusinessDataState<VaultShipment[]>;
   trustpilot: VaultBusinessDataState<VaultTrustpilotData>;
 };
@@ -695,6 +701,40 @@ export async function getVaultBusinessState({
   const trustpilot = unavailable<VaultTrustpilotData>(
     "The Trustpilot adapter is not connected.",
   );
+  let businessActivity = unavailable<BusinessActivityEvent[]>(
+    "No canonical business activity is available.",
+  );
+
+  try {
+    const activity = await BusinessActivityRepository
+      .getRecentBusinessActivity();
+
+    if (
+      (activity.status === "live" || activity.status === "stale") &&
+      activity.timestamp
+    ) {
+      businessActivity = {
+        status: activity.status,
+        data: activity.data,
+        lastUpdatedAt: activity.timestamp,
+        message: activity.message,
+      };
+    } else if (activity.status === "error") {
+      businessActivity = {
+        status: "error",
+        data: null,
+        lastUpdatedAt: null,
+        message: activity.message ?? "Business activity could not be loaded.",
+      };
+    }
+  } catch (error) {
+    businessActivity = {
+      status: "error",
+      data: null,
+      lastUpdatedAt: null,
+      message: `Business activity could not be loaded: ${getErrorMessage(error)}`,
+    };
+  }
 
   const sourceStatuses: VaultBusinessSourceStatus[] = [
     createSourceStatus("inventory", "Inventory", inventory),
@@ -706,6 +746,11 @@ export async function getVaultBusinessState({
     ),
     businessFinanceStatus,
     shopifyPaymentsStatus,
+    createSourceStatus(
+      "business-activity",
+      "Business activity",
+      businessActivity,
+    ),
     createSourceStatus("shipments", "Shipments", shipments),
     createSourceStatus("trustpilot", "Trustpilot", trustpilot),
   ];
@@ -720,6 +765,7 @@ export async function getVaultBusinessState({
     topProducts,
     websiteAnalytics,
     finance,
+    businessActivity,
     shipments,
     trustpilot,
   };

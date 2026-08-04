@@ -32,6 +32,8 @@ type IconName =
   | "coins"
   | "chart"
   | "warning"
+  | "refund"
+  | "info"
   | "truck"
   | "star"
   | "arrow"
@@ -166,6 +168,19 @@ function Icon({
         <path d="M12 17h.01" />
       </>
     ),
+    refund: (
+      <>
+        <path d="M9 7 5 11l4 4" />
+        <path d="M5 11h8a6 6 0 0 1 6 6" />
+      </>
+    ),
+    info: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v6" />
+        <path d="M12 7h.01" />
+      </>
+    ),
     truck: (
       <>
         <path d="M3 6h11v10H3z" />
@@ -252,6 +267,119 @@ function formatRelativeTime(
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function getLondonCalendarDate(value: string): {
+  year: number;
+  month: number;
+  day: number;
+  key: string;
+} | null {
+  const date = new Date(value);
+
+  if (!Number.isFinite(date.getTime())) return null;
+
+  const parts = new Map(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/London",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  const year = Number(parts.get("year"));
+  const month = Number(parts.get("month"));
+  const day = Number(parts.get("day"));
+
+  return {
+    year,
+    month,
+    day,
+    key: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+  };
+}
+
+function formatBusinessActivityTime(
+  value: string,
+  generatedAt: string,
+): string {
+  const eventTime = new Date(value);
+  const currentTime = new Date(generatedAt);
+  const eventDate = getLondonCalendarDate(value);
+  const currentDate = getLondonCalendarDate(generatedAt);
+
+  if (
+    !eventDate ||
+    !currentDate ||
+    !Number.isFinite(eventTime.getTime()) ||
+    !Number.isFinite(currentTime.getTime())
+  ) {
+    return "Time unavailable";
+  }
+
+  const elapsedMinutes = Math.max(
+    0,
+    Math.floor((currentTime.getTime() - eventTime.getTime()) / 60_000),
+  );
+
+  if (eventDate.key === currentDate.key) {
+    if (elapsedMinutes < 1) return "Just now";
+    if (elapsedMinutes === 1) return "1 min ago";
+    if (elapsedMinutes < 60) return `${elapsedMinutes} mins ago`;
+
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    return elapsedHours === 1 ? "1 hour ago" : `${elapsedHours} hours ago`;
+  }
+
+  const yesterday = new Date(Date.UTC(
+    currentDate.year,
+    currentDate.month - 1,
+    currentDate.day - 1,
+  ));
+  const yesterdayKey = [
+    yesterday.getUTCFullYear(),
+    String(yesterday.getUTCMonth() + 1).padStart(2, "0"),
+    String(yesterday.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+  const clockTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(eventTime);
+
+  if (eventDate.key === yesterdayKey) {
+    return `Yesterday at ${clockTime}`;
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(eventTime);
+}
+
+function getBusinessEventPresentation(type: string): {
+  icon: IconName;
+  tone: "success" | "warning" | "neutral";
+  label: string;
+} {
+  if (type === "shopify-order-created") {
+    return { icon: "orders", tone: "success", label: "Order" };
+  }
+
+  if (type === "shopify-order-fulfilled") {
+    return { icon: "truck", tone: "success", label: "Fulfilment" };
+  }
+
+  if (type === "shopify-refund") {
+    return { icon: "refund", tone: "warning", label: "Refund" };
+  }
+
+  return { icon: "info", tone: "neutral", label: "Activity" };
 }
 
 function formatSourceFreshness(
@@ -452,6 +580,8 @@ export default async function Home() {
   const recentOrders = recentOrdersState.data;
   const topProductsState = businessState.topProducts;
   const topProducts = topProductsState.data;
+  const businessActivityState = businessState.businessActivity;
+  const businessActivity = businessActivityState.data?.slice(0, 8) ?? [];
   const shopifyStatus =
     businessState.sourceStatuses.find(
       (source) => source.source === "shopify-trading",
@@ -770,72 +900,67 @@ export default async function Home() {
               ))}
             </section>
 
-            <section className="vault-panel vault-attention">
+            <section className="vault-panel vault-business-feed">
               <div className="vault-section-heading">
                 <div>
-                  <span className="vault-eyebrow">Attention Required</span>
-                  <h2>Today&apos;s priorities</h2>
+                  <span className="vault-eyebrow">Business Feed</span>
+                  <h2>Latest operational activity</h2>
                 </div>
-
-                <button className="vault-text-button" type="button">
-                  View all <Icon name="arrow" size={16} />
-                </button>
               </div>
 
-              <div className="vault-attention-grid">
-                <article className="vault-action-card vault-action-card-primary">
-                  <div className="vault-action-topline">
-                    <span className="vault-badge">Exclusive</span>
-                    <Icon name="warning" size={20} />
-                  </div>
+              {businessActivityState.status === "error" ? (
+                <div className="vault-business-feed-state is-error">
+                  <strong>Business activity unavailable</strong>
+                  <span>Vault OS could not load the activity feed.</span>
+                </div>
+              ) : businessActivity.length === 0 ? (
+                <div className="vault-business-feed-state">
+                  <strong>No business activity recorded yet</strong>
+                  <span>
+                    New orders, fulfilments and refunds will appear here automatically.
+                  </span>
+                </div>
+              ) : (
+                <div className="vault-business-feed-list">
+                  {businessActivity.map((event) => {
+                    const presentation = getBusinessEventPresentation(event.type);
 
-                  <h3>Moncler Black Badge</h3>
-                  <p className="vault-action-title">Order 20 packs</p>
-                  <p className="vault-muted">6 days of stock remaining</p>
+                    return (
+                      <article
+                        className={`vault-business-feed-row is-${presentation.tone}`}
+                        key={event.id}
+                      >
+                        <span
+                          className="vault-business-feed-icon"
+                          aria-label={presentation.label}
+                        >
+                          <Icon name={presentation.icon} size={17} />
+                        </span>
+                        <div className="vault-business-feed-copy">
+                          <strong>{event.title}</strong>
+                          {event.description ? <p>{event.description}</p> : null}
+                        </div>
+                        <time dateTime={event.timestamp}>
+                          {formatBusinessActivityTime(
+                            event.timestamp,
+                            businessState.generatedAt,
+                          )}
+                        </time>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
 
-                  <button className="vault-primary-button" type="button">
-                    Generate WhatsApp
-                    <Icon name="whatsapp" size={18} />
-                  </button>
-                </article>
-
-                <article className="vault-action-card">
-                  <span className="vault-card-kicker">Dropship partner</span>
-                  <h3>Tony</h3>
-                  <p className="vault-action-title">3 shoe orders</p>
-                  <p className="vault-muted">Awaiting purchase</p>
-                  <button className="vault-secondary-button" type="button">
-                    View orders
-                  </button>
-                </article>
-
-                <article className="vault-action-card">
-                  <span className="vault-card-kicker">Shipment</span>
-                  <div className="vault-inline-title">
-                    <h3>UPS</h3>
-                    <Icon name="truck" size={28} />
-                  </div>
-                  <p className="vault-action-title">Arrives tomorrow</p>
-                  <p className="vault-muted">Expected at 12:10 PM</p>
-                  <button className="vault-secondary-button" type="button">
-                    Track shipment
-                  </button>
-                </article>
-
-                <article className="vault-action-card">
-                  <span className="vault-card-kicker">Trustpilot</span>
-                  <h3>Excellent</h3>
-                  <div className="vault-stars" aria-label="Five stars">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <Icon key={index} name="star" size={22} />
-                    ))}
-                  </div>
-                  <p className="vault-muted">New five-star review received</p>
-                  <button className="vault-secondary-button" type="button">
-                    View review
-                  </button>
-                </article>
-              </div>
+              {businessActivityState.status === "stale" &&
+                  businessActivity.length > 0 ? (
+                <p className="vault-business-feed-freshness">
+                  Activity feed may be delayed · last event {formatBusinessActivityTime(
+                    businessActivityState.lastUpdatedAt ?? businessActivity[0].timestamp,
+                    businessState.generatedAt,
+                  )}
+                </p>
+              ) : null}
             </section>
 
             <section className="vault-lower-grid">
