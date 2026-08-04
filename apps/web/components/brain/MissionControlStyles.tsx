@@ -3,6 +3,7 @@ export default function MissionControlStyles() {
     <style>{`
         .mission-control-content {
           display: block;
+          max-width: 1380px;
         }
 
         .mission-control-workspace {
@@ -10,13 +11,18 @@ export default function MissionControlStyles() {
           min-width: 0;
         }
 
+        .mission-control-workspace > section {
+          width: 100%;
+          min-width: 0;
+        }
+
         .mission-control-header {
           display: grid;
           grid-template-columns:
-            minmax(280px, 1fr)
-            minmax(560px, 1.2fr);
+            minmax(0, 1fr)
+            minmax(180px, 210px);
           align-items: end;
-          gap: 32px;
+          gap: 24px;
         }
 
         .mission-control-header
@@ -317,9 +323,27 @@ export default function MissionControlStyles() {
 
         .morning-briefing {
           display: grid;
-          grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.75fr);
+          grid-template-columns: minmax(0, 1fr);
           gap: 16px;
           margin-top: 22px;
+        }
+
+        .todays-analysis-section {
+          width: 100%;
+          min-width: 0;
+          margin-top: 22px;
+        }
+
+        .todays-analysis-section > .vault-panel {
+          width: 100%;
+          margin-top: 12px;
+        }
+
+        .todays-analysis-section .morning-impact-list {
+          grid-template-columns: repeat(
+            auto-fit,
+            minmax(min(100%, 280px), 1fr)
+          );
         }
 
         .morning-briefing-panel,
@@ -666,14 +690,6 @@ export default function MissionControlStyles() {
         }
 
         @media (max-width: 1280px) {
-          .mission-control-header {
-            grid-template-columns: 1fr;
-          }
-
-          .morning-briefing {
-            grid-template-columns: 1fr;
-          }
-
           .morning-briefing-narrative {
             grid-template-columns: 1fr;
           }
@@ -691,6 +707,15 @@ export default function MissionControlStyles() {
         }
 
         @media (max-width: 900px) {
+          .mission-control-header {
+            grid-template-columns: 1fr;
+          }
+
+          .mission-confidence-metric {
+            width: min(100%, 280px);
+            justify-self: start;
+          }
+
           .mission-metrics,
           .morning-briefing-metrics {
             grid-template-columns: repeat(
@@ -715,6 +740,14 @@ export default function MissionControlStyles() {
           }
 
           .morning-briefing-metrics {
+            grid-template-columns: 1fr;
+          }
+
+          .mission-confidence-metric {
+            width: 100%;
+          }
+
+          .todays-analysis-section .morning-impact-list {
             grid-template-columns: 1fr;
           }
 

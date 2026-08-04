@@ -18,7 +18,7 @@ export default function TodaysAnalysis({
     .slice(0, 5);
 
   return (
-    <section className="morning-briefing">
+    <section className="todays-analysis-section">
       <div className="vault-section-heading">
         <div>
           <span className="vault-eyebrow">Today&apos;s Analysis</span>
