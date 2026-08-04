@@ -337,9 +337,6 @@ export default function MissionControlWorkspace({
 
               <MemoryInsights />
 
-              {/* TODO Sprint 12.2: Move Product Vision, Catalogue Intelligence,
-                  Vision Index, Indexing Engine, Catalogue Readiness, Commercial
-                  Readiness and Catalogue Health to Catalogue. */}
             </section>
           </div>
 
