@@ -3,31 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import { requireOperatorRole } from "@/lib/auth/operators";
+import {
+  INITIAL_COMMERCIAL_ACTION_STATE,
+  type ProductCommercialActionState,
+} from "@/lib/commercial-action-state";
 import { parseCommercialInputs } from "@/lib/commercial-inputs";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-
-export type ProductCommercialActionState = {
-  status: "idle" | "success" | "error";
-  message: string;
-  commercialState: "trusted" | "untrusted" | null;
-  landedCostAvailable: boolean;
-  grossProfitAvailable: boolean;
-  marginAvailable: boolean;
-  returnAvailable: boolean;
-  missingRequirements: string[];
-};
-
-export const INITIAL_COMMERCIAL_ACTION_STATE:
-  ProductCommercialActionState = {
-    status: "idle",
-    message: "",
-    commercialState: null,
-    landedCostAvailable: false,
-    grossProfitAvailable: false,
-    marginAvailable: false,
-    returnAvailable: false,
-    missingRequirements: [],
-  };
 
 export async function updateCommercialCosts(
   _previousState: ProductCommercialActionState,

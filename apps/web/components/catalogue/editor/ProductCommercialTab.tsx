@@ -5,13 +5,11 @@ import {
   useState,
 } from "react";
 
-import {
-  INITIAL_COMMERCIAL_ACTION_STATE,
-  updateCommercialCosts,
-} from "@/app/catalogue/commercial-actions";
+import { updateCommercialCosts } from "@/app/catalogue/commercial-actions";
 
 import { CommercialReviewCard } from "@/components/catalogue/editor/commercial/CommercialReviewCard";
 import { useCommercialCalculator } from "@/components/catalogue/editor/commercial/useCommercialCalculator";
+import { INITIAL_COMMERCIAL_ACTION_STATE } from "@/lib/commercial-action-state";
 
 import type {
   CatalogueProduct,

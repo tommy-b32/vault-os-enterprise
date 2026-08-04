@@ -121,3 +121,28 @@ test("Advisor never converts a missing landed cost to zero", async () => {
   assert.match(advisor, /cost !== null && Number\.isFinite\(cost\) && cost > 0/);
   assert.match(advisor, /CommercialOpportunityInput \| null/);
 });
+
+test('changed "use server" modules export async actions only', async () => {
+  const serverModules = [
+    new URL("../app/catalogue/commercial-actions.ts", import.meta.url),
+  ];
+
+  for (const moduleUrl of serverModules) {
+    const source = await readFile(moduleUrl, "utf8");
+    const runtimeExports = [
+      ...source.matchAll(
+        /^export\s+(?!type\b|interface\b)(?:const|let|var|class|function)\s+([A-Za-z_$][\w$]*)/gm,
+      ),
+    ];
+    const invalidExports = runtimeExports
+      .filter((match) => !match[0].startsWith("export async function"))
+      .map((match) => match[1]);
+
+    assert.deepEqual(
+      invalidExports,
+      [],
+      `${moduleUrl.pathname} exports non-async runtime values`,
+    );
+    assert.match(source, /export async function updateCommercialCosts/);
+  }
+});
