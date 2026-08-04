@@ -2747,6 +2747,162 @@ input:focus-visible {
   margin-top: 14px;
 }
 
+.purchase-order-supplier-draft {
+  min-width: 0;
+  margin-top: 14px;
+  padding: 22px;
+  border: 1px solid var(--vault-border);
+  border-radius: 14px;
+  background: var(--vault-panel);
+  box-shadow: var(--vault-shadow);
+}
+
+.purchase-order-section-heading > div > p:last-child {
+  margin: 7px 0 0;
+  color: var(--vault-muted);
+  font-size: 11px;
+}
+
+.purchase-order-lines-table {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid var(--vault-border);
+  border-radius: 11px;
+}
+
+.purchase-order-lines-head,
+.purchase-order-editable-line {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.6fr)
+    minmax(105px, 0.65fr)
+    minmax(110px, 0.75fr)
+    minmax(110px, 0.75fr)
+    minmax(120px, 0.85fr)
+    minmax(85px, 0.55fr)
+    minmax(95px, 0.6fr);
+  gap: 12px;
+}
+
+.purchase-order-lines-head {
+  padding: 10px 13px;
+  color: var(--vault-muted);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.purchase-order-editable-line {
+  align-items: start;
+  padding: 15px 13px;
+  border-top: 1px solid var(--vault-border);
+}
+
+.purchase-order-product-cell strong,
+.purchase-order-editable-line > div > strong {
+  color: #f4f1e9;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.purchase-order-product-cell > span,
+.purchase-order-editable-line small {
+  display: block;
+  margin-top: 4px;
+  color: var(--vault-muted);
+  font-size: 9px;
+}
+
+.purchase-order-product-cell p {
+  max-width: 520px;
+  margin: 6px 0 0;
+  color: var(--vault-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.purchase-order-editable-line input {
+  width: 76px;
+  min-height: 34px;
+  margin-top: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--vault-border);
+  border-radius: 7px;
+  outline: 0;
+  color: #f4f1e9;
+  background: #090b0a;
+}
+
+.purchase-order-editable-line input:focus {
+  border-color: var(--vault-border-gold);
+}
+
+.purchase-order-editable-line .is-ready,
+.purchase-order-supplier-totals .is-ready {
+  color: var(--vault-success);
+}
+
+.purchase-order-editable-line .is-warning,
+.purchase-order-supplier-totals .is-warning {
+  color: var(--vault-warning);
+}
+
+.purchase-order-mobile-label {
+  display: none;
+}
+
+.purchase-order-supplier-totals {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.purchase-order-supplier-totals > div {
+  min-width: 190px;
+  padding: 13px;
+  border: 1px solid var(--vault-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.purchase-order-supplier-totals span {
+  display: block;
+  color: var(--vault-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.purchase-order-supplier-totals strong {
+  display: block;
+  margin-top: 6px;
+  color: #f4f1e9;
+  font-size: 13px;
+}
+
+.purchase-order-capital-guidance {
+  margin: 13px 0 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--vault-gold);
+  color: var(--vault-muted);
+  background: rgba(217, 173, 74, 0.04);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.purchase-order-readiness-empty {
+  max-width: none;
+  margin-top: 28px;
+}
+
+.purchase-order-readiness-empty h2 {
+  margin: 8px 0;
+  color: #f4f1e9;
+  font-size: clamp(24px, 3vw, 34px);
+}
+
 .purchase-order-wallet-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2820,6 +2976,27 @@ input:focus-visible {
   .purchase-order-layout {
     grid-template-columns: 1fr;
   }
+
+  .purchase-order-lines-head {
+    display: none;
+  }
+
+  .purchase-order-editable-line {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .purchase-order-product-cell {
+    grid-column: 1 / -1;
+  }
+
+  .purchase-order-mobile-label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--vault-muted);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
 }
 
 @media (max-width: 650px) {
@@ -2844,6 +3021,23 @@ input:focus-visible {
   .purchase-order-line,
   .purchase-order-line dl {
     grid-template-columns: 1fr;
+  }
+
+  .purchase-order-editable-line {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-order-product-cell {
+    grid-column: auto;
+  }
+
+  .purchase-order-supplier-totals {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .purchase-order-supplier-totals > div {
+    min-width: 0;
   }
 
   .purchase-order-actions a,
