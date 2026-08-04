@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 
-import BusinessFeed from "@/components/brain/workspace/BusinessFeed";
 import ExecutiveMemory from "@/components/brain/workspace/ExecutiveMemory";
 import MemoryInsights from "@/components/brain/workspace/MemoryInsights";
 import MissionCard from "@/components/brain/workspace/MissionCard";
 import MissionMetric from "@/components/brain/workspace/MissionMetric";
 import MorningBriefing from "@/components/brain/workspace/MorningBriefing";
 import PredictionInsights from "@/components/brain/workspace/PredictionInsights";
+import TodaysAnalysis from "@/components/brain/workspace/TodaysAnalysis";
 import VaultBrainStartup from "@/components/brain/workspace/VaultBrainStartup";
 import VaultIcon, {
   type VaultIconName,
@@ -28,10 +28,6 @@ import type {
   VaultBrainOperationalSnapshot,
 } from "@/lib/brain/types";
 
-import type {
-  BusinessActivityResult,
-} from "@/lib/business/BusinessActivityRepository";
-
 import {
   createMissionSummary,
   getHighestPriorityMission,
@@ -50,8 +46,6 @@ type MissionControlWorkspaceProps = {
   executiveMemory:
     ExecutiveMemoryResult;
 
-  businessActivity: BusinessActivityResult;
-
   title?: string;
   description?: string;
 };
@@ -63,7 +57,7 @@ const navigation = [
     href: "/",
   },
   {
-    label: "Missions",
+    label: "Vault Brain",
     icon: "missions",
     href: "/missions",
     active: true,
@@ -119,7 +113,6 @@ export default function MissionControlWorkspace({
   missions,
   snapshot,
   executiveMemory,
-  businessActivity,
   title = "Vault Brain",
   description =
     "...",
@@ -294,10 +287,7 @@ export default function MissionControlWorkspace({
                 }
               />
 
-              <BusinessFeed
-                activity={businessActivity}
-                generatedAt={snapshot.generatedAt}
-              />
+              <TodaysAnalysis analysis={executiveMemory} />
 
               <ExecutiveMemory
                 memory={

@@ -18,10 +18,6 @@ import {
 } from "@/lib/brain/OperationalMemoryRepository";
 
 import {
-  BusinessActivityRepository,
-} from "@/lib/business/BusinessActivityRepository";
-
-import {
   createMissions,
 } from "@/lib/missions/MissionEngine";
 
@@ -306,10 +302,6 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
 export default async function MissionsPage() {
   const inventorySnapshot =
     await getLiveInventorySnapshot();
-  const businessActivity =
-    await BusinessActivityRepository
-      .getRecentBusinessActivity(8);
-
   const inventoryMission =
     createInventoryMission(
       inventorySnapshot,
@@ -388,7 +380,6 @@ export default async function MissionsPage() {
       executiveMemory={
         executiveMemory
       }
-      businessActivity={businessActivity}
       title="Executive Intelligence"
       description={
         description
