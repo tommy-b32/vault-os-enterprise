@@ -9,6 +9,9 @@ import type {
   Opportunity,
 } from "@/lib/brain/OpportunityEngine";
 import { getCatalogueData } from "@/lib/catalogue";
+import type {
+  CatalogueProduct,
+} from "@/types/catalogue";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,16 @@ type DecisionBlocker = {
   title: string;
   description: string;
   count: number;
+  href: string;
+  action: string;
+};
+
+type ReadinessCheck = {
+  id: string;
+  title: string;
+  description: string;
+  state: "ready" | "attention" | "unavailable";
+  importance: "mandatory" | "supporting";
   href: string;
   action: string;
 };
@@ -91,17 +104,152 @@ function buildDecisionBlockers(
   return blockers.slice(0, 3);
 }
 
+function buildReadinessChecks(
+  products: CatalogueProduct[],
+  diagnostics: AdvisorDiagnostics,
+): ReadinessCheck[] {
+  const total = diagnostics.productsScanned;
+  const analysedProducts = products.filter(
+    (product) => product.product_vision !== null,
+  ).length;
+
+  return [
+    {
+      id: "configuration-trust",
+      title: "Trusted catalogue configuration",
+      description: `${diagnostics.configurationTrusted} of ${total} products have trusted configuration.`,
+      state:
+        diagnostics.configurationTrusted > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Review catalogue configuration",
+    },
+    {
+      id: "supplier-assignment",
+      title: "Supplier assignments",
+      description: `${diagnostics.supplierAssigned} of ${total} products have a supplier assigned.`,
+      state:
+        diagnostics.supplierAssigned > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Review supplier assignments",
+    },
+    {
+      id: "restock-configuration",
+      title: "Restock configuration",
+      description: `${diagnostics.restockEnabled} of ${total} products have restocking enabled.`,
+      state:
+        diagnostics.restockEnabled > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Review restock rules",
+    },
+    {
+      id: "reorder-trust",
+      title: "Trusted reorder rules",
+      description: `${diagnostics.trustedForReorder} of ${total} products are trusted for reorder decisions.`,
+      state:
+        diagnostics.trustedForReorder > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Complete reorder configuration",
+    },
+    {
+      id: "trusted-costs",
+      title: "Trusted commercial costs",
+      description: `${diagnostics.commercialCostTrusted} of ${total} products have trusted cost data.`,
+      state:
+        diagnostics.commercialCostTrusted > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Complete trusted product costs",
+    },
+    {
+      id: "commercial-data",
+      title: "Complete margin and return data",
+      description: `${diagnostics.commercialDataComplete} of ${total} products have complete commercial data.`,
+      state:
+        diagnostics.commercialDataComplete > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Review commercial data",
+    },
+    {
+      id: "margin-rule",
+      title: "Margin rule eligibility",
+      description: `${diagnostics.marginThresholdPassed} of ${total} products pass the existing margin rule.`,
+      state:
+        diagnostics.marginThresholdPassed > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Review margin readiness",
+    },
+    {
+      id: "return-rule",
+      title: "Return rule eligibility",
+      description: `${diagnostics.returnThresholdPassed} of ${total} products pass the existing return rule.`,
+      state:
+        diagnostics.returnThresholdPassed > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Review return readiness",
+    },
+    {
+      id: "inventory-eligibility",
+      title: "Inventory action signal",
+      description: `${diagnostics.lowStock} of ${total} products are within the existing low-stock range.`,
+      state:
+        diagnostics.lowStock > 0
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/inventory",
+      action: "Review inventory",
+    },
+    {
+      id: "product-intelligence",
+      title: "Product Intelligence coverage",
+      description: `${analysedProducts} of ${total} products have Product Intelligence.`,
+      state:
+        analysedProducts > 0
+          ? "ready"
+          : "attention",
+      importance: "supporting",
+      href: "/catalogue",
+      action: "Open Product Intelligence",
+    },
+  ];
+}
+
 async function loadAdvisorPage() {
   try {
     const { products } = await getCatalogueData();
 
     return {
       advisor: AdvisorEngine.analyse({ products }),
+      products,
       error: null,
     };
   } catch (error) {
     return {
       advisor: null,
+      products: null,
       error:
         error instanceof Error
           ? error.message
@@ -161,6 +309,19 @@ export default async function AdvisorPage() {
     analysis.ranked.length > 0
       ? `${analysis.averageConfidence}%`
       : "Not ready";
+  const readinessChecks = buildReadinessChecks(
+    result.products ?? [],
+    diagnostics,
+  );
+  const readyRequirements = readinessChecks.filter(
+    (check) => check.state === "ready",
+  ).length;
+  const attentionRequirements = readinessChecks.filter(
+    (check) => check.state === "attention",
+  ).length;
+  const nextSteps = readinessChecks
+    .filter((check) => check.state === "attention")
+    .slice(0, 3);
 
   return (
     <VaultAppShell
@@ -308,22 +469,90 @@ export default async function AdvisorPage() {
             </section>
           </>
         ) : (
-          <section className="advisor-empty-state">
-            <p className="vault-eyebrow">Decision readiness</p>
-            <h2>No commercial action is ready yet</h2>
-            <p>
-              Vault OS needs stronger catalogue, supplier or cost
-              data before it can recommend a trusted commercial
-              action.
-            </p>
-            <div>
-              <Link href="/catalogue">Review Catalogue</Link>
-              <Link href="/supplier-catalogue">
-                Open Supplier Catalogue
-              </Link>
-              <Link href="/commercial">
-                Open Commercial Intelligence
-              </Link>
+          <section className="advisor-readiness-panel">
+            <header className="advisor-readiness-header">
+              <div>
+                <p className="vault-eyebrow">COMMERCIAL READINESS</p>
+                <h2>Advisor is building decision confidence</h2>
+                <p>
+                  Complete the remaining catalogue, supplier and
+                  commercial requirements so Vault OS can recommend
+                  trusted actions.
+                </p>
+              </div>
+
+              <div className="advisor-readiness-summary">
+                <strong>
+                  {readyRequirements} of {readinessChecks.length}
+                </strong>
+                <span>requirements ready</span>
+                <small>
+                  {attentionRequirements} requiring attention
+                </small>
+              </div>
+            </header>
+
+            <div className="advisor-readiness-layout">
+              <div className="advisor-readiness-checklist">
+                <div className="advisor-readiness-subheading">
+                  <h3>Readiness checklist</h3>
+                  <span>Decision-enabling signals</span>
+                </div>
+
+                {readinessChecks.map((check) => (
+                  <article
+                    className={`advisor-readiness-check is-${check.state}`}
+                    key={check.id}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="advisor-readiness-icon"
+                    >
+                      {check.state === "ready" ? "✓" : "!"}
+                    </span>
+                    <div>
+                      <div className="advisor-readiness-check-heading">
+                        <h4>{check.title}</h4>
+                        <span>{check.importance}</span>
+                      </div>
+                      <p>{check.description}</p>
+                    </div>
+                    <div className="advisor-readiness-check-action">
+                      <span>{
+                        check.state === "ready"
+                          ? "Ready"
+                          : check.state === "unavailable"
+                            ? "Unavailable"
+                            : "Attention required"
+                      }</span>
+                      {check.state !== "ready" ? (
+                        <Link href={check.href}>{check.action} →</Link>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <aside className="advisor-next-steps">
+                <p className="vault-eyebrow">Next Best Steps</p>
+                <h3>Strengthen decision readiness</h3>
+
+                {nextSteps.length > 0 ? (
+                  <ol>
+                    {nextSteps.map((step) => (
+                      <li key={step.id}>
+                        <strong>{step.action}</strong>
+                        <p>{step.description}</p>
+                        <Link href={step.href}>Open workspace →</Link>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="advisor-next-steps-empty">
+                    All supported readiness requirements are available.
+                  </p>
+                )}
+              </aside>
             </div>
           </section>
         )}

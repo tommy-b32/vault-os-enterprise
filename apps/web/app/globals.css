@@ -2295,6 +2295,256 @@ input:focus-visible {
   text-decoration: none;
 }
 
+.advisor-readiness-panel {
+  width: 100%;
+  min-width: 0;
+  margin-top: 28px;
+  padding: 26px;
+  border: 1px solid var(--vault-border-gold);
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(217, 173, 74, 0.055), transparent 48%),
+    var(--vault-panel);
+  box-shadow: var(--vault-shadow);
+}
+
+.advisor-readiness-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  align-items: end;
+  gap: 28px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--vault-border);
+}
+
+.advisor-readiness-header h2 {
+  margin: 8px 0 9px;
+  color: #f4f1e9;
+  font-size: clamp(24px, 3vw, 36px);
+  letter-spacing: -0.035em;
+}
+
+.advisor-readiness-header > div:first-child > p:last-child {
+  max-width: 720px;
+  margin: 0;
+  color: var(--vault-muted);
+  line-height: 1.65;
+}
+
+.advisor-readiness-summary {
+  padding: 18px;
+  border: 1px solid var(--vault-border-gold);
+  border-radius: 12px;
+  background: rgba(217, 173, 74, 0.055);
+}
+
+.advisor-readiness-summary strong,
+.advisor-readiness-summary span,
+.advisor-readiness-summary small {
+  display: block;
+}
+
+.advisor-readiness-summary strong {
+  color: var(--vault-gold-bright);
+  font-size: 28px;
+}
+
+.advisor-readiness-summary span {
+  margin-top: 4px;
+  color: #f4f1e9;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.advisor-readiness-summary small {
+  margin-top: 7px;
+  color: var(--vault-muted);
+  font-size: 10px;
+}
+
+.advisor-readiness-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.34fr);
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.advisor-readiness-checklist {
+  min-width: 0;
+}
+
+.advisor-readiness-subheading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.advisor-readiness-subheading h3,
+.advisor-next-steps h3 {
+  margin: 0;
+  color: #f4f1e9;
+  font-size: 16px;
+}
+
+.advisor-readiness-subheading span {
+  color: var(--vault-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.advisor-readiness-check {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px 14px;
+  border-top: 1px solid var(--vault-border);
+}
+
+.advisor-readiness-check:first-of-type {
+  border-top: 0;
+}
+
+.advisor-readiness-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--vault-border);
+  border-radius: 50%;
+  color: var(--vault-muted);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.advisor-readiness-check.is-ready .advisor-readiness-icon {
+  border-color: rgba(82, 211, 120, 0.26);
+  color: #6fe291;
+  background: rgba(82, 211, 120, 0.07);
+}
+
+.advisor-readiness-check.is-attention .advisor-readiness-icon {
+  border-color: rgba(232, 181, 77, 0.26);
+  color: var(--vault-warning);
+  background: rgba(232, 181, 77, 0.07);
+}
+
+.advisor-readiness-check-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.advisor-readiness-check-heading h4 {
+  margin: 0;
+  color: #f4f1e9;
+  font-size: 13px;
+}
+
+.advisor-readiness-check-heading span {
+  padding: 3px 6px;
+  border: 1px solid var(--vault-border);
+  border-radius: 999px;
+  color: var(--vault-muted);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.advisor-readiness-check p {
+  margin: 5px 0 0;
+  color: var(--vault-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.advisor-readiness-check-action {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  text-align: right;
+}
+
+.advisor-readiness-check-action > span {
+  color: var(--vault-muted);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.advisor-readiness-check.is-ready
+  .advisor-readiness-check-action > span {
+  color: #6fe291;
+}
+
+.advisor-readiness-check.is-attention
+  .advisor-readiness-check-action > span {
+  color: var(--vault-warning);
+}
+
+.advisor-readiness-check-action a,
+.advisor-next-steps a {
+  color: var(--vault-gold-bright);
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.advisor-next-steps {
+  align-self: start;
+  padding: 19px;
+  border: 1px solid var(--vault-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.advisor-next-steps h3 {
+  margin-top: 7px;
+}
+
+.advisor-next-steps ol {
+  display: grid;
+  gap: 15px;
+  margin: 17px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: advisor-step;
+}
+
+.advisor-next-steps li {
+  padding-top: 14px;
+  border-top: 1px solid var(--vault-border);
+  counter-increment: advisor-step;
+}
+
+.advisor-next-steps li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.advisor-next-steps li strong::before {
+  margin-right: 7px;
+  color: var(--vault-gold-bright);
+  content: counter(advisor-step, decimal-leading-zero);
+}
+
+.advisor-next-steps li strong {
+  color: #f4f1e9;
+  font-size: 12px;
+}
+
+.advisor-next-steps li p,
+.advisor-next-steps-empty {
+  margin: 6px 0 9px;
+  color: var(--vault-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 @media (max-width: 900px) {
   .advisor-decision-page {
     padding: 24px;
@@ -2311,6 +2561,15 @@ input:focus-visible {
 
   .advisor-blocker-grid {
     grid-template-columns: 1fr;
+  }
+
+  .advisor-readiness-header,
+  .advisor-readiness-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .advisor-readiness-summary {
+    width: min(100%, 320px);
   }
 }
 
@@ -2342,6 +2601,32 @@ input:focus-visible {
   .advisor-empty-state a {
     width: 100%;
     text-align: center;
+  }
+
+  .advisor-readiness-panel {
+    padding: 19px;
+  }
+
+  .advisor-readiness-subheading,
+  .advisor-readiness-check-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .advisor-readiness-check {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .advisor-readiness-check-action {
+    grid-column: 2;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .advisor-readiness-check-action a {
+    display: block;
+    width: 100%;
+    padding: 8px 0;
   }
 }
 
