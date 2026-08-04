@@ -317,7 +317,7 @@ export const ShopifyTradingRepository = {
         net_revenue,
         customer_name
       `)
-      .order("shopify_created_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(safeLimit);
 
     if (error) {

@@ -14,6 +14,8 @@ import {
   type VaultBusinessSourceState,
 } from "@/lib/business/VaultBusinessState";
 
+export const dynamic = "force-dynamic";
+
 type IconName =
   | "home"
   | "inventory"
