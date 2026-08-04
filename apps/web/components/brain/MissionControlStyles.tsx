@@ -3,7 +3,9 @@ export default function MissionControlStyles() {
     <style>{`
         .mission-control-content {
           display: block;
-          max-width: 1380px;
+          max-width: none;
+          padding-right: 32px;
+          padding-left: 32px;
         }
 
         .mission-control-workspace {
@@ -726,6 +728,14 @@ export default function MissionControlStyles() {
 
           .mission-queue-grid {
             grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .mission-control-content {
+            padding-right: 18px;
+            padding-bottom: 100px;
+            padding-left: 18px;
           }
         }
 
