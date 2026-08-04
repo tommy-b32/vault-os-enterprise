@@ -62,9 +62,19 @@ const navigation = [
     href: "/orders",
   },
   {
+    label: "Purchase Orders",
+    icon: "orders",
+    href: "/purchase-orders",
+  },
+  {
     label: "Analytics",
     icon: "analytics",
     href: "/analytics",
+  },
+  {
+    label: "Commercial Intelligence",
+    icon: "analytics",
+    href: "/commercial",
   },
   {
     label: "Advisor",
@@ -560,6 +570,7 @@ export default function VaultAppShell({
                   .join(" ")}
                 href={item.href}
                 key={item.href}
+                aria-current={isActive ? "page" : undefined}
               >
                 <VaultIcon name={item.icon} />
                 <span>{item.label}</span>

@@ -88,9 +88,19 @@ const navigation = [
     href: "/orders",
   },
   {
+    label: "Purchase Orders",
+    icon: "orders",
+    href: "/purchase-orders",
+  },
+  {
     label: "Analytics",
     icon: "analytics",
     href: "/analytics",
+  },
+  {
+    label: "Commercial Intelligence",
+    icon: "analytics",
+    href: "/commercial",
   },
   {
     label: "Advisor",
@@ -154,6 +164,11 @@ export default function MissionControlWorkspace({
                 }`}
                 href={
                   item.href
+                }
+                aria-current={
+                  item.active
+                    ? "page"
+                    : undefined
                 }
                 key={
                   item.label
