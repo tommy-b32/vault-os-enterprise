@@ -343,7 +343,7 @@ export const ProductBrain = {
     inventory,
   }: ProductBrainBuildInput): ProductBrainProfile {
     return {
-      id: product.product_id,
+      id: product.style_id,
       name: product.product_name,
 
       productType:

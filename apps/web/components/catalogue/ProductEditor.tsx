@@ -74,7 +74,7 @@ export function ProductEditor({
 
   useEffect(() => {
     setActiveTab("business");
-  }, [product?.product_id]);
+  }, [product?.style_id]);
 
   if (!product) {
     return (
@@ -143,12 +143,12 @@ export function ProductEditor({
     <form
       action={saveAction}
       className="product-editor"
-      key={product.product_id}
+      key={product.style_id}
     >
       <input
-        name="product_id"
+        name="parent_product_id"
         type="hidden"
-        value={product.product_id}
+        value={product.parent_product_id}
       />
 
       <header className="product-editor-header">

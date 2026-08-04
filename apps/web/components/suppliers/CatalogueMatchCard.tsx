@@ -142,7 +142,7 @@ export function CatalogueMatchCard({
                   <article
                     key={
                       alternative.product
-                        .product_id
+                        .style_id
                     }
                   >
                     <strong>

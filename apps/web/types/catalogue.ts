@@ -125,7 +125,7 @@ export type ConfigurationState =
   | "service";
 
 export type CatalogueProduct = {
-  product_id: string;
+  style_id: string;
   parent_product_id: string;
   product_name: string;
 

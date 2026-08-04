@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requireOperatorRole } from "@/lib/auth/operators";
+import { parseParentProductId } from "@/lib/catalogue-identifiers";
 
 export type ProductSettingsActionState = {
   status: "idle" | "success" | "error";
@@ -11,13 +12,9 @@ export type ProductSettingsActionState = {
 };
 
 function getParentProductId(formData: FormData): string {
-  const value = formData.get("parent_product_id");
-
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error("A canonical parent product ID is required");
-  }
-
-  return value.trim();
+  return parseParentProductId(
+    formData.get("parent_product_id"),
+  );
 }
 
 function revalidateReorderApprovalRoutes() {
@@ -30,24 +27,24 @@ export async function approveProductForReorder(
   formData: FormData,
 ): Promise<void> {
   const operator = await requireOperatorRole("owner", "operator");
-  const productId = getParentProductId(formData);
+  const parentProductId = getParentProductId(formData);
 
   const [productResponse, configurationResponse, approvalResponse] =
     await Promise.all([
       supabaseAdmin
         .from("vault_products")
         .select("id")
-        .eq("id", productId)
+        .eq("id", parentProductId)
         .maybeSingle(),
       supabaseAdmin
         .from("vault_configuration_intelligence")
         .select("configuration_trusted, inventory_strategy, restock_enabled")
-        .eq("product_id", productId)
+        .eq("product_id", parentProductId)
         .maybeSingle(),
       supabaseAdmin
         .from("vault_product_reorder_approvals")
         .select("approval_state")
-        .eq("product_id", productId)
+        .eq("product_id", parentProductId)
         .maybeSingle(),
     ]);
 
@@ -83,7 +80,7 @@ export async function approveProductForReorder(
     .from("vault_product_reorder_approvals")
     .upsert(
       {
-        product_id: productId,
+        product_id: parentProductId,
         approval_state: "approved",
         approved_by: operator.id,
         approved_at: approvedAt,
@@ -104,18 +101,18 @@ export async function revokeProductReorderApproval(
   formData: FormData,
 ): Promise<void> {
   const operator = await requireOperatorRole("owner", "operator");
-  const productId = getParentProductId(formData);
+  const parentProductId = getParentProductId(formData);
 
   const [productResponse, approvalResponse] = await Promise.all([
     supabaseAdmin
       .from("vault_products")
       .select("id")
-      .eq("id", productId)
+      .eq("id", parentProductId)
       .maybeSingle(),
     supabaseAdmin
       .from("vault_product_reorder_approvals")
       .select("approval_state")
-      .eq("product_id", productId)
+      .eq("product_id", parentProductId)
       .maybeSingle(),
   ]);
 
@@ -139,7 +136,7 @@ export async function revokeProductReorderApproval(
       revoked_by: operator.id,
       revoked_at: new Date().toISOString(),
     })
-    .eq("product_id", productId)
+    .eq("product_id", parentProductId)
     .eq("approval_state", "approved");
 
   if (error) {
@@ -206,17 +203,21 @@ export async function updateProductSettings(
   formData: FormData,
 ): Promise<ProductSettingsActionState> {
   await requireOperatorRole("owner", "operator");
-  const productId = formData.get("product_id");
+  let parentProductId: string;
+
+  try {
+    parentProductId = getParentProductId(formData);
+  } catch {
+    return {
+      status: "error",
+      message:
+        "This product could not be saved because its canonical identifier is invalid.",
+    };
+  }
+
   const supplierId = formData.get("supplier_id");
   const strategy = formData.get("inventory_strategy");
   const packProfile = formData.get("pack_profile");
-
-  if (
-    typeof productId !== "string" ||
-    productId.trim().length === 0
-  ) {
-    throw new Error("A product ID is required");
-  }
 
   if (
     typeof strategy !== "string" ||
@@ -246,7 +247,7 @@ export async function updateProductSettings(
       : null;
 
   const payload = {
-    product_id: productId,
+    product_id: parentProductId,
     supplier_id: resolvedSupplierId,
     inventory_strategy: strategy,
     restock_enabled: restockEnabled,
@@ -270,6 +271,21 @@ export async function updateProductSettings(
       optionalText(formData.get("notes")),
   };
 
+  const { data: parentProduct, error: parentProductError } =
+    await supabaseAdmin
+      .from("vault_products")
+      .select("id")
+      .eq("id", parentProductId)
+      .maybeSingle();
+
+  if (parentProductError || !parentProduct) {
+    return {
+      status: "error",
+      message:
+        "This product could not be saved because its canonical record is unavailable.",
+    };
+  }
+
   const { error } = await supabaseAdmin
     .from("vault_product_settings")
     .upsert(payload, {
@@ -277,15 +293,17 @@ export async function updateProductSettings(
     });
 
   if (error) {
-  return {
-    status: "error",
-    message: `Unable to save product settings: ${error.message}`,
-  };
-}
+    return {
+      status: "error",
+      message: "Product settings could not be saved.",
+    };
+  }
 
   revalidatePath("/catalogue");
   revalidatePath("/");
   revalidatePath("/inventory");
+  revalidatePath("/advisor");
+  revalidatePath("/purchase-orders");
   return {
   status: "success",
   message: "Product settings saved successfully.",

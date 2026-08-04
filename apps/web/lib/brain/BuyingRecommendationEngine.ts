@@ -343,7 +343,7 @@ export const BuyingRecommendationEngine = {
 
     const baseResult = {
       productId:
-        product.product_id,
+        product.style_id,
 
       productName:
         product.product_name,

@@ -86,7 +86,7 @@ export default async function PurchaseOrdersPage() {
         (input) => input.productId === recommendation.id,
       );
       const product = catalogueResult.data.products.find(
-        (candidate) => candidate.product_id === recommendation.id,
+        (candidate) => candidate.style_id === recommendation.id,
       );
 
       if (!commercialInput || !product) continue;

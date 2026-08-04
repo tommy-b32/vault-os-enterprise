@@ -20,9 +20,9 @@ export function CatalogueWorkspace({
   suppliers,
 }: CatalogueWorkspaceProps) {
   const [search, setSearch] = useState("");
-  const [selectedProductId, setSelectedProductId] =
+  const [selectedStyleId, setSelectedStyleId] =
     useState<string | null>(
-      products[0]?.product_id ?? null,
+      products[0]?.style_id ?? null,
     );
 
   const filteredProducts = useMemo(() => {
@@ -51,7 +51,7 @@ export function CatalogueWorkspace({
   const selectedProduct =
     products.find(
       (product) =>
-        product.product_id === selectedProductId,
+        product.style_id === selectedStyleId,
     ) ?? null;
 
   function handleSearchChange(value: string) {
@@ -79,7 +79,7 @@ export function CatalogueWorkspace({
     });
 
     if (firstMatch) {
-      setSelectedProductId(firstMatch.product_id);
+      setSelectedStyleId(firstMatch.style_id);
     }
   }
 
@@ -95,9 +95,9 @@ export function CatalogueWorkspace({
 
         <div className="catalogue-master-scroll">
           <ProductList
-            onSelectProduct={setSelectedProductId}
+            onSelectStyle={setSelectedStyleId}
             products={filteredProducts}
-            selectedProductId={selectedProductId}
+            selectedStyleId={selectedStyleId}
           />
         </div>
       </aside>

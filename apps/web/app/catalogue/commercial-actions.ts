@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requireOperatorRole } from "@/lib/auth/operators";
+import { parseParentProductId } from "@/lib/catalogue-identifiers";
 
 export type ProductCommercialActionState = {
   status: "idle" | "success" | "error";
@@ -15,7 +16,19 @@ export async function updateCommercialCosts(
 ): Promise<ProductCommercialActionState> {
   await requireOperatorRole("owner", "operator");
 
-  const productId = String(formData.get("product_id"));
+  let parentProductId: string;
+
+  try {
+    parentProductId = parseParentProductId(
+      formData.get("parent_product_id"),
+    );
+  } catch {
+    return {
+      status: "error",
+      message:
+        "Commercial costs could not be saved because the canonical product identifier is invalid.",
+    };
+  }
 
   const packCost =
     Number(formData.get("pack_cost")) || null;
@@ -32,11 +45,26 @@ export async function updateCommercialCosts(
   const lastSupplierUpdate =
     String(formData.get("last_supplier_price_update")) || null;
 
+  const { data: parentProduct, error: parentProductError } =
+    await supabaseAdmin
+      .from("vault_products")
+      .select("id")
+      .eq("id", parentProductId)
+      .maybeSingle();
+
+  if (parentProductError || !parentProduct) {
+    return {
+      status: "error",
+      message:
+        "Commercial costs could not be saved because the canonical product record is unavailable.",
+    };
+  }
+
   const { error } =
     await supabaseAdmin
       .from("vault_product_costs")
       .upsert({
-        product_id: productId,
+        product_id: parentProductId,
 
         pack_cost: packCost,
 
@@ -53,11 +81,13 @@ export async function updateCommercialCosts(
   if (error) {
     return {
       status: "error",
-      message: error.message,
+      message: "Commercial costs could not be saved.",
     };
   }
 
   revalidatePath("/catalogue");
+  revalidatePath("/advisor");
+  revalidatePath("/purchase-orders");
 
   return {
     status: "success",

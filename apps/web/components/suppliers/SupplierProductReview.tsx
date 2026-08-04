@@ -743,7 +743,7 @@ const selectedGarment =
                 match.alternatives
               }
               selectedProductId={
-                selectedMatch?.product.product_id
+                selectedMatch?.product.style_id
               }
               onSelect={(alternative) => {
                 setSelectedMatch(
@@ -964,7 +964,7 @@ const selectedGarment =
           }}
           products={products}
           selectedProductId={
-            selectedMatch?.product.product_id
+            selectedMatch?.product.style_id
           }
         />
       ) : null}

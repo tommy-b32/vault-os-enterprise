@@ -122,7 +122,7 @@ function classifyItem(
         100,
 
       productId:
-        bestMatch.product.product_id,
+        bestMatch.product.style_id,
 
       productName:
         bestMatch.product.product_name,
@@ -157,7 +157,7 @@ function classifyItem(
         bestMatch.confidence,
 
       productId:
-        bestMatch.product.product_id,
+        bestMatch.product.style_id,
 
       productName:
         bestMatch.product.product_name,
@@ -187,7 +187,7 @@ function classifyItem(
         bestMatch.confidence,
 
       productId:
-        bestMatch.product.product_id,
+        bestMatch.product.style_id,
 
       productName:
         bestMatch.product.product_name,

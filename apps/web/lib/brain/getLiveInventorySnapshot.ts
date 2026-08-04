@@ -122,14 +122,14 @@ export async function getLiveInventorySnapshot(): Promise<LiveInventorySnapshot>
       catalogueProducts.map((product) => {
         const inventory =
           inventoryByProduct.get(
-            product.product_id,
+            product.style_id,
           );
 
         return {
           product,
           inventory: {
             productId:
-              product.product_id,
+              product.style_id,
 
             committedStock:
               inventory?.committed_stock ??

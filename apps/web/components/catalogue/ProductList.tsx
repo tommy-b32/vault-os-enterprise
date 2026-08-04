@@ -5,8 +5,8 @@ import type {
 
 type ProductListProps = {
   products: CatalogueProduct[];
-  selectedProductId: string | null;
-  onSelectProduct: (productId: string) => void;
+  selectedStyleId: string | null;
+  onSelectStyle: (styleId: string) => void;
 };
 
 const strategyLabels = {
@@ -32,8 +32,8 @@ const configurationLabels: Record<
 
 export function ProductList({
   products,
-  selectedProductId,
-  onSelectProduct,
+  selectedStyleId,
+  onSelectStyle,
 }: ProductListProps) {
   if (products.length === 0) {
     return (
@@ -47,7 +47,7 @@ export function ProductList({
     <div className="product-list">
       {products.map((product) => {
         const selected =
-          product.product_id === selectedProductId;
+          product.style_id === selectedStyleId;
 
         const configurationLabel =
           configurationLabels[
@@ -59,9 +59,9 @@ export function ProductList({
             className={`product-list-item ${
               selected ? "is-selected" : ""
             }`}
-            key={product.product_id}
+            key={product.style_id}
             onClick={() =>
-              onSelectProduct(product.product_id)
+              onSelectStyle(product.style_id)
             }
             type="button"
           >

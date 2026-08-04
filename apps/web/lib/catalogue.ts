@@ -570,11 +570,11 @@ export async function getCatalogueData():
     new Map(
       [...productVisionByProductId.entries()].map(
         ([
-          productId,
+          styleId,
           productVision,
         ]) => [
           normaliseProductVisionId(
-            productId,
+            styleId,
           ),
           productVision,
         ],
@@ -678,7 +678,7 @@ export async function getCatalogueData():
           [];
 
         return {
-          product_id:
+          style_id:
             style.style_id,
 
           parent_product_id:
@@ -870,7 +870,7 @@ export async function getCatalogueData():
           )
           .map(
             (product) =>
-              product.product_id,
+              product.style_id,
           );
 
       console.warn(

@@ -108,7 +108,7 @@ export function ManualProductSearch({
   const pendingProduct =
     products.find(
       (product) =>
-        product.product_id ===
+        product.style_id ===
         pendingProductId,
     ) ?? null;
 
@@ -193,7 +193,7 @@ export function ManualProductSearch({
             filteredProducts.map(
               (product) => {
                 const selected =
-                  product.product_id ===
+                  product.style_id ===
                   pendingProductId;
 
                 const brand =
@@ -218,10 +218,10 @@ export function ManualProductSearch({
                         ? "is-selected"
                         : ""
                     }
-                    key={product.product_id}
+                    key={product.style_id}
                     onClick={() =>
                       setPendingProductId(
-                        product.product_id,
+                        product.style_id,
                       )
                     }
                     type="button"

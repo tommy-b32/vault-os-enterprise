@@ -173,7 +173,7 @@ function buildCommercialInput(
     );
 
   return {
-    productId: product.product_id,
+    productId: product.style_id,
 
     productName:
       product.product_name,
@@ -311,7 +311,7 @@ export function analyseAdvisor({
     products
       .map((product) => ({
         productId:
-          product.product_id,
+          product.style_id,
 
         productName:
           product.product_name,

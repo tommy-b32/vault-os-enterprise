@@ -33,7 +33,7 @@ export function AlternativeMatchesCard({
         {alternatives.map(
           (alternative) => {
             const selected =
-              alternative.product.product_id ===
+              alternative.product.style_id ===
               selectedProductId;
 
             return (
@@ -45,7 +45,7 @@ export function AlternativeMatchesCard({
                     : ""
                 }
                 key={
-                  alternative.product.product_id
+                  alternative.product.style_id
                 }
                 onClick={() =>
                   onSelect?.(

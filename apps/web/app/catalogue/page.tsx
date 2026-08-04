@@ -322,7 +322,7 @@ export default async function CataloguePage() {
             {attentionProducts.length > 0 ? (
               <div className="catalogue-attention-list">
                 {attentionProducts.map((product) => (
-                  <article key={product.product_id}>
+                  <article key={product.style_id}>
                     <div>
                       <strong>{product.product_name}</strong>
                       <p>

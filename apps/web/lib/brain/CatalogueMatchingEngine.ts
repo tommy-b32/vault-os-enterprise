@@ -368,7 +368,7 @@ function buildMatch({
 
   if (
     card.linkedProductId ===
-    product.product_id
+    product.style_id
   ) {
     return {
       product,

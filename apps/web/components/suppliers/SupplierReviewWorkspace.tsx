@@ -155,7 +155,7 @@ function buildProductLink(
       item.card.internalReference,
 
     fabricVaultProductId:
-      bestMatch.product.product_id,
+      bestMatch.product.style_id,
 
     fabricVaultProductName:
       bestMatch.product.product_name,
@@ -205,7 +205,7 @@ function buildVaultMemoryInput(
       item.card.internalReference,
 
     fabricVaultProductId:
-      bestMatch.product.product_id,
+      bestMatch.product.style_id,
 
     fabricVaultProductName:
       bestMatch.product.product_name,
@@ -542,7 +542,7 @@ export function SupplierReviewWorkspace({
     const copilotRecommendation =
       BrainCopilotEngine.createRecommendation({
         productId:
-          bestMatch.product.product_id,
+          bestMatch.product.style_id,
 
         productName:
           bestMatch.product.product_name,
@@ -844,13 +844,13 @@ export function SupplierReviewWorkspace({
 
       BrainLearningRepository.save({
         id:
-          `${currentItem.card.id}:${selectedMatch.product.product_id}`,
+          `${currentItem.card.id}:${selectedMatch.product.style_id}`,
 
         createdAt:
           new Date().toISOString(),
 
         productId:
-          selectedMatch.product.product_id,
+          selectedMatch.product.style_id,
 
         supplierId:
           currentItem.card.supplierId ??

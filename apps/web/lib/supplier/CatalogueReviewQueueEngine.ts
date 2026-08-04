@@ -354,7 +354,7 @@ function buildRememberedMatch({
   const product =
     products.find(
       (candidate) =>
-        candidate.product_id ===
+        candidate.style_id ===
         memory.fabricVaultProductId,
     );
 
@@ -483,7 +483,7 @@ export const CatalogueReviewQueueEngine = {
             ? {
                 ...card,
                 linkedProductId:
-                  rememberedMatch.bestMatch.product.product_id,
+                  rememberedMatch.bestMatch.product.style_id,
                 linkedProductName:
                   rememberedMatch.bestMatch.product.product_name,
               }

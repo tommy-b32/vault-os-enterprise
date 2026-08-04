@@ -171,9 +171,9 @@ export function ProductCommercialTab({
       </div>
 
       <input
-        name="product_id"
+        name="parent_product_id"
         type="hidden"
-        value={product.product_id}
+        value={product.parent_product_id}
       />
 
       <div className="product-editor-grid">
