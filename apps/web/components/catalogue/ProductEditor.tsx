@@ -73,6 +73,8 @@ export function ProductEditor({
     useState<ProductEditorTab>("business");
 
   useEffect(() => {
+    // Style changes intentionally return the editor to its default workspace.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveTab("business");
   }, [product?.style_id]);
 
@@ -140,17 +142,10 @@ export function ProductEditor({
   const nextActions = getNextActions(product);
 
   return (
-    <form
-      action={saveAction}
+    <div
       className="product-editor"
       key={product.style_id}
     >
-      <input
-        name="parent_product_id"
-        type="hidden"
-        value={product.parent_product_id}
-      />
-
       <header className="product-editor-header">
         <div>
           <p className="vault-eyebrow">
@@ -344,14 +339,46 @@ export function ProductEditor({
       />
 
       {activeTab === "business" && (
-        <ProductBusinessTab
-          product={product}
-          suppliers={suppliers}
-        />
+        <form action={saveAction}>
+          <input
+            name="parent_product_id"
+            type="hidden"
+            value={product.parent_product_id}
+          />
+
+          <ProductBusinessTab
+            product={product}
+            suppliers={suppliers}
+          />
+
+          <footer className="product-editor-footer">
+            <div>
+              <strong>Vault business memory</strong>
+
+              <p>
+                Saving will update Inventory Intelligence, supplier
+                planning and future Vault Advisor recommendations.
+              </p>
+            </div>
+
+            <ProductSaveButton />
+          </footer>
+
+          {saveState.status !== "idle" && (
+            <p
+              aria-live="polite"
+              className={`product-save-message is-${saveState.status}`}
+            >
+              {saveState.status === "success" ? "Saved: " : "Attention: "}
+              {saveState.message}
+            </p>
+          )}
+        </form>
       )}
 
       {activeTab === "commercial" && (
         <ProductCommercialTab
+          key={product.style_id}
           product={product}
         />
       )}
@@ -402,35 +429,6 @@ export function ProductEditor({
         </section>
       )}
 
-      {activeTab === "business" && (
-        <>
-          <footer className="product-editor-footer">
-            <div>
-              <strong>Vault business memory</strong>
-
-              <p>
-                Saving will update Inventory
-                Intelligence, supplier planning and
-                future Vault Advisor recommendations.
-              </p>
-            </div>
-
-            <ProductSaveButton />
-          </footer>
-
-          {saveState.status !== "idle" && (
-            <p
-              aria-live="polite"
-              className={`product-save-message is-${saveState.status}`}
-            >
-              {saveState.status === "success"
-                ? "✓ "
-                : "⚠ "}
-              {saveState.message}
-            </p>
-          )}
-        </>
-      )}
-    </form>
+    </div>
   );
 }

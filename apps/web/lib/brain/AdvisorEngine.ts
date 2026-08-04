@@ -24,6 +24,7 @@ export type AdvisorDiagnostics = {
   trustedForReorder: number;
   reorderApprovalMissing: number;
   commercialCostTrusted: number;
+  invalidOrMissingCommercialCost: number;
 
   commercialDataComplete: number;
   commercialDataMissing: number;
@@ -43,6 +44,7 @@ export type AdvisorExclusionReason =
   | "reorder_approval_missing"
   | "reorder_untrusted"
   | "commercial_cost_untrusted"
+  | "invalid_or_missing_commercial_cost"
   | "commercial_data_missing"
   | "stock_above_threshold"
   | "margin_below_threshold"
@@ -88,6 +90,12 @@ function hasCommercialData(
   );
 }
 
+function hasValidCanonicalCost(product: CatalogueProduct): boolean {
+  const cost = product.commercial_cost.landed_cost_per_pack_gbp;
+
+  return cost !== null && Number.isFinite(cost) && cost > 0;
+}
+
 function getExclusionReasons(
   product: CatalogueProduct,
 ): AdvisorExclusionReason[] {
@@ -123,6 +131,10 @@ function getExclusionReasons(
 
   if (!commercial.commercial_cost_trusted) {
     reasons.push("commercial_cost_untrusted");
+  }
+
+  if (!hasValidCanonicalCost(product)) {
+    reasons.push("invalid_or_missing_commercial_cost");
   }
 
   if (!hasCommercialData(product)) {
@@ -162,9 +174,17 @@ function getExclusionReasons(
 
 function buildCommercialInput(
   product: CatalogueProduct,
-): CommercialOpportunityInput {
+): CommercialOpportunityInput | null {
   const commercial =
     product.commercial_cost;
+  const purchaseCost = commercial.landed_cost_per_pack_gbp;
+
+  if (
+    !hasValidCanonicalCost(product) ||
+    purchaseCost === null
+  ) {
+    return null;
+  }
 
   const recommendedOrderQuantity =
     Math.max(
@@ -198,9 +218,7 @@ function buildCommercialInput(
 
     recommendedOrderQuantity,
 
-    purchaseCost:
-      commercial
-        .landed_cost_per_pack_gbp ?? 0,
+    purchaseCost,
   };
 }
 
@@ -258,6 +276,11 @@ function buildDiagnostics(
         (product) =>
           product.commercial_cost
             .commercial_cost_trusted,
+      ).length,
+
+    invalidOrMissingCommercialCost:
+      products.filter(
+        (product) => !hasValidCanonicalCost(product),
       ).length,
 
     commercialDataComplete,
@@ -332,9 +355,12 @@ export function analyseAdvisor({
     );
 
   const commercialInputs =
-    qualifyingProducts.map(
-      buildCommercialInput,
-    );
+    qualifyingProducts
+      .map(buildCommercialInput)
+      .filter(
+        (input): input is CommercialOpportunityInput =>
+          input !== null,
+      );
 
   const opportunities =
     OpportunityCollector.collect({

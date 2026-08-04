@@ -81,6 +81,13 @@ export function AdvisorDiagnostics({
         />
 
         <AdvisorStat
+          label="Invalid/missing landed cost"
+          value={
+            diagnostics.invalidOrMissingCommercialCost
+          }
+        />
+
+        <AdvisorStat
           label="Low stock"
           value={diagnostics.lowStock}
         />

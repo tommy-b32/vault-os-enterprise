@@ -1,8 +1,14 @@
 "use client";
 
 import {
+  useActionState,
   useState,
 } from "react";
+
+import {
+  INITIAL_COMMERCIAL_ACTION_STATE,
+  updateCommercialCosts,
+} from "@/app/catalogue/commercial-actions";
 
 import { CommercialReviewCard } from "@/components/catalogue/editor/commercial/CommercialReviewCard";
 import { useCommercialCalculator } from "@/components/catalogue/editor/commercial/useCommercialCalculator";
@@ -77,6 +83,12 @@ export function ProductCommercialTab({
   product,
 }: ProductCommercialTabProps) {
   const commercial = product.commercial_cost;
+  const [saveState, saveAction, isSaving] = useActionState(
+    updateCommercialCosts,
+    INITIAL_COMMERCIAL_ACTION_STATE,
+  );
+  const [hasUnsavedChanges, setHasUnsavedChanges] =
+    useState(false);
 
   const [currency, setCurrency] =
     useState(commercial.currency ?? "GBP");
@@ -154,7 +166,11 @@ export function ProductCommercialTab({
     Number(averageSellingPrice) > 0;
 
   return (
-    <section className="product-editor-section commercial-editor">
+    <form
+      action={saveAction}
+      className="product-editor-section commercial-editor"
+      onChange={() => setHasUnsavedChanges(true)}
+    >
       <div className="product-editor-section-heading">
         <div>
           <p className="vault-eyebrow">
@@ -174,6 +190,11 @@ export function ProductCommercialTab({
         name="parent_product_id"
         type="hidden"
         value={product.parent_product_id}
+      />
+      <input
+        name="supplier_id"
+        type="hidden"
+        value={product.supplier_id ?? ""}
       />
 
       <div className="product-editor-grid">
@@ -277,16 +298,17 @@ export function ProductCommercialTab({
           <span>Units per pack</span>
 
           <input
-            disabled
+            defaultValue={commercial.units_per_pack ?? ""}
+            min="1"
+            name="units_per_pack"
+            placeholder="Required for unit economics"
+            step="1"
             type="number"
-            value={
-              commercial.units_per_pack ?? ""
-            }
           />
 
           <small>
-            Derived from the saved pack profile where
-            possible.
+            Pre-filled from a recognised pack profile; enter the
+            canonical pack size when no reliable profile value exists.
           </small>
         </label>
 
@@ -322,6 +344,11 @@ export function ProductCommercialTab({
             value={lastSupplierUpdate}
           />
         </label>
+      </div>
+
+      <div className="commercial-metrics-heading">
+        <span>Unsaved calculation preview</span>
+        <small>Canonical values are recalculated by the database after save.</small>
       </div>
 
       <div className="commercial-calculation-grid">
@@ -435,6 +462,113 @@ export function ProductCommercialTab({
           commercial.units_per_pack
         }
       />
-    </section>
+
+      <section className="commercial-canonical-metrics">
+        <div className="commercial-metrics-heading">
+          <span>Canonical saved metrics</span>
+          <strong>
+            {commercial.commercial_cost_trusted
+              ? "Trusted"
+              : "Incomplete"}
+          </strong>
+        </div>
+
+        <div className="commercial-calculation-grid">
+          <article>
+            <span>Landed pack cost GBP</span>
+            <strong>
+              {commercial.landed_cost_per_pack_gbp === null
+                ? "Unavailable"
+                : formatCurrency(
+                    commercial.landed_cost_per_pack_gbp,
+                    "GBP",
+                  )}
+            </strong>
+          </article>
+          <article>
+            <span>Landed unit cost</span>
+            <strong>
+              {commercial.landed_cost_per_unit === null
+                ? "Unavailable"
+                : formatCurrency(commercial.landed_cost_per_unit, "GBP")}
+            </strong>
+          </article>
+          <article>
+            <span>Gross profit per unit</span>
+            <strong>
+              {commercial.estimated_gross_profit_per_unit === null
+                ? "Unavailable"
+                : formatCurrency(
+                    commercial.estimated_gross_profit_per_unit,
+                    "GBP",
+                  )}
+            </strong>
+          </article>
+          <article>
+            <span>Gross margin</span>
+            <strong>
+              {commercial.estimated_margin_percent === null
+                ? "Unavailable"
+                : `${commercial.estimated_margin_percent.toFixed(1)}%`}
+            </strong>
+          </article>
+          <article>
+            <span>Return on capital</span>
+            <strong>
+              {commercial.estimated_return_on_pack_capital_percent === null
+                ? "Unavailable"
+                : `${commercial.estimated_return_on_pack_capital_percent.toFixed(
+                    1,
+                  )}%`}
+            </strong>
+          </article>
+        </div>
+
+        {commercial.missing_commercial_requirements.length > 0 ? (
+          <p>
+            Missing: {commercial.missing_commercial_requirements
+              .map((requirement) => requirement.replaceAll("_", " "))
+              .join(", ")}.
+          </p>
+        ) : null}
+      </section>
+
+      <footer className="commercial-save-footer">
+        <div>
+          <strong>
+            {isSaving
+              ? "Saving commercial data"
+              : saveState.status === "error"
+                ? "Validation error"
+                : saveState.status === "success"
+                  ? saveState.commercialState === "trusted"
+                    ? "Saved and trusted"
+                    : "Saved but incomplete"
+                  : hasUnsavedChanges
+                    ? "Unsaved changes"
+                    : "Canonical data unchanged"}
+          </strong>
+          <p aria-live="polite">
+            {saveState.message ||
+              "Enter real supplier costs and selling data, then save."}
+          </p>
+          {saveState.missingRequirements.length > 0 ? (
+            <small>
+              Missing: {saveState.missingRequirements
+                .map((requirement) => requirement.replaceAll("_", " "))
+                .join(", ")}
+            </small>
+          ) : null}
+        </div>
+
+        <button
+          disabled={isSaving}
+          onClick={() => setHasUnsavedChanges(false)}
+          type="submit"
+        >
+          {isSaving ? "Saving…" : "Save commercial data"}
+        </button>
+      </footer>
+    </form>
   );
 }
