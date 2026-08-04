@@ -2331,6 +2331,15 @@ input:focus-visible {
   line-height: 1.65;
 }
 
+.advisor-readiness-executive-copy {
+  max-width: 760px;
+  margin: 0 0 7px;
+  color: #d7d3ca;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
 .advisor-readiness-summary {
   padding: 18px;
   border: 1px solid var(--vault-border-gold);
@@ -2452,6 +2461,7 @@ input:focus-visible {
   color: var(--vault-muted);
   font-size: 8px;
   font-weight: 700;
+  opacity: 0.7;
   text-transform: uppercase;
 }
 

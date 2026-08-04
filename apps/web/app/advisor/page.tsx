@@ -50,6 +50,32 @@ function formatLabel(value: string): string {
     );
 }
 
+function formatCoverage(
+  ready: number,
+  total: number,
+  capability: string,
+): string {
+  const remaining = Math.max(0, total - ready);
+
+  if (total > 0 && ready === total) {
+    return `All ${total} products ${capability}.`;
+  }
+
+  if (ready === 0) {
+    return `No products currently ${capability}.`;
+  }
+
+  return `${ready} products ready · ${remaining} need attention.`;
+}
+
+function getDestinationLabel(href: string): string {
+  return href === "/inventory"
+    ? "Open Inventory"
+    : href === "/commercial"
+      ? "Open Commercial Intelligence"
+      : "Open Catalogue";
+}
+
 function buildDecisionBlockers(
   diagnostics: AdvisorDiagnostics,
 ): DecisionBlocker[] {
@@ -116,104 +142,139 @@ function buildReadinessChecks(
   return [
     {
       id: "configuration-trust",
-      title: "Trusted catalogue configuration",
-      description: `${diagnostics.configurationTrusted} of ${total} products have trusted configuration.`,
+      title: "Catalogue trust",
+      description: formatCoverage(
+        diagnostics.configurationTrusted,
+        total,
+        "have enough trusted catalogue data for commercial analysis",
+      ),
       state:
         diagnostics.configurationTrusted > 0
           ? "ready"
           : "attention",
       importance: "mandatory",
       href: "/catalogue",
-      action: "Review catalogue configuration",
+      action: "Complete catalogue data",
     },
     {
       id: "supplier-assignment",
-      title: "Supplier assignments",
-      description: `${diagnostics.supplierAssigned} of ${total} products have a supplier assigned.`,
+      title: "Supplier coverage",
+      description: formatCoverage(
+        diagnostics.supplierAssigned,
+        total,
+        "have a supplier assigned",
+      ),
       state:
         diagnostics.supplierAssigned > 0
           ? "ready"
           : "attention",
       importance: "mandatory",
       href: "/catalogue",
-      action: "Review supplier assignments",
+      action: "Complete supplier coverage",
     },
     {
       id: "restock-configuration",
-      title: "Restock configuration",
-      description: `${diagnostics.restockEnabled} of ${total} products have restocking enabled.`,
+      title: "Restock readiness",
+      description: formatCoverage(
+        diagnostics.restockEnabled,
+        total,
+        "have restocking enabled",
+      ),
       state:
         diagnostics.restockEnabled > 0
           ? "ready"
           : "attention",
       importance: "mandatory",
       href: "/catalogue",
-      action: "Review restock rules",
+      action: "Complete restock rules",
     },
     {
       id: "reorder-trust",
-      title: "Trusted reorder rules",
-      description: `${diagnostics.trustedForReorder} of ${total} products are trusted for reorder decisions.`,
+      title: "Buying rules",
+      description: formatCoverage(
+        diagnostics.trustedForReorder,
+        total,
+        "are trusted for reorder decisions",
+      ),
       state:
         diagnostics.trustedForReorder > 0
           ? "ready"
           : "attention",
       importance: "mandatory",
       href: "/catalogue",
-      action: "Complete reorder configuration",
+      action: "Complete buying rules",
     },
     {
       id: "trusted-costs",
-      title: "Trusted commercial costs",
-      description: `${diagnostics.commercialCostTrusted} of ${total} products have trusted cost data.`,
+      title: "Commercial costs",
+      description: formatCoverage(
+        diagnostics.commercialCostTrusted,
+        total,
+        "have trusted cost information",
+      ),
       state:
         diagnostics.commercialCostTrusted > 0
           ? "ready"
           : "attention",
       importance: "mandatory",
       href: "/catalogue",
-      action: "Complete trusted product costs",
+      action: "Complete commercial costs",
     },
     {
       id: "commercial-data",
-      title: "Complete margin and return data",
-      description: `${diagnostics.commercialDataComplete} of ${total} products have complete commercial data.`,
+      title: "Profit and return data",
+      description: formatCoverage(
+        diagnostics.commercialDataComplete,
+        total,
+        "have complete margin and return data",
+      ),
       state:
         diagnostics.commercialDataComplete > 0
           ? "ready"
           : "attention",
       importance: "mandatory",
       href: "/catalogue",
-      action: "Review commercial data",
+      action: "Complete commercial data",
     },
     {
       id: "margin-rule",
-      title: "Margin rule eligibility",
-      description: `${diagnostics.marginThresholdPassed} of ${total} products pass the existing margin rule.`,
+      title: "Margin readiness",
+      description: formatCoverage(
+        diagnostics.marginThresholdPassed,
+        total,
+        "pass the existing margin rule",
+      ),
       state:
         diagnostics.marginThresholdPassed > 0
           ? "ready"
           : "attention",
       importance: "mandatory",
       href: "/catalogue",
-      action: "Review margin readiness",
+      action: "Complete margin rules",
     },
     {
       id: "return-rule",
-      title: "Return rule eligibility",
-      description: `${diagnostics.returnThresholdPassed} of ${total} products pass the existing return rule.`,
+      title: "Return readiness",
+      description: formatCoverage(
+        diagnostics.returnThresholdPassed,
+        total,
+        "pass the existing return rule",
+      ),
       state:
         diagnostics.returnThresholdPassed > 0
           ? "ready"
           : "attention",
       importance: "mandatory",
       href: "/catalogue",
-      action: "Review return readiness",
+      action: "Complete return rules",
     },
     {
       id: "inventory-eligibility",
-      title: "Inventory action signal",
-      description: `${diagnostics.lowStock} of ${total} products are within the existing low-stock range.`,
+      title: "Inventory opportunity",
+      description:
+        diagnostics.lowStock > 0
+          ? `${diagnostics.lowStock} products currently meet the existing low-stock condition.`
+          : "No products currently meet the existing low-stock condition.",
       state:
         diagnostics.lowStock > 0
           ? "ready"
@@ -224,15 +285,19 @@ function buildReadinessChecks(
     },
     {
       id: "product-intelligence",
-      title: "Product Intelligence coverage",
-      description: `${analysedProducts} of ${total} products have Product Intelligence.`,
+      title: "Product Intelligence",
+      description: formatCoverage(
+        analysedProducts,
+        total,
+        "have completed Product Intelligence analysis",
+      ),
       state:
         analysedProducts > 0
           ? "ready"
           : "attention",
       importance: "supporting",
       href: "/catalogue",
-      action: "Open Product Intelligence",
+      action: "Complete Product Intelligence",
     },
   ];
 }
@@ -474,6 +539,12 @@ export default async function AdvisorPage() {
               <div>
                 <p className="vault-eyebrow">COMMERCIAL READINESS</p>
                 <h2>Advisor is building decision confidence</h2>
+                <p className="advisor-readiness-executive-copy">
+                  Vault OS currently trusts {readyRequirements} of the{" "}
+                  {readinessChecks.length} commercial readiness signals
+                  assessed while it builds confidence for a trusted
+                  action.
+                </p>
                 <p>
                   Complete the remaining catalogue, supplier and
                   commercial requirements so Vault OS can recommend
@@ -495,7 +566,7 @@ export default async function AdvisorPage() {
             <div className="advisor-readiness-layout">
               <div className="advisor-readiness-checklist">
                 <div className="advisor-readiness-subheading">
-                  <h3>Readiness checklist</h3>
+                  <h3>Decision Confidence Assessment</h3>
                   <span>Decision-enabling signals</span>
                 </div>
 
@@ -543,7 +614,9 @@ export default async function AdvisorPage() {
                       <li key={step.id}>
                         <strong>{step.action}</strong>
                         <p>{step.description}</p>
-                        <Link href={step.href}>Open workspace →</Link>
+                        <Link href={step.href}>
+                          {getDestinationLabel(step.href)} →
+                        </Link>
                       </li>
                     ))}
                   </ol>
