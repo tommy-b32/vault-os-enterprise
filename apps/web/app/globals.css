@@ -2436,6 +2436,55 @@ input:focus-visible {
   background: rgba(82, 211, 120, 0.07);
 }
 
+.advisor-readiness-check.is-operational .advisor-readiness-icon {
+  color: var(--vault-success);
+  border-color: color-mix(in srgb, var(--vault-success) 38%, transparent);
+}
+
+.advisor-readiness-check.is-partial .advisor-readiness-icon {
+  color: var(--vault-warning);
+  border-color: color-mix(in srgb, var(--vault-warning) 38%, transparent);
+}
+
+.advisor-candidate-summary {
+  display: grid;
+  gap: 18px;
+  margin: 22px 0;
+  padding: 22px;
+  border: 1px solid var(--vault-border);
+  border-radius: 18px;
+  background: var(--vault-panel-soft);
+}
+
+.advisor-candidate-summary dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.advisor-candidate-summary dl div {
+  display: grid;
+  gap: 4px;
+}
+
+.advisor-candidate-summary dt,
+.advisor-candidate-summary p {
+  color: var(--vault-muted);
+}
+
+.advisor-candidate-summary dd {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+}
+
+@media (max-width: 760px) {
+  .advisor-candidate-summary dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .advisor-readiness-check.is-attention .advisor-readiness-icon {
   border-color: rgba(232, 181, 77, 0.26);
   color: var(--vault-warning);
@@ -2489,6 +2538,16 @@ input:focus-visible {
 .advisor-readiness-check.is-ready
   .advisor-readiness-check-action > span {
   color: #6fe291;
+}
+
+.advisor-readiness-check.is-operational
+  .advisor-readiness-check-action > span {
+  color: var(--vault-success);
+}
+
+.advisor-readiness-check.is-partial
+  .advisor-readiness-check-action > span {
+  color: var(--vault-warning);
 }
 
 .advisor-readiness-check.is-attention

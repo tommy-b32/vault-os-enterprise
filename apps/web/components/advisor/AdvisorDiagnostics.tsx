@@ -88,6 +88,26 @@ export function AdvisorDiagnostics({
         />
 
         <AdvisorStat
+          label="Trusted replenishment inputs"
+          value={diagnostics.trustedReplenishmentInputs}
+        />
+
+        <AdvisorStat
+          label="Trusted positive quantity"
+          value={diagnostics.trustedQuantityProduced}
+        />
+
+        <AdvisorStat
+          label="Stale inventory"
+          value={diagnostics.staleInventory}
+        />
+
+        <AdvisorStat
+          label="Supplier minimum unknown"
+          value={diagnostics.supplierMinimumUnknown}
+        />
+
+        <AdvisorStat
           label="Low stock"
           value={diagnostics.lowStock}
         />

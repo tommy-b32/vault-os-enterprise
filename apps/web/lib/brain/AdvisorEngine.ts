@@ -39,6 +39,11 @@ export type AdvisorDiagnostics = {
   trustedQuantityProduced: number;
   noReorderNeeded: number;
   insufficientQuantityData: number;
+  staleInventory: number;
+  supplierMinimumUnknown: number;
+  targetStockDaysMissing: number;
+  supplierLeadTimeMissing: number;
+  supplierMoqMissing: number;
 
   commercialDataComplete: number;
   commercialDataMissing: number;
@@ -365,6 +370,31 @@ function buildDiagnostics(
     ).length,
     insufficientQuantityData: buyingResults.filter(
       (result) => result.status === "insufficient_data",
+    ).length,
+    staleInventory: products.filter((product) =>
+      product.replenishment_intelligence.missingRequirements.includes(
+        "inventory_stale",
+      ),
+    ).length,
+    supplierMinimumUnknown: products.filter((product) =>
+      product.replenishment_intelligence.missingRequirements.includes(
+        "supplier_minimum_order_unknown",
+      ),
+    ).length,
+    targetStockDaysMissing: products.filter((product) =>
+      product.replenishment_intelligence.missingRequirements.includes(
+        "target_stock_days_missing",
+      ),
+    ).length,
+    supplierLeadTimeMissing: products.filter((product) =>
+      product.replenishment_intelligence.missingRequirements.includes(
+        "supplier_lead_time_missing",
+      ),
+    ).length,
+    supplierMoqMissing: products.filter((product) =>
+      product.replenishment_intelligence.missingRequirements.includes(
+        "supplier_moq_missing",
+      ),
     ).length,
 
     commercialDataComplete,

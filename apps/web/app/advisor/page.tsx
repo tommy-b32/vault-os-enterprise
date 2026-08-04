@@ -28,11 +28,21 @@ type ReadinessCheck = {
   id: string;
   title: string;
   description: string;
-  state: "ready" | "attention" | "unavailable";
+  state: "operational" | "partial" | "attention" | "unavailable";
   importance: "mandatory" | "supporting";
   href: string;
   action: string;
 };
+
+function coverageState(
+  ready: number,
+  total: number,
+): ReadinessCheck["state"] {
+  if (total === 0) return "unavailable";
+  if (ready === total) return "operational";
+  if (ready > 0) return "partial";
+  return "attention";
+}
 
 function formatGbp(value: number): string {
   return new Intl.NumberFormat("en-GB", {
@@ -90,6 +100,42 @@ function buildDecisionBlockers(
     diagnostics.productsScanned -
       diagnostics.trustedForReorder,
   );
+
+  if (diagnostics.staleInventory > 0) {
+    blockers.push({
+      id: "inventory-stale",
+      title: "Inventory intelligence is stale",
+      description:
+        "Trusted quantities remain blocked until canonical inventory is synchronized within the freshness policy.",
+      count: diagnostics.staleInventory,
+      href: "/inventory",
+      action: "Refresh inventory intelligence",
+    });
+  }
+
+  if (diagnostics.supplierMinimumUnknown > 0) {
+    blockers.push({
+      id: "supplier-minimum",
+      title: "Supplier minimum-order rules are unresolved",
+      description:
+        "Unknown supplier minimums remain blocking and are not treated as satisfied.",
+      count: diagnostics.supplierMinimumUnknown,
+      href: "/commercial",
+      action: "Set supplier minimum-order rules",
+    });
+  }
+
+  if (diagnostics.targetStockDaysMissing > 0) {
+    blockers.push({
+      id: "target-stock-days",
+      title: "Target stock days are incomplete",
+      description:
+        "The quantity engine requires canonical target stock days before calculating a trusted reorder.",
+      count: diagnostics.targetStockDaysMissing,
+      href: "/catalogue",
+      action: "Complete target stock days",
+    });
+  }
 
   if (diagnostics.reorderApprovalMissing > 0) {
     blockers.push({
@@ -160,10 +206,7 @@ function buildReadinessChecks(
         total,
         "have enough trusted catalogue data for commercial analysis",
       ),
-      state:
-        diagnostics.configurationTrusted > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.configurationTrusted, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete catalogue data",
@@ -176,10 +219,7 @@ function buildReadinessChecks(
         total,
         "have a supplier assigned",
       ),
-      state:
-        diagnostics.supplierAssigned > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.supplierAssigned, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete supplier coverage",
@@ -192,10 +232,7 @@ function buildReadinessChecks(
         total,
         "have restocking enabled",
       ),
-      state:
-        diagnostics.restockEnabled > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.restockEnabled, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete restock rules",
@@ -208,10 +245,7 @@ function buildReadinessChecks(
         total,
         "have explicit operator approval for reorder",
       ),
-      state:
-        diagnostics.reorderApprovalMissing < total
-          ? "ready"
-          : "attention",
+      state: coverageState(total - diagnostics.reorderApprovalMissing, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Review reorder approvals",
@@ -224,10 +258,7 @@ function buildReadinessChecks(
         total,
         "are trusted for reorder decisions",
       ),
-      state:
-        diagnostics.trustedForReorder > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.trustedForReorder, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete buying rules",
@@ -240,10 +271,7 @@ function buildReadinessChecks(
         total,
         "have trusted cost information",
       ),
-      state:
-        diagnostics.commercialCostTrusted > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.commercialCostTrusted, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete commercial costs",
@@ -256,10 +284,7 @@ function buildReadinessChecks(
         total,
         "have complete margin and return data",
       ),
-      state:
-        diagnostics.commercialDataComplete > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.commercialDataComplete, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete commercial data",
@@ -272,10 +297,7 @@ function buildReadinessChecks(
         total,
         "pass the existing margin rule",
       ),
-      state:
-        diagnostics.marginThresholdPassed > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.marginThresholdPassed, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete margin rules",
@@ -288,10 +310,7 @@ function buildReadinessChecks(
         total,
         "pass the existing return rule",
       ),
-      state:
-        diagnostics.returnThresholdPassed > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.returnThresholdPassed, total),
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete return rules",
@@ -303,10 +322,7 @@ function buildReadinessChecks(
         diagnostics.lowStock > 0
           ? `${diagnostics.lowStock} products currently meet the existing low-stock condition.`
           : "No products currently meet the existing low-stock condition.",
-      state:
-        diagnostics.lowStock > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(diagnostics.lowStock, total),
       importance: "mandatory",
       href: "/inventory",
       action: "Review inventory",
@@ -319,10 +335,7 @@ function buildReadinessChecks(
         total,
         "have completed Product Intelligence analysis",
       ),
-      state:
-        analysedProducts > 0
-          ? "ready"
-          : "attention",
+      state: coverageState(analysedProducts, total),
       importance: "supporting",
       href: "/catalogue",
       action: "Complete Product Intelligence",
@@ -406,15 +419,24 @@ export default async function AdvisorPage() {
     result.products ?? [],
     diagnostics,
   );
-  const readyRequirements = readinessChecks.filter(
-    (check) => check.state === "ready",
+  const operationalSignals = readinessChecks.filter(
+    (check) => check.state !== "unavailable",
   ).length;
-  const attentionRequirements = readinessChecks.filter(
-    (check) => check.state === "attention",
+  const partialSignals = readinessChecks.filter(
+    (check) => check.state === "partial",
   ).length;
-  const nextSteps = readinessChecks
-    .filter((check) => check.state === "attention")
-    .slice(0, 3);
+  const nextSteps = blockers;
+  const trustedCandidates = diagnostics.productsQualifying;
+  const primaryProduct = primaryDecision
+    ? result.products?.find(
+        (product) => product.style_id === primaryDecision.id,
+      ) ?? null
+    : null;
+  const primaryCommercialInput = primaryDecision
+    ? result.advisor.commercialInputs.find(
+        (input) => input.productId === primaryDecision.id,
+      ) ?? null
+    : null;
 
   return (
     <VaultAppShell
@@ -463,6 +485,22 @@ export default async function AdvisorPage() {
 
               <div className="advisor-primary-card">
                 <OpportunitySummary opportunity={primaryDecision} />
+                {primaryProduct && primaryCommercialInput ? (
+                  <dl className="advisor-opportunity-facts advisor-trusted-evidence">
+                    <div><dt>Supplier</dt><dd>{primaryProduct.supplier_company ?? "Unavailable"}</dd></div>
+                    <div><dt>Current stock</dt><dd>{primaryProduct.stock_on_hand}</dd></div>
+                    <div><dt>Committed</dt><dd>{primaryProduct.committed_stock ?? "Unavailable"}</dd></div>
+                    <div><dt>Incoming</dt><dd>{primaryProduct.incoming_stock ?? "Unavailable"}</dd></div>
+                    <div><dt>Seven-day velocity</dt><dd>{primaryProduct.replenishment_intelligence.averageDailySales === null ? "Unavailable" : `${primaryProduct.replenishment_intelligence.averageDailySales.toFixed(2)} units/day`}</dd></div>
+                    <div><dt>Lead time</dt><dd>{primaryProduct.replenishment_intelligence.supplierLeadTimeDays === null ? "Unavailable" : `${primaryProduct.replenishment_intelligence.supplierLeadTimeDays} days`}</dd></div>
+                    <div><dt>Target stock</dt><dd>{primaryProduct.target_stock_days === null ? "Unavailable" : `${primaryProduct.target_stock_days} days`}</dd></div>
+                    <div><dt>Suggested quantity</dt><dd>{primaryCommercialInput.recommendedOrderQuantity} packs</dd></div>
+                    <div><dt>Landed pack cost</dt><dd>{formatGbp(primaryCommercialInput.purchaseCost)}</dd></div>
+                    <div><dt>Estimated order cost</dt><dd>{formatGbp(primaryCommercialInput.purchaseCost * primaryCommercialInput.recommendedOrderQuantity)}</dd></div>
+                    <div><dt>Margin</dt><dd>{primaryCommercialInput.marginPercent === null ? "Unavailable" : `${primaryCommercialInput.marginPercent.toFixed(1)}%`}</dd></div>
+                    <div><dt>Return on capital</dt><dd>{primaryCommercialInput.returnOnCapital === null ? "Unavailable" : `${primaryCommercialInput.returnOnCapital.toFixed(1)}%`}</dd></div>
+                  </dl>
+                ) : null}
                 {blockers[0] ? (
                   <div className="advisor-primary-blocker">
                     <span>Primary blocker</span>
@@ -568,10 +606,9 @@ export default async function AdvisorPage() {
                 <p className="vault-eyebrow">COMMERCIAL READINESS</p>
                 <h2>Advisor is building decision confidence</h2>
                 <p className="advisor-readiness-executive-copy">
-                  Vault OS currently trusts {readyRequirements} of the{" "}
-                  {readinessChecks.length} commercial readiness signals
-                  assessed while it builds confidence for a trusted
-                  action.
+                  {operationalSignals} readiness signals are operational,
+                  but no product currently satisfies every mandatory
+                  requirement and produces a trusted positive quantity.
                 </p>
                 <p>
                   Complete the remaining catalogue, supplier and
@@ -581,15 +618,25 @@ export default async function AdvisorPage() {
               </div>
 
               <div className="advisor-readiness-summary">
-                <strong>
-                  {readyRequirements} of {readinessChecks.length}
-                </strong>
-                <span>requirements ready</span>
-                <small>
-                  {attentionRequirements} requiring attention
-                </small>
+                <strong>{operationalSignals}</strong>
+                <span>readiness systems operational</span>
+                <small>{partialSignals} with partial product coverage</small>
               </div>
             </header>
+
+            <section className="advisor-candidate-summary">
+              <div>
+                <p className="vault-eyebrow">Trusted Buying Candidates</p>
+                <h3>No trusted buying candidate yet</h3>
+              </div>
+              <dl>
+                <div><dt>Products evaluated</dt><dd>{diagnostics.productsScanned}</dd></div>
+                <div><dt>Trusted replenishment inputs</dt><dd>{diagnostics.trustedReplenishmentInputs}</dd></div>
+                <div><dt>Trusted positive quantity</dt><dd>{diagnostics.trustedQuantityProduced}</dd></div>
+                <div><dt>Fully eligible</dt><dd>{trustedCandidates}</dd></div>
+              </dl>
+              {blockers[0] ? <p>{blockers[0].description}</p> : null}
+            </section>
 
             <div className="advisor-readiness-layout">
               <div className="advisor-readiness-checklist">
@@ -607,7 +654,7 @@ export default async function AdvisorPage() {
                       aria-hidden="true"
                       className="advisor-readiness-icon"
                     >
-                      {check.state === "ready" ? "✓" : "!"}
+                      {check.state === "operational" ? "✓" : "!"}
                     </span>
                     <div>
                       <div className="advisor-readiness-check-heading">
@@ -618,13 +665,15 @@ export default async function AdvisorPage() {
                     </div>
                     <div className="advisor-readiness-check-action">
                       <span>{
-                        check.state === "ready"
-                          ? "Ready"
-                          : check.state === "unavailable"
-                            ? "Unavailable"
-                            : "Attention required"
+                        check.state === "operational"
+                          ? "Operational"
+                          : check.state === "partial"
+                            ? "Partial coverage"
+                            : check.state === "unavailable"
+                              ? "Unavailable"
+                              : "Attention required"
                       }</span>
-                      {check.state !== "ready" ? (
+                      {check.state !== "operational" ? (
                         <Link href={check.href}>{check.action} →</Link>
                       ) : null}
                     </div>
