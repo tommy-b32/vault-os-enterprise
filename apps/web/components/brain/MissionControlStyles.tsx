@@ -33,6 +33,12 @@ export default function MissionControlStyles() {
           gap: 14px;
         }
 
+        .mission-confidence-metric {
+          width: min(100%, 210px);
+          grid-template-columns: 1fr;
+          justify-self: end;
+        }
+
         .mission-metric-card {
           min-height: 112px;
           padding: 18px;

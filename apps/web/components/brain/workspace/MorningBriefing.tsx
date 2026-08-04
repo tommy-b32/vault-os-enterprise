@@ -7,7 +7,6 @@ import {
 } from "@/lib/brain/NarratorEngine";
 
 import type {
-  MorningBriefingImpact,
   MorningBriefingMetric,
   VaultBrainOperationalSnapshot,
   VaultBrainSignalTone,
@@ -21,12 +20,6 @@ function getMetricToneClass(
   tone: VaultBrainSignalTone,
 ): string {
   return `morning-metric-${tone}`;
-}
-
-function getImpactToneClass(
-  tone: VaultBrainSignalTone,
-): string {
-  return `morning-impact-${tone}`;
 }
 
 function getMetricIcon(
@@ -125,71 +118,6 @@ function SummaryIcon() {
   );
 }
 
-function ImpactIcon({
-  impact,
-}: {
-  impact: MorningBriefingImpact;
-}) {
-  if (
-    impact.tone === "critical" ||
-    impact.tone === "warning"
-  ) {
-    return (
-      <svg
-        aria-hidden="true"
-        fill="none"
-        height="18"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
-        viewBox="0 0 24 24"
-        width="18"
-      >
-        <path d="M12 3 2.5 20h19z" />
-        <path d="M12 9v4" />
-        <path d="M12 17h.01" />
-      </svg>
-    );
-  }
-
-  if (impact.tone === "positive") {
-    return (
-      <svg
-        aria-hidden="true"
-        fill="none"
-        height="18"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
-        viewBox="0 0 24 24"
-        width="18"
-      >
-        <circle cx="12" cy="12" r="9" />
-        <path d="m8 12 2.7 2.7L16.5 9" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="18"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-      width="18"
-    >
-      <circle cx="12" cy="12" r="8" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
 export default function MorningBriefing({
   snapshot,
 }: MorningBriefingProps) {
@@ -221,11 +149,6 @@ export default function MorningBriefing({
         ].includes(metric.id),
     );
 
-  const displayedImpacts =
-    narratorStory.impacts.length > 0
-      ? narratorStory.impacts
-      : operationalBriefing.impacts;
-
   return (
     <section className="morning-briefing">
       <article className="vault-panel morning-briefing-panel">
@@ -241,9 +164,6 @@ export default function MorningBriefing({
               </h2>
             </div>
 
-            <span className="morning-briefing-ready">
-              {narratorStory.confidence}% confidence
-            </span>
           </div>
 
           <p className="morning-briefing-period">
@@ -316,53 +236,6 @@ export default function MorningBriefing({
         </div>
       </article>
 
-      <article className="vault-panel morning-impact-panel">
-        <div className="morning-impact-heading">
-          <div>
-            <span className="vault-eyebrow">
-              Business Impact
-            </span>
-
-            <h3>
-              What changed because of the latest trading
-              period
-            </h3>
-          </div>
-
-          <span className="morning-impact-status">
-            Analysis complete
-          </span>
-        </div>
-
-        <div className="morning-impact-list">
-          {displayedImpacts.map((impact) => (
-            <article
-              className={`morning-impact-item ${getImpactToneClass(
-                impact.tone,
-              )}`}
-              key={impact.id}
-            >
-              <span className="morning-impact-icon">
-                <ImpactIcon impact={impact} />
-              </span>
-
-              <div>
-                <strong>
-                  {impact.title}
-                </strong>
-
-                <p>
-                  {impact.description}
-                </p>
-
-                <span className="morning-impact-confidence">
-                  {impact.confidence}% confidence
-                </span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </article>
     </section>
   );
 }

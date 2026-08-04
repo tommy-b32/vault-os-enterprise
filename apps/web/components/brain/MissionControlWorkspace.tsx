@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 
+import BusinessFeed from "@/components/brain/workspace/BusinessFeed";
 import ExecutiveMemory from "@/components/brain/workspace/ExecutiveMemory";
-import LiveIntelligenceFeed from "@/components/brain/workspace/LiveIntelligenceFeed";
 import MemoryInsights from "@/components/brain/workspace/MemoryInsights";
 import MissionCard from "@/components/brain/workspace/MissionCard";
 import MissionMetric from "@/components/brain/workspace/MissionMetric";
@@ -16,10 +16,8 @@ import VaultIcon, {
 
 import MissionControlStyles from "@/components/brain/MissionControlStyles";
 
-import LiveIntelligenceFeedStyles from "@/styles/LiveIntelligenceFeedStyles";
 import MemoryInsightsStyles from "@/styles/MemoryInsightsStyles";
 import PredictionInsightsStyles from "@/styles/PredictionInsightsStyles";
-import ProductVisionWorkspace from "@/components/brain/ProductVisionWorkspace";
 import VaultBrainStartupStyles from "@/styles/VaultBrainStartupStyles";
 
 import type {
@@ -31,16 +29,11 @@ import type {
 } from "@/lib/brain/types";
 
 import type {
-  BusinessEventResult,
-} from "@/lib/brain/BusinessEventEngine";
-
-import type {
-  LiveIntelligenceFeed as LiveIntelligenceFeedModel,
-} from "@/lib/brain/LiveIntelligenceEngine";
+  BusinessActivityResult,
+} from "@/lib/business/BusinessActivityRepository";
 
 import {
   createMissionSummary,
-  getActionableMissions,
   getHighestPriorityMission,
 } from "@/lib/missions/MissionEngine";
 
@@ -57,11 +50,7 @@ type MissionControlWorkspaceProps = {
   executiveMemory:
     ExecutiveMemoryResult;
 
-  businessEvents:
-    BusinessEventResult;
-
-  liveIntelligenceFeed:
-    LiveIntelligenceFeedModel;
+  businessActivity: BusinessActivityResult;
 
   title?: string;
   description?: string;
@@ -130,30 +119,15 @@ export default function MissionControlWorkspace({
   missions,
   snapshot,
   executiveMemory,
-  businessEvents,
-  liveIntelligenceFeed,
+  businessActivity,
   title = "Vault Brain",
   description =
     "...",
 }: MissionControlWorkspaceProps) {
-  const actionableMissions =
-    getActionableMissions(
-      missions,
-    );
-
   const highestPriorityMission =
     getHighestPriorityMission(
       missions,
     );
-
-  const remainingMissions =
-    highestPriorityMission
-      ? actionableMissions.filter(
-          (mission) =>
-            mission.id !==
-            highestPriorityMission.id,
-        )
-      : actionableMissions;
 
   const summary =
     createMissionSummary(
@@ -293,7 +267,7 @@ export default function MissionControlWorkspace({
               <header className="mission-control-header">
                 <div className="vault-page-heading">
                   <p className="vault-eyebrow">
-                    Vault Brain
+                    VAULT BRAIN
                   </p>
 
                   <h1>
@@ -305,31 +279,7 @@ export default function MissionControlWorkspace({
                   </p>
                 </div>
 
-                <section className="mission-metrics">
-                  <MissionMetric
-                    icon="target"
-                    label="Active Missions"
-                    value={
-                      summary.actionable
-                    }
-                  />
-
-                  <MissionMetric
-                    icon="shield"
-                    label="Urgent Attention"
-                    value={
-                      summary.critical
-                    }
-                  />
-
-                  <MissionMetric
-                    icon="trend"
-                    label="High-Value Actions"
-                    value={
-                      summary.high
-                    }
-                  />
-
+                <section className="mission-metrics mission-confidence-metric">
                   <MissionMetric
                     icon="brain"
                     label="Brain Confidence"
@@ -338,36 +288,15 @@ export default function MissionControlWorkspace({
                 </section>
               </header>
 
-              <section className="vault-status-strip">
-                <span>
-                  <i />
-
-                  Shopify connected
-                </span>
-
-                <span>
-                  <i />
-
-                  Inventory synced 2 min ago
-                </span>
-
-                <span>
-                  <i />
-
-                  Vault Brain online
-                </span>
-
-                <span>
-                  <i />
-
-                  0 sync errors
-                </span>
-              </section>
-
               <MorningBriefing
                 snapshot={
                   snapshot
                 }
+              />
+
+              <BusinessFeed
+                activity={businessActivity}
+                generatedAt={snapshot.generatedAt}
               />
 
               <ExecutiveMemory
@@ -381,7 +310,7 @@ export default function MissionControlWorkspace({
                   <div className="vault-section-heading">
                     <div>
                       <span className="vault-eyebrow">
-                        Highest-value mission
+                        Highest Value Mission
                       </span>
                     </div>
 
@@ -414,97 +343,21 @@ export default function MissionControlWorkspace({
                 </section>
               )}
 
-              {remainingMissions.length >
-              0 ? (
-                <section className="mission-queue-section">
-                  <div className="vault-section-heading">
-                    <div>
-                      <span className="vault-eyebrow">
-                        Today&apos;s priorities
-                      </span>
-
-                      <h2>
-                        Next best actions
-                      </h2>
-                    </div>
-
-                    <button
-                      className="vault-text-button"
-                      type="button"
-                    >
-                      View all
-
-                      <VaultIcon
-                        name="arrow"
-                        size={16}
-                      />
-                    </button>
-                  </div>
-
-                  <div className="mission-queue-grid">
-                    {remainingMissions.map(
-                      (
-                        mission,
-                      ) => (
-                        <MissionCard
-                          key={
-                            mission.id
-                          }
-                          mission={
-                            mission
-                          }
-                        />
-                      ),
-                    )}
-                  </div>
-                </section>
-              ) : null}
-
-              <LiveIntelligenceFeed
-                feed={liveIntelligenceFeed}
-              />
-
-              <ProductVisionWorkspace />
+              <PredictionInsights />
 
               <MemoryInsights />
 
-              <PredictionInsights />
+              {/* TODO Sprint 12.2: Move Product Vision, Catalogue Intelligence,
+                  Vision Index, Indexing Engine, Catalogue Readiness, Commercial
+                  Readiness and Catalogue Health to Catalogue. */}
             </section>
           </div>
 
-          <footer className="vault-quick-actions">
-            <span className="vault-eyebrow">
-              Quick Actions
-            </span>
-
-            <div>
-              <button type="button">
-                ＋ Add product
-              </button>
-
-              <button type="button">
-                ▣ Create order
-              </button>
-
-              <button type="button">
-                ◉ Message partner
-              </button>
-
-              <button type="button">
-                ▤ Generate report
-              </button>
-
-              <button type="button">
-                ⌁ View analytics
-              </button>
-            </div>
-          </footer>
         </VaultBrainStartup>
       </section>
 
       <MissionControlStyles />
       <VaultBrainStartupStyles />
-      <LiveIntelligenceFeedStyles />
       <MemoryInsightsStyles />
       <PredictionInsightsStyles />
     </main>

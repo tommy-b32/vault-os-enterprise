@@ -1,14 +1,6 @@
 import MissionControlWorkspace from "@/components/brain/MissionControlWorkspace";
 
 import {
-  createBusinessEvents,
-} from "@/lib/brain/BusinessEventEngine";
-
-import {
-  createBusinessNarration,
-} from "@/lib/brain/BusinessEventNarrator";
-
-import {
   createExecutiveMemory,
 } from "@/lib/brain/ExecutiveMemoryEngine";
 
@@ -21,13 +13,13 @@ import {
 } from "@/lib/brain/getLiveInventorySnapshot";
 
 import {
-  LiveIntelligenceEngine,
-} from "@/lib/brain/LiveIntelligenceEngine";
-
-import {
   getPreviousOperationalSnapshot,
   saveOperationalSnapshot,
 } from "@/lib/brain/OperationalMemoryRepository";
+
+import {
+  BusinessActivityRepository,
+} from "@/lib/business/BusinessActivityRepository";
 
 import {
   createMissions,
@@ -314,6 +306,9 @@ const DEMONSTRATION_MISSIONS: MissionDraft[] = [
 export default async function MissionsPage() {
   const inventorySnapshot =
     await getLiveInventorySnapshot();
+  const businessActivity =
+    await BusinessActivityRepository
+      .getRecentBusinessActivity(8);
 
   const inventoryMission =
     createInventoryMission(
@@ -363,39 +358,6 @@ export default async function MissionsPage() {
     );
 
   /*
-   * Convert detected changes into structured business events.
-   */
-  const businessEvents =
-    createBusinessEvents(
-      executiveMemory,
-    );
-
-  /*
-   * Convert structured events into consistent executive
-   * language for all presentation surfaces.
-   */
-  const businessNarration =
-    createBusinessNarration(
-      businessEvents,
-    );
-
-  /*
-   * Adapt the real business events to the existing animated
-   * Live Intelligence Feed contract.
-   */
-  const liveIntelligenceFeed =
-    LiveIntelligenceEngine
-      .buildBusinessFeed({
-        result:
-          businessEvents,
-
-        narration:
-          businessNarration,
-
-        maximumEvents: 7,
-      });
-
-  /*
    * Save the current state only after comparison and event
    * generation, preventing it from being compared with itself.
    */
@@ -426,13 +388,8 @@ export default async function MissionsPage() {
       executiveMemory={
         executiveMemory
       }
-      businessEvents={
-        businessEvents
-      }
-      liveIntelligenceFeed={
-        liveIntelligenceFeed
-      }
-      title="Vault Brain"
+      businessActivity={businessActivity}
+      title="Executive Intelligence"
       description={
         description
       }

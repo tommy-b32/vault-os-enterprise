@@ -131,11 +131,11 @@ export default function MemoryInsights() {
       <div className="vault-section-heading">
         <div>
           <span className="vault-eyebrow">
-            Vault Brain Memory
+            Learned Patterns
           </span>
 
           <h2>
-            What Vault Brain has learned
+            Emerging patterns
           </h2>
         </div>
 

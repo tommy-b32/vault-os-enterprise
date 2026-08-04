@@ -158,7 +158,7 @@ export default function ExecutiveMemory({
 
               <div>
                 <span className="vault-card-kicker">
-                  Vault Brain Memory
+                  Learning memory
                 </span>
 
                 <span className="memory-learning-status">
@@ -204,8 +204,8 @@ export default function ExecutiveMemory({
             Executive Memory
           </span>
 
-          <h2>
-            What changed since the previous snapshot
+            <h2>
+              Operational history
           </h2>
         </div>
 
@@ -232,7 +232,7 @@ export default function ExecutiveMemory({
 
               <div>
                 <span className="vault-card-kicker">
-                  Highest-priority change
+                  Previous snapshot comparison
                 </span>
 
                 <span className="memory-learning-status">

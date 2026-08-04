@@ -176,17 +176,17 @@ const predictionResult =
   );
 
 export default function PredictionInsights() {
+  const displayedPredictions =
+    predictionResult.predictions.filter(
+      (prediction) =>
+        ["revenue", "orders", "inventory", "supplier"]
+          .includes(prediction.category),
+    );
   const featuredPrediction =
-    predictionResult.highestPriorityPrediction;
+    displayedPredictions[0] ?? null;
 
   const secondaryPredictions =
-    predictionResult.predictions
-      .filter(
-        (prediction) =>
-          prediction.id !==
-          featuredPrediction?.id,
-      )
-      .slice(0, 5);
+    displayedPredictions.slice(1);
 
   if (!featuredPrediction) {
     return null;
@@ -202,16 +202,16 @@ export default function PredictionInsights() {
       <div className="vault-section-heading">
         <div>
           <span className="vault-eyebrow">
-            Vault Brain Prediction
+            Predictions
           </span>
 
           <h2>
-            What Vault Brain expects next
+            Revenue, order, inventory and supplier forecasts
           </h2>
         </div>
 
         <span className="prediction-summary-status">
-          {predictionResult.predictions.length} active forecasts
+          {displayedPredictions.length} active forecasts
         </span>
       </div>
 
