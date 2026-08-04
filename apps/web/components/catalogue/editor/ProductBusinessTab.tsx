@@ -2,6 +2,10 @@ import type {
   CatalogueProduct,
   CatalogueSupplier,
 } from "@/types/catalogue";
+import {
+  approveProductForReorder,
+  revokeProductReorderApproval,
+} from "@/app/catalogue/actions";
 
 type ProductBusinessTabProps = {
   product: CatalogueProduct;
@@ -24,10 +28,33 @@ const packProfiles = [
   ["custom", "Custom"],
 ] as const;
 
+function formatApprovalTimestamp(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/London",
+  }).format(new Date(value));
+}
+
 export function ProductBusinessTab({
   product,
   suppliers,
 }: ProductBusinessTabProps) {
+  const approval = product.reorder_approval;
+  const hasActiveApproval =
+    approval?.approval_state === "approved";
+  const configurationEligible =
+    product.configuration_trusted &&
+    product.inventory_strategy === "stocked" &&
+    product.restock_enabled;
+  const approvalState = hasActiveApproval
+    ? configurationEligible
+      ? "approved"
+      : "inactive"
+    : configurationEligible
+      ? "ready"
+      : "ineligible";
+
   return (
     <section className="product-editor-section">
       <div className="product-editor-section-heading">
@@ -171,6 +198,83 @@ export function ProductBusinessTab({
           />
         </label>
       </div>
+
+      <section className={`commercial-approval is-${approvalState}`}>
+        <input
+          name="parent_product_id"
+          type="hidden"
+          value={product.parent_product_id}
+        />
+
+        <div className="commercial-approval-heading">
+          <div>
+            <p className="vault-eyebrow">Commercial Approval</p>
+            <h4>Reorder approval</h4>
+          </div>
+          <span>
+            {approvalState === "approved" && "Approved"}
+            {approvalState === "ready" && "Ready for approval"}
+            {approvalState === "inactive" &&
+              "Approval inactive because configuration changed"}
+            {approvalState === "ineligible" && "Not eligible"}
+          </span>
+        </div>
+
+        {approval ? (
+          <dl className="commercial-approval-metadata">
+            <div>
+              <dt>Approving operator</dt>
+              <dd>{approval.approved_by_display_name}</dd>
+            </div>
+            <div>
+              <dt>Approval timestamp</dt>
+              <dd>{formatApprovalTimestamp(approval.approved_at)}</dd>
+            </div>
+          </dl>
+        ) : null}
+
+        {approvalState === "ineligible" ? (
+          <p>
+            Complete the mandatory configuration before this product can
+            be explicitly approved. Missing: {product.missing_requirements
+              .map((requirement) => requirement.replaceAll("_", " "))
+              .join(", ") || "stocked strategy or restock permission"}.
+          </p>
+        ) : null}
+
+        {approvalState === "inactive" ? (
+          <p>
+            The approval record is preserved, but reorder trust remains
+            disabled until the mandatory configuration is restored.
+          </p>
+        ) : null}
+
+        {approvalState === "ready" ? (
+          <p>
+            Configuration is complete. Approval requires an explicit
+            operator action and applies to this canonical parent product.
+          </p>
+        ) : null}
+
+        <div className="commercial-approval-actions">
+          {hasActiveApproval ? (
+            <button
+              formAction={revokeProductReorderApproval}
+              type="submit"
+            >
+              Revoke approval
+            </button>
+          ) : (
+            <button
+              disabled={!configurationEligible}
+              formAction={approveProductForReorder}
+              type="submit"
+            >
+              Approve for reorder
+            </button>
+          )}
+        </div>
+      </section>
     </section>
   );
 }

@@ -22,6 +22,7 @@ export type AdvisorDiagnostics = {
 
   configurationTrusted: number;
   trustedForReorder: number;
+  reorderApprovalMissing: number;
   commercialCostTrusted: number;
 
   commercialDataComplete: number;
@@ -39,6 +40,7 @@ export type AdvisorExclusionReason =
   | "restock_disabled"
   | "supplier_missing"
   | "configuration_untrusted"
+  | "reorder_approval_missing"
   | "reorder_untrusted"
   | "commercial_cost_untrusted"
   | "commercial_data_missing"
@@ -110,7 +112,12 @@ function getExclusionReasons(
     reasons.push("configuration_untrusted");
   }
 
-  if (!product.trusted_for_reorder) {
+  if (
+    product.reorder_approval?.approval_state !==
+    "approved"
+  ) {
+    reasons.push("reorder_approval_missing");
+  } else if (!product.trusted_for_reorder) {
     reasons.push("reorder_untrusted");
   }
 
@@ -237,6 +244,13 @@ function buildDiagnostics(
       products.filter(
         (product) =>
           product.trusted_for_reorder,
+      ).length,
+
+    reorderApprovalMissing:
+      products.filter(
+        (product) =>
+          product.reorder_approval?.approval_state !==
+          "approved",
       ).length,
 
     commercialCostTrusted:

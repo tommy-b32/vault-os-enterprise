@@ -108,6 +108,13 @@ export type CatalogueSupplier = {
   supplier_name: string;
 };
 
+export type ProductReorderApproval = {
+  approval_state: "approved" | "revoked";
+  approved_at: string;
+  approved_by_display_name: string;
+  revoked_at: string | null;
+};
+
 export type ConfigurationState =
   | "ready"
   | "almost_ready"
@@ -119,6 +126,7 @@ export type ConfigurationState =
 
 export type CatalogueProduct = {
   product_id: string;
+  parent_product_id: string;
   product_name: string;
 
   /*
@@ -179,6 +187,8 @@ export type CatalogueProduct = {
   configuration_trusted: boolean;
 
   trusted_for_reorder: boolean;
+
+  reorder_approval: ProductReorderApproval | null;
 
   brain_confidence: string;
 

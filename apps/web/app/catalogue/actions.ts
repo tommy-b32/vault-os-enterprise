@@ -10,6 +10,145 @@ export type ProductSettingsActionState = {
   message: string;
 };
 
+function getParentProductId(formData: FormData): string {
+  const value = formData.get("parent_product_id");
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("A canonical parent product ID is required");
+  }
+
+  return value.trim();
+}
+
+function revalidateReorderApprovalRoutes() {
+  revalidatePath("/catalogue");
+  revalidatePath("/advisor");
+  revalidatePath("/purchase-orders");
+}
+
+export async function approveProductForReorder(
+  formData: FormData,
+): Promise<void> {
+  const operator = await requireOperatorRole("owner", "operator");
+  const productId = getParentProductId(formData);
+
+  const [productResponse, configurationResponse, approvalResponse] =
+    await Promise.all([
+      supabaseAdmin
+        .from("vault_products")
+        .select("id")
+        .eq("id", productId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("vault_configuration_intelligence")
+        .select("configuration_trusted, inventory_strategy, restock_enabled")
+        .eq("product_id", productId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("vault_product_reorder_approvals")
+        .select("approval_state")
+        .eq("product_id", productId)
+        .maybeSingle(),
+    ]);
+
+  if (
+    productResponse.error ||
+    configurationResponse.error ||
+    approvalResponse.error
+  ) {
+    throw new Error("Reorder approval could not be validated");
+  }
+
+  if (!productResponse.data || !configurationResponse.data) {
+    throw new Error("The selected canonical product does not exist");
+  }
+
+  const configuration = configurationResponse.data;
+
+  if (
+    configuration.configuration_trusted !== true ||
+    configuration.inventory_strategy !== "stocked" ||
+    configuration.restock_enabled !== true
+  ) {
+    throw new Error("Complete the mandatory product configuration before approval");
+  }
+
+  if (approvalResponse.data?.approval_state === "approved") {
+    revalidateReorderApprovalRoutes();
+    return;
+  }
+
+  const approvedAt = new Date().toISOString();
+  const { error } = await supabaseAdmin
+    .from("vault_product_reorder_approvals")
+    .upsert(
+      {
+        product_id: productId,
+        approval_state: "approved",
+        approved_by: operator.id,
+        approved_at: approvedAt,
+        revoked_by: null,
+        revoked_at: null,
+      },
+      { onConflict: "product_id" },
+    );
+
+  if (error) {
+    throw new Error("The product could not be approved for reorder");
+  }
+
+  revalidateReorderApprovalRoutes();
+}
+
+export async function revokeProductReorderApproval(
+  formData: FormData,
+): Promise<void> {
+  const operator = await requireOperatorRole("owner", "operator");
+  const productId = getParentProductId(formData);
+
+  const [productResponse, approvalResponse] = await Promise.all([
+    supabaseAdmin
+      .from("vault_products")
+      .select("id")
+      .eq("id", productId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("vault_product_reorder_approvals")
+      .select("approval_state")
+      .eq("product_id", productId)
+      .maybeSingle(),
+  ]);
+
+  if (productResponse.error || approvalResponse.error) {
+    throw new Error("Reorder approval could not be validated");
+  }
+
+  if (!productResponse.data) {
+    throw new Error("The selected canonical product does not exist");
+  }
+
+  if (!approvalResponse.data || approvalResponse.data.approval_state === "revoked") {
+    revalidateReorderApprovalRoutes();
+    return;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("vault_product_reorder_approvals")
+    .update({
+      approval_state: "revoked",
+      revoked_by: operator.id,
+      revoked_at: new Date().toISOString(),
+    })
+    .eq("product_id", productId)
+    .eq("approval_state", "approved");
+
+  if (error) {
+    throw new Error("The reorder approval could not be revoked");
+  }
+
+  revalidateReorderApprovalRoutes();
+}
+
 const allowedStrategies = new Set([
   "stocked",
   "do_not_restock",

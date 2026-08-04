@@ -14,6 +14,7 @@ import type {
   PackProfile,
   ProductCommercialCost,
   ProductIntelligenceProfile,
+  ProductReorderApproval,
   ProductSalesIntelligence,
 } from "@/types/catalogue";
 
@@ -82,6 +83,19 @@ type CommercialRow =
   ProductCommercialCost & {
     product_id: string;
   };
+
+type ReorderApprovalRow = {
+  product_id: string;
+  approval_state: "approved" | "revoked";
+  approved_by: string;
+  approved_at: string;
+  revoked_at: string | null;
+};
+
+type OperatorDisplayRow = {
+  id: string;
+  display_name: string | null;
+};
 
 export type CatalogueConfigurationSummary = {
   total_products: number;
@@ -371,6 +385,8 @@ export async function getCatalogueData():
     supplierResponse,
     commercialResponse,
     productVisionByProductId,
+    approvalResponse,
+    operatorResponse,
   ] = await Promise.all([
     supabaseAdmin
       .from(
@@ -467,12 +483,28 @@ export async function getCatalogueData():
 
     ProductVisionRepository
       .getMapByProductId(),
+
+    supabaseAdmin
+      .from("vault_product_reorder_approvals")
+      .select(`
+        product_id,
+        approval_state,
+        approved_by,
+        approved_at,
+        revoked_at
+      `),
+
+    supabaseAdmin
+      .from("vault_operators")
+      .select("id, display_name"),
   ]);
 
   const error =
     styleResponse.error ??
     supplierResponse.error ??
-    commercialResponse.error;
+    commercialResponse.error ??
+    approvalResponse.error ??
+    operatorResponse.error;
 
   if (error) {
     throw new Error(
@@ -491,6 +523,43 @@ export async function getCatalogueData():
   const commercialRows =
     (commercialResponse.data ??
       []) as CommercialRow[];
+
+  const approvalRows =
+    (approvalResponse.data ??
+      []) as ReorderApprovalRow[];
+
+  const operatorRows =
+    (operatorResponse.data ??
+      []) as OperatorDisplayRow[];
+
+  const operatorDisplayById = new Map(
+    operatorRows.map((operator) => [
+      operator.id,
+      operator.display_name?.trim() ||
+        "Vault operator",
+    ]),
+  );
+
+  const approvalByParentProduct = new Map<
+    string,
+    ProductReorderApproval
+  >(
+    approvalRows.map((approval) => [
+      approval.product_id,
+      {
+        approval_state:
+          approval.approval_state,
+        approved_at:
+          approval.approved_at,
+        approved_by_display_name:
+          operatorDisplayById.get(
+            approval.approved_by,
+          ) ?? "Vault operator",
+        revoked_at:
+          approval.revoked_at,
+      },
+    ]),
+  );
 
   /*
    * Product Vision IDs should match style_id exactly.
@@ -611,6 +680,9 @@ export async function getCatalogueData():
         return {
           product_id:
             style.style_id,
+
+          parent_product_id:
+            style.parent_product_id,
 
           product_name:
             style.product_name,
@@ -740,6 +812,11 @@ export async function getCatalogueData():
           trusted_for_reorder:
             style.trusted_for_reorder ??
             false,
+
+          reorder_approval:
+            approvalByParentProduct.get(
+              style.parent_product_id,
+            ) ?? null,
 
           brain_confidence:
             style.brain_confidence ??

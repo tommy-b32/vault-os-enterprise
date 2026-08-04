@@ -91,6 +91,18 @@ function buildDecisionBlockers(
       diagnostics.trustedForReorder,
   );
 
+  if (diagnostics.reorderApprovalMissing > 0) {
+    blockers.push({
+      id: "reorder-approval",
+      title: "Explicit reorder approval is missing",
+      description:
+        "Eligible products require an operator approval before Advisor can trust a reorder decision.",
+      count: diagnostics.reorderApprovalMissing,
+      href: "/catalogue",
+      action: "Review reorder approvals",
+    });
+  }
+
   if (diagnostics.commercialDataMissing > 0) {
     blockers.push({
       id: "commercial-data",
@@ -187,6 +199,22 @@ function buildReadinessChecks(
       importance: "mandatory",
       href: "/catalogue",
       action: "Complete restock rules",
+    },
+    {
+      id: "reorder-approval",
+      title: "Reorder approval",
+      description: formatCoverage(
+        total - diagnostics.reorderApprovalMissing,
+        total,
+        "have explicit operator approval for reorder",
+      ),
+      state:
+        diagnostics.reorderApprovalMissing < total
+          ? "ready"
+          : "attention",
+      importance: "mandatory",
+      href: "/catalogue",
+      action: "Review reorder approvals",
     },
     {
       id: "reorder-trust",

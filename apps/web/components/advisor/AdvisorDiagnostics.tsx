@@ -69,6 +69,11 @@ export function AdvisorDiagnostics({
         />
 
         <AdvisorStat
+          label="Reorder approval missing"
+          value={diagnostics.reorderApprovalMissing}
+        />
+
+        <AdvisorStat
           label="Commercial trusted"
           value={
             diagnostics.commercialCostTrusted
