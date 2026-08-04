@@ -812,7 +812,7 @@ const selectedGarment =
                   <p>
                     Search the Fabric Vault catalogue and choose the
                     correct product to compare identity, colour, logo,
-                    garment details and Product Vision evidence.
+                    garment details and catalogue product evidence.
                   </p>
                 </div>
 

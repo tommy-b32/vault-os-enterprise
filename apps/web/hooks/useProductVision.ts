@@ -52,6 +52,15 @@ type ApiError = {
 const DEFAULT_BATCH_SIZE = 15;
 const MAX_CONSECUTIVE_EMPTY_BATCHES = 2;
 
+function toProductIntelligenceCopy(
+  message: string,
+): string {
+  return message.replaceAll(
+    "Product Vision",
+    "Product Intelligence",
+  );
+}
+
 function normaliseCount(
   value: unknown,
 ): number {
@@ -228,8 +237,10 @@ export default function useProductVision() {
 
           setError(
             caughtError instanceof Error
-              ? caughtError.message
-              : "Unable to load Product Vision status.",
+              ? toProductIntelligenceCopy(
+                  caughtError.message,
+                )
+              : "Unable to load Product Intelligence status.",
           );
         } finally {
           if (
@@ -268,7 +279,7 @@ export default function useProductVision() {
         setIsIndexing(false);
         setIsPaused(false);
         setLatestMessage(
-          "Product Vision indexing stopped.",
+          "Product Intelligence indexing stopped.",
         );
       }
     }, []);
@@ -284,7 +295,7 @@ export default function useProductVision() {
 
       setIsPaused(true);
       setLatestMessage(
-        "Product Vision will pause after the current batch.",
+        "Product Intelligence will pause after the current batch.",
       );
     }, [isIndexing]);
 
@@ -305,7 +316,7 @@ export default function useProductVision() {
         setIsPaused(false);
         setError(null);
         setLatestMessage(
-          "Building the Product Vision database…",
+          "Building Product Intelligence…",
         );
         setFailedProducts([]);
         setCompletedThisRun(0);
@@ -396,7 +407,15 @@ export default function useProductVision() {
               setFailedProducts(
                 (current) => [
                   ...current,
-                  ...result.failed,
+                  ...result.failed.map(
+                    (failure) => ({
+                      ...failure,
+                      error:
+                        toProductIntelligenceCopy(
+                          failure.error,
+                        ),
+                    }),
+                  ),
                 ],
               );
             }
@@ -438,7 +457,7 @@ export default function useProductVision() {
               shouldContinueRef.current = false;
 
               setLatestMessage(
-                "Product Vision indexing is complete.",
+                "Product Intelligence indexing is complete.",
               );
 
               break;
@@ -450,7 +469,7 @@ export default function useProductVision() {
               shouldContinueRef.current = false;
 
               setLatestMessage(
-                "Product Vision indexing is paused.",
+                "Product Intelligence indexing is paused.",
               );
 
               break;
@@ -461,7 +480,7 @@ export default function useProductVision() {
               MAX_CONSECUTIVE_EMPTY_BATCHES
             ) {
               throw new Error(
-                "Product Vision could not make progress. Review the failed products before continuing.",
+                "Product Intelligence could not make progress. Review the failed products before continuing.",
               );
             }
           }
@@ -486,8 +505,10 @@ export default function useProductVision() {
 
           setError(
             caughtError instanceof Error
-              ? caughtError.message
-              : "Unable to continue Product Vision indexing.",
+              ? toProductIntelligenceCopy(
+                  caughtError.message,
+                )
+              : "Unable to continue Product Intelligence indexing.",
           );
         } finally {
           activeRequestRef.current =

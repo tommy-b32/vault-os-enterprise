@@ -363,7 +363,7 @@ export const VisualSimilarityEngine = {
 
           label:
             productVision
-              ? "Graphic details match Product Vision"
+              ? "Graphic details match Product Intelligence"
               : "Graphic and logo similarity",
 
           score:
@@ -474,7 +474,7 @@ export const VisualSimilarityEngine = {
 
           label:
             productVision
-              ? "Product Vision keyword similarity"
+              ? "Product Intelligence keyword similarity"
               : "Product intelligence keyword similarity",
 
           score:

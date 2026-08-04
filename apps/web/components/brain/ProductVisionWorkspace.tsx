@@ -40,23 +40,23 @@ export default function ProductVisionWorkspace() {
 
   const primaryActionLabel =
     isComplete
-      ? "Vision Index Complete"
+      ? "Product Intelligence Complete"
       : isIndexing
         ? "Indexing Products…"
         : isPaused
           ? "Resume Indexing"
           : analysedProducts > 0
             ? "Continue Indexing"
-            : "Start Vision Indexing";
+            : "Start Product Intelligence Indexing";
 
   const statusLabel =
     isComplete
-      ? "Vision Ready"
+      ? "Intelligence Ready"
       : isIndexing
         ? "Analysing"
         : isPaused
           ? "Paused"
-          : "Index Active";
+          : "Intelligence Active";
 
   return (
     <section
@@ -75,13 +75,13 @@ export default function ProductVisionWorkspace() {
             id="product-vision-title"
             className="tfv-product-vision__title"
           >
-            Product Vision
+            Product Intelligence
           </h2>
 
           <p className="tfv-product-vision__description">
-            Vault OS is building a reusable visual
-            fingerprint for every style in your catalogue.
-            Start it once and the engine will continue
+            Vault OS creates a reusable understanding of every
+            product in your store catalogue from its images and
+            attributes. Start it once and the engine will continue
             automatically until the catalogue is complete.
           </p>
         </div>
@@ -108,7 +108,7 @@ export default function ProductVisionWorkspace() {
         <div className="tfv-product-vision__progress-heading">
           <div>
             <span className="tfv-product-vision__progress-label">
-              Catalogue indexed
+              Catalogue analysed
             </span>
 
             <strong className="tfv-product-vision__progress-value">
@@ -128,7 +128,7 @@ export default function ProductVisionWorkspace() {
         <div
           className="tfv-product-vision__track"
           role="progressbar"
-          aria-label="Product Vision indexing progress"
+          aria-label="Product Intelligence indexing progress"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={progress}
@@ -162,7 +162,7 @@ export default function ProductVisionWorkspace() {
           </strong>
 
           <span className="tfv-product-vision__metric-note">
-            Visual fingerprints stored
+            Product intelligence fingerprints stored
           </span>
         </article>
 
@@ -178,7 +178,7 @@ export default function ProductVisionWorkspace() {
           </strong>
 
           <span className="tfv-product-vision__metric-note">
-            Awaiting AI analysis
+            Awaiting product analysis
           </span>
         </article>
 
@@ -222,7 +222,7 @@ export default function ProductVisionWorkspace() {
 
         <article className="tfv-product-vision__metric tfv-product-vision__metric--wide">
           <span className="tfv-product-vision__metric-label">
-            Vision model
+            Intelligence Model
           </span>
 
           <strong className="tfv-product-vision__metric-value tfv-product-vision__metric-value--model">
@@ -251,7 +251,7 @@ export default function ProductVisionWorkspace() {
           role="alert"
         >
           <strong>
-            Product Vision could not continue.
+            Product Intelligence could not continue.
           </strong>
 
           <span>{error}</span>
@@ -319,14 +319,18 @@ export default function ProductVisionWorkspace() {
             </>
           ) : null}
 
-          <button
+          {isComplete ? (
+            <span className="tfv-product-vision__completion">
+              Product Intelligence Complete
+            </span>
+          ) : (
+            <button
             type="button"
             className="tfv-product-vision__button"
             disabled={
-              isLoading ||
-              isIndexing ||
-              isComplete ||
-              totalProducts === 0
+                isLoading ||
+                isIndexing ||
+                totalProducts === 0
             }
             onClick={() => {
               void runIndexing();
@@ -346,7 +350,8 @@ export default function ProductVisionWorkspace() {
                   ? "↻"
                   : "→"}
             </span>
-          </button>
+            </button>
+          )}
         </div>
       </div>
 
@@ -754,6 +759,19 @@ export default function ProductVisionWorkspace() {
 
         .tfv-product-vision__button-icon {
           font-size: 1rem;
+        }
+
+        .tfv-product-vision__completion {
+          display: inline-flex;
+          min-height: 46px;
+          align-items: center;
+          padding: 0 14px;
+          border: 1px solid rgba(126, 211, 154, 0.24);
+          border-radius: 12px;
+          color: #b8e5c6;
+          background: rgba(126, 211, 154, 0.07);
+          font-size: 0.84rem;
+          font-weight: 700;
         }
 
         @keyframes tfv-product-vision-pulse {

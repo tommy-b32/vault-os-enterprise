@@ -342,7 +342,7 @@ export function VisualComparisonCard({
         </div>
 
         <BrainPill tone="default">
-          Product Vision
+          Catalogue product evidence
         </BrainPill>
       </header>
 

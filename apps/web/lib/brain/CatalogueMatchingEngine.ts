@@ -426,7 +426,7 @@ function buildMatch({
           "brand_match",
         label:
           productVision
-            ? "Brand matches Product Vision"
+            ? "Brand matches Product Intelligence"
             : "Brand match",
         score: 30,
       },
@@ -490,7 +490,7 @@ function buildMatch({
           "colour_match",
         label:
           productVision
-            ? "Primary colour matches Product Vision"
+            ? "Primary colour matches Product Intelligence"
             : "Primary colour match",
         score: 8,
       },
@@ -668,4 +668,4 @@ export const CatalogueMatchingEngine = {
         }),
     );
   },
-} as const; 
+} as const;
