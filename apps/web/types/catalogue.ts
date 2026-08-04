@@ -108,6 +108,28 @@ export type CatalogueSupplier = {
   supplier_name: string;
 };
 
+export type ReplenishmentIntelligence = {
+  styleId: string;
+  parentProductId: string;
+  stockOnHand: number | null;
+  committedStock: number | null;
+  incomingStock: number | null;
+  netAvailableStock: number | null;
+  averageDailySales: number | null;
+  averageWeeklySales: number | null;
+  salesHistoryDays: number | null;
+  reorderPoint: number | null;
+  safetyStock: number | null;
+  targetStockDays: number | null;
+  supplierLeadTimeDays: number | null;
+  unitsPerPack: number | null;
+  supplierMoqPacks: number | null;
+  freshness: string | null;
+  supplierMinimumOrderState: "satisfied" | "not_satisfied" | "unknown" | "not_applicable";
+  trusted: boolean;
+  missingRequirements: string[];
+};
+
 export type ProductReorderApproval = {
   approval_state: "approved" | "revoked";
   approved_at: string;
@@ -170,11 +192,16 @@ export type CatalogueProduct = {
 
   stock_on_hand: number;
 
+  committed_stock: number | null;
+  incoming_stock: number | null;
+
   complete_packs: number;
 
   loose_units: number;
 
   sales_intelligence: ProductSalesIntelligence;
+
+  replenishment_intelligence: ReplenishmentIntelligence;
 
   configuration_score: number;
 

@@ -108,8 +108,7 @@ function getAverageDailySales(
   if (
     intelligence.average_daily_sales !==
       null &&
-    intelligence.average_daily_sales >
-      0
+    intelligence.average_daily_sales >= 0
   ) {
     return intelligence.average_daily_sales;
   }
@@ -154,6 +153,7 @@ function getUnitsPerPack({
   }
 
   const unitsPerPack =
+    product.replenishment_intelligence.unitsPerPack ??
     product.commercial_cost?.units_per_pack ??
     null;
 
@@ -259,14 +259,15 @@ export const BuyingRecommendationEngine = {
       getAverageDailySales(product);
 
     const currentStock =
-      product.stock_on_hand ?? 0;
+      product.replenishment_intelligence.stockOnHand ??
+      product.stock_on_hand;
 
     const supplierLeadTimeDays =
       supplierCard?.leadTimeDays ??
-      null;
+      product.replenishment_intelligence.supplierLeadTimeDays;
 
     const targetStockDays =
-      product.target_stock_days;
+      product.replenishment_intelligence.targetStockDays;
 
     const salesIntelligence =
       getSalesIntelligence(
@@ -306,35 +307,38 @@ export const BuyingRecommendationEngine = {
         product,
       });
 
-    const missingData: string[] = [];
+    const missingData = [
+      ...product.replenishment_intelligence.missingRequirements,
+    ];
 
     if (averageDailySales === null) {
-      missingData.push(
-        "Average sales rate",
-      );
+      if (!missingData.includes("sales_history_unavailable")) {
+        missingData.push("sales_history_unavailable");
+      }
     }
 
     if (supplierLeadTimeDays === null) {
-      missingData.push(
-        "Supplier lead time",
-      );
+      if (!missingData.includes("supplier_lead_time_missing")) {
+        missingData.push("supplier_lead_time_missing");
+      }
     }
 
     if (targetStockDays === null) {
-      missingData.push(
-        "Target stock days",
-      );
+      if (!missingData.includes("target_stock_days_missing")) {
+        missingData.push("target_stock_days_missing");
+      }
     }
 
     if (unitsPerPack === null) {
-      missingData.push(
-        "Units per pack",
-      );
+      if (!missingData.includes("units_per_pack_missing")) {
+        missingData.push("units_per_pack_missing");
+      }
     }
 
     const trusted =
       product.trusted_for_reorder &&
       product.configuration_trusted &&
+      product.replenishment_intelligence.trusted &&
       (
         product.commercial_cost
           ?.commercial_cost_trusted ??
@@ -359,7 +363,7 @@ export const BuyingRecommendationEngine = {
           : null,
 
       estimatedDaysRemaining:
-        averageDailySales !== null
+        averageDailySales !== null && averageDailySales > 0
           ? roundTo(
               currentStock /
                 averageDailySales,
@@ -424,6 +428,7 @@ export const BuyingRecommendationEngine = {
     }
 
     if (
+      !product.replenishment_intelligence.trusted ||
       averageDailySales === null ||
       targetStockDays === null ||
       unitsPerPack === null

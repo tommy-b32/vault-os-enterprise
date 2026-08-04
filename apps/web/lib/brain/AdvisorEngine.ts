@@ -1,4 +1,5 @@
 import { OpportunityCollector } from "@/lib/brain/OpportunityCollector";
+import { BuyingRecommendationEngine } from "@/lib/brain/BuyingRecommendationEngine";
 import type {
   Opportunity,
   OpportunityEngineResult,
@@ -26,6 +27,19 @@ export type AdvisorDiagnostics = {
   commercialCostTrusted: number;
   invalidOrMissingCommercialCost: number;
 
+  mappedToSalesHistory: number;
+  validSalesVelocity: number;
+  validStockInputs: number;
+  validCommittedIncomingInputs: number;
+  validLeadTime: number;
+  validTargetDays: number;
+  validPackSize: number;
+  validMoq: number;
+  trustedReplenishmentInputs: number;
+  trustedQuantityProduced: number;
+  noReorderNeeded: number;
+  insufficientQuantityData: number;
+
   commercialDataComplete: number;
   commercialDataMissing: number;
 
@@ -46,6 +60,8 @@ export type AdvisorExclusionReason =
   | "commercial_cost_untrusted"
   | "invalid_or_missing_commercial_cost"
   | "commercial_data_missing"
+  | "replenishment_intelligence_untrusted"
+  | "trusted_quantity_unavailable"
   | "stock_above_threshold"
   | "margin_below_threshold"
   | "return_below_threshold";
@@ -143,6 +159,20 @@ function getExclusionReasons(
     return reasons;
   }
 
+  const buying = BuyingRecommendationEngine.buildRecommendation({ product });
+
+  if (!product.replenishment_intelligence.trusted) {
+    reasons.push("replenishment_intelligence_untrusted");
+  }
+
+  if (
+    !buying.trusted ||
+    buying.suggestedPacks === null ||
+    buying.suggestedPacks <= 0
+  ) {
+    reasons.push("trusted_quantity_unavailable");
+  }
+
   if (
     product.stock_on_hand >
     LOW_STOCK_THRESHOLD
@@ -178,19 +208,19 @@ function buildCommercialInput(
   const commercial =
     product.commercial_cost;
   const purchaseCost = commercial.landed_cost_per_pack_gbp;
+  const buying = BuyingRecommendationEngine.buildRecommendation({ product });
 
   if (
     !hasValidCanonicalCost(product) ||
-    purchaseCost === null
+    purchaseCost === null ||
+    !buying.trusted ||
+    buying.suggestedPacks === null ||
+    buying.suggestedPacks <= 0
   ) {
     return null;
   }
 
-  const recommendedOrderQuantity =
-    Math.max(
-      1,
-      product.supplier_moq_packs ?? 1,
-    );
+  const recommendedOrderQuantity = buying.suggestedPacks;
 
   return {
     productId: product.style_id,
@@ -228,6 +258,9 @@ function buildDiagnostics(
 ): AdvisorDiagnostics {
   const commercialDataComplete =
     products.filter(hasCommercialData).length;
+  const buyingResults = products.map((product) =>
+    BuyingRecommendationEngine.buildRecommendation({ product }),
+  );
 
   return {
     productsScanned:
@@ -282,6 +315,57 @@ function buildDiagnostics(
       products.filter(
         (product) => !hasValidCanonicalCost(product),
       ).length,
+
+    mappedToSalesHistory: products.filter(
+      (product) =>
+        !product.replenishment_intelligence.missingRequirements.includes(
+          "variant_mapping_missing",
+        ),
+    ).length,
+    validSalesVelocity: products.filter(
+      (product) =>
+        product.replenishment_intelligence.averageDailySales !== null,
+    ).length,
+    validStockInputs: products.filter(
+      (product) => product.replenishment_intelligence.stockOnHand !== null,
+    ).length,
+    validCommittedIncomingInputs: products.filter(
+      (product) =>
+        product.replenishment_intelligence.committedStock !== null &&
+        product.replenishment_intelligence.incomingStock !== null,
+    ).length,
+    validLeadTime: products.filter(
+      (product) =>
+        (product.replenishment_intelligence.supplierLeadTimeDays ?? 0) > 0,
+    ).length,
+    validTargetDays: products.filter(
+      (product) =>
+        (product.replenishment_intelligence.targetStockDays ?? 0) > 0,
+    ).length,
+    validPackSize: products.filter(
+      (product) =>
+        (product.replenishment_intelligence.unitsPerPack ?? 0) > 0,
+    ).length,
+    validMoq: products.filter(
+      (product) =>
+        product.replenishment_intelligence.supplierMoqPacks !== null &&
+        product.replenishment_intelligence.supplierMoqPacks >= 0,
+    ).length,
+    trustedReplenishmentInputs: products.filter(
+      (product) => product.replenishment_intelligence.trusted,
+    ).length,
+    trustedQuantityProduced: buyingResults.filter(
+      (result) =>
+        result.trusted &&
+        result.suggestedPacks !== null &&
+        result.suggestedPacks > 0,
+    ).length,
+    noReorderNeeded: buyingResults.filter(
+      (result) => result.status === "healthy",
+    ).length,
+    insufficientQuantityData: buyingResults.filter(
+      (result) => result.status === "insufficient_data",
+    ).length,
 
     commercialDataComplete,
 

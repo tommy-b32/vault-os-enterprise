@@ -15,6 +15,7 @@ import type {
   ProductCommercialCost,
   ProductIntelligenceProfile,
   ProductReorderApproval,
+  ReplenishmentIntelligence,
   ProductSalesIntelligence,
 } from "@/types/catalogue";
 
@@ -83,6 +84,28 @@ type CommercialRow =
   ProductCommercialCost & {
     product_id: string;
   };
+
+type ReplenishmentRow = {
+  style_id: string;
+  parent_product_id: string;
+  stock_on_hand: number | null;
+  committed_stock: number | null;
+  incoming_stock: number | null;
+  net_available_stock: number | null;
+  average_daily_sales: number | null;
+  average_weekly_sales: number | null;
+  sales_history_days: number | null;
+  reorder_point: number | null;
+  safety_stock: number | null;
+  target_stock_days: number | null;
+  supplier_lead_time_days: number | null;
+  units_per_pack: number | null;
+  supplier_moq_packs: number | null;
+  freshness: string | null;
+  supplier_minimum_order_state: ReplenishmentIntelligence["supplierMinimumOrderState"];
+  trusted: boolean;
+  missing_requirements: string[] | null;
+};
 
 type ReorderApprovalRow = {
   product_id: string;
@@ -384,6 +407,7 @@ export async function getCatalogueData():
     styleResponse,
     supplierResponse,
     commercialResponse,
+    replenishmentResponse,
     productVisionByProductId,
     approvalResponse,
     operatorResponse,
@@ -481,6 +505,30 @@ export async function getCatalogueData():
         commercial_notes
       `),
 
+    supabaseAdmin
+      .from("vault_style_replenishment_intelligence")
+      .select(`
+        style_id,
+        parent_product_id,
+        stock_on_hand,
+        committed_stock,
+        incoming_stock,
+        net_available_stock,
+        average_daily_sales,
+        average_weekly_sales,
+        sales_history_days,
+        reorder_point,
+        safety_stock,
+        target_stock_days,
+        supplier_lead_time_days,
+        units_per_pack,
+        supplier_moq_packs,
+        freshness,
+        supplier_minimum_order_state,
+        trusted,
+        missing_requirements
+      `),
+
     ProductVisionRepository
       .getMapByProductId(),
 
@@ -503,6 +551,7 @@ export async function getCatalogueData():
     styleResponse.error ??
     supplierResponse.error ??
     commercialResponse.error ??
+    replenishmentResponse.error ??
     approvalResponse.error ??
     operatorResponse.error;
 
@@ -523,6 +572,13 @@ export async function getCatalogueData():
   const commercialRows =
     (commercialResponse.data ??
       []) as CommercialRow[];
+
+  const replenishmentRows =
+    (replenishmentResponse.data ?? []) as ReplenishmentRow[];
+
+  const replenishmentByStyle = new Map(
+    replenishmentRows.map((row) => [row.style_id, row]),
+  );
 
   const approvalRows =
     (approvalResponse.data ??
@@ -656,6 +712,7 @@ export async function getCatalogueData():
     CatalogueProduct[] =
     styleRows.map(
       (style) => {
+        const replenishment = replenishmentByStyle.get(style.style_id);
         const commercialCost =
           commercialByParentProduct.get(
             style.parent_product_id,
@@ -771,6 +828,9 @@ export async function getCatalogueData():
               0,
             ),
 
+          committed_stock: style.committed_stock,
+          incoming_stock: style.incoming_stock,
+
           complete_packs:
             Math.max(
               0,
@@ -785,8 +845,51 @@ export async function getCatalogueData():
               0,
             ),
 
-          sales_intelligence: {
-            ...EMPTY_SALES_INTELLIGENCE,
+          sales_intelligence: replenishment
+            ? {
+                ...EMPTY_SALES_INTELLIGENCE,
+                average_daily_sales: replenishment.average_daily_sales,
+                average_weekly_sales: replenishment.average_weekly_sales,
+                average_monthly_sales: null,
+                sales_velocity:
+                  replenishment.average_daily_sales === null
+                    ? "unknown"
+                    : replenishment.average_daily_sales >= 1
+                      ? "high"
+                      : replenishment.average_daily_sales > 0
+                        ? "low"
+                        : "very_low",
+                reorder_point: replenishment.reorder_point,
+                safety_stock: replenishment.safety_stock,
+              }
+            : { ...EMPTY_SALES_INTELLIGENCE },
+
+          replenishment_intelligence: {
+            styleId: style.style_id,
+            parentProductId: style.parent_product_id,
+            stockOnHand: replenishment?.stock_on_hand ?? null,
+            committedStock: replenishment?.committed_stock ?? null,
+            incomingStock: replenishment?.incoming_stock ?? null,
+            netAvailableStock: replenishment?.net_available_stock ?? null,
+            averageDailySales: replenishment?.average_daily_sales ?? null,
+            averageWeeklySales: replenishment?.average_weekly_sales ?? null,
+            salesHistoryDays: replenishment?.sales_history_days ?? null,
+            reorderPoint: replenishment?.reorder_point ?? null,
+            safetyStock: replenishment?.safety_stock ?? null,
+            targetStockDays: replenishment?.target_stock_days ?? null,
+            supplierLeadTimeDays:
+              replenishment?.supplier_lead_time_days ?? null,
+            unitsPerPack: replenishment?.units_per_pack ?? null,
+            supplierMoqPacks:
+              replenishment?.supplier_moq_packs ?? null,
+            freshness: replenishment?.freshness ?? null,
+            supplierMinimumOrderState:
+              replenishment?.supplier_minimum_order_state ?? "unknown",
+            trusted: replenishment?.trusted ?? false,
+            missingRequirements:
+              replenishment?.missing_requirements ?? [
+                "replenishment_intelligence_unavailable",
+              ],
           },
 
           configuration_score:
