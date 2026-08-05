@@ -13035,3 +13035,93 @@ grid-template-columns:1fr;
     flex-direction: column;
   }
 }
+.decision-timeline {
+  display: grid;
+  gap: 20px;
+}
+
+.decision-timeline-group {
+  display: grid;
+  gap: 10px;
+}
+
+.decision-timeline-group > h3 {
+  color: var(--vault-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.decision-timeline-group > div {
+  display: grid;
+  gap: 10px;
+}
+
+.decision-timeline-item {
+  align-items: center;
+  background: color-mix(in srgb, var(--vault-panel) 90%, transparent);
+  border: 1px solid var(--vault-border);
+  border-left: 3px solid var(--vault-muted);
+  border-radius: 12px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 16px;
+}
+
+.decision-timeline-item.is-actionable {
+  border-left-color: var(--vault-success);
+}
+
+.decision-timeline-item.is-blocked,
+.decision-timeline-item.is-unavailable {
+  border-left-color: var(--vault-warning);
+}
+
+.decision-timeline-item-copy > span {
+  color: var(--vault-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.decision-timeline-item-copy h3 {
+  margin: 4px 0;
+}
+
+.decision-timeline-item-copy p {
+  color: var(--vault-muted);
+  margin: 0;
+}
+
+.decision-timeline-item dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 12px 0 0;
+}
+
+.decision-timeline-item dl div {
+  display: flex;
+  gap: 6px;
+}
+
+.decision-timeline-item dt {
+  color: var(--vault-muted);
+}
+
+.decision-timeline-item dd {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .decision-timeline-item {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-timeline-item > a {
+    display: block;
+    text-align: center;
+    width: 100%;
+  }
+}

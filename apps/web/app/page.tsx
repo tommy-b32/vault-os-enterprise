@@ -1,8 +1,6 @@
 import VaultAppShell from "@/components/layout/VaultAppShell";
 
-import {
-  CommandCentreBrainPriority,
-} from "@/components/brain/CommandCentreBrainPriority";
+import { CommercialDecisionTimeline } from "@/components/command-centre/CommercialDecisionTimeline";
 import {
   CommandCentreLiveMetric,
   CommandCentreLiveTrading,
@@ -13,6 +11,7 @@ import {
   getVaultBusinessState,
   type VaultBusinessSourceState,
 } from "@/lib/business/VaultBusinessState";
+import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecisionTimeline";
 
 export const dynamic = "force-dynamic";
 
@@ -574,6 +573,9 @@ export default async function Home() {
     await getVaultBusinessState({
       refreshExternalSources: false,
     });
+  const decisionTimeline = await getCommercialDecisionTimeline(
+    businessState.generatedAt,
+  );
   const tradingState = businessState.trading;
   const trading = tradingState.data;
   const recentOrdersState = businessState.recentOrders;
@@ -769,7 +771,7 @@ export default async function Home() {
               <p>Good morning Tom <span aria-hidden>👋</span></p>
             </div>
 
-            <CommandCentreBrainPriority />
+            <CommercialDecisionTimeline timeline={decisionTimeline} />
 
             <section className="vault-status-strip">
               <span>
@@ -892,7 +894,7 @@ export default async function Home() {
                         </span>
                       ) : null}
                       <a className="vault-cash-link" href="/commercial">
-                        View finance
+                        Open Commercial Intelligence
                       </a>
                     </div>
                   ) : null}
