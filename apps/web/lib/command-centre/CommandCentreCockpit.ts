@@ -36,14 +36,15 @@ export type CommandCentreCockpitData = {
     orderComparison: CockpitValue<number>;
   };
   website: {
-    visitors: CockpitValue<number>;
+    trackedVisitors: CockpitValue<number>;
+    estimatedUntrackedVisitors: CockpitValue<number>;
+    estimatedTotalVisitors: CockpitValue<number>;
     sessions: CockpitValue<number>;
-    liveVisitors: CockpitValue<number>;
+    liveTrackedVisitors: CockpitValue<number>;
     conversionRate: CockpitValue<number>;
     addToCartRate: CockpitValue<number>;
     checkoutRate: CockpitValue<number>;
     abandonedCheckouts: CockpitValue<number>;
-    ukTrafficPercentage: CockpitValue<number>;
   };
   meta: {
     connection: "not_connected";
@@ -91,6 +92,39 @@ export const notConnected = <T>(): CockpitValue<T> => ({
   value: null,
   updatedAt: null,
 });
+
+export function createWebsiteTrafficBreakdown({
+  tracked,
+  estimatedUntracked,
+  estimatedTotal,
+  liveTracked,
+  updatedAt,
+  stale,
+}: {
+  tracked: number | null;
+  estimatedUntracked: number | null;
+  estimatedTotal: number | null;
+  liveTracked: number | null;
+  updatedAt: string | null;
+  stale: boolean;
+}): Pick<CommandCentreCockpitData["website"],
+  | "trackedVisitors"
+  | "estimatedUntrackedVisitors"
+  | "estimatedTotalVisitors"
+  | "liveTrackedVisitors"
+> {
+  const canonical = (value: number | null): CockpitValue<number> =>
+    value === null
+      ? unavailable()
+      : { state: stale ? "stale" : "available", value, updatedAt };
+
+  return {
+    trackedVisitors: canonical(tracked),
+    estimatedUntrackedVisitors: canonical(estimatedUntracked),
+    estimatedTotalVisitors: canonical(estimatedTotal),
+    liveTrackedVisitors: canonical(liveTracked),
+  };
+}
 
 export function selectAttentionItems(
   timeline: CommercialDecisionTimelineResult | null,

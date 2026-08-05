@@ -5,6 +5,7 @@ import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecision
 import { getVaultBusinessState } from "@/lib/business/VaultBusinessState";
 import type { FinancePosition } from "@/lib/business/BusinessFinanceRepository";
 import {
+  createWebsiteTrafficBreakdown,
   limitFeed,
   limitInsights,
   notConnected,
@@ -55,6 +56,14 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
   const finance = business.finance.data;
   const financeStale = business.finance.status === "stale";
   const wallet = walletResult.error ? null : walletResult.data as PurchasingWalletData;
+  const websiteTraffic = createWebsiteTrafficBreakdown({
+    tracked: visitors?.tracked ?? null,
+    estimatedUntracked: visitors?.estimatedPrivacy ?? null,
+    estimatedTotal: visitors?.estimatedTotal ?? null,
+    liveTracked: visitors?.liveTracked ?? null,
+    updatedAt: websiteAt,
+    stale: websiteStale,
+  });
 
   const unavailableMoney = unavailable<CockpitMoney>();
   const tradingMoney = (amount: number | null): CockpitValue<CockpitMoney> => {
@@ -73,12 +82,16 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
         : "Revenue is available, but its currency is unavailable.",
     });
   }
-  if (visitors?.estimatedTotal !== null && visitors?.estimatedTotal !== undefined) {
+  if (
+    visitors?.tracked !== null && visitors?.tracked !== undefined &&
+    visitors.estimatedPrivacy !== null &&
+    visitors.estimatedTotal !== null
+  ) {
     insights.push({
       id: "website-visitors",
       tone: "neutral",
-      title: `${visitors.estimatedTotal.toLocaleString("en-GB")} estimated visitors today`,
-      detail: "Conversion funnel metrics are not yet available from the canonical website source.",
+      title: `${visitors.estimatedTotal.toLocaleString("en-GB")} estimated total visitors today`,
+      detail: `${visitors.tracked.toLocaleString("en-GB")} tracked and ${visitors.estimatedPrivacy.toLocaleString("en-GB")} estimated from declined-cookie traffic.`,
     });
   }
   const firstAttention = selectAttentionItems(timeline)[0];
@@ -114,16 +127,12 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
         : unavailable(),
     },
     website: {
-      visitors: visitors?.estimatedTotal !== null && visitors?.estimatedTotal !== undefined
-        ? available(visitors.estimatedTotal, websiteAt, websiteStale) : unavailable(),
+      ...websiteTraffic,
       sessions: unavailable(),
-      liveVisitors: visitors?.liveTracked !== null && visitors?.liveTracked !== undefined
-        ? available(visitors.liveTracked, websiteAt, websiteStale) : unavailable(),
       conversionRate: unavailable(),
       addToCartRate: unavailable(),
       checkoutRate: unavailable(),
       abandonedCheckouts: unavailable(),
-      ukTrafficPercentage: unavailable(),
     },
     meta: {
       connection: "not_connected",
