@@ -11,7 +11,8 @@ import {
   type CashDirection,
 } from "@/lib/business/CashLedgerRules";
 import { emitCommandCentreRefreshEvent } from "@/lib/command-centre/emitCommandCentreRefreshEvent";
-import { SupplierMinimumContract, type SupplierMinimumState } from "@/lib/supplier/SupplierMinimum";
+import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
+import type { SupplierMinimumActionState } from "@/lib/supplier/SupplierMinimumActionState";
 import { parseSupplierMinimumPolicy } from "@/lib/supplier/SupplierMinimumPolicyInput";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -22,18 +23,6 @@ export type CashLedgerActionState = {
 
 class CashLedgerInputError extends Error {}
 class SupplierMinimumInputError extends Error {}
-
-export type SupplierMinimumActionState = {
-  status: "idle" | "success" | "error";
-  message: string;
-  supplierMinimumState: SupplierMinimumState | null;
-};
-
-export const INITIAL_SUPPLIER_MINIMUM_ACTION_STATE: SupplierMinimumActionState = {
-  status: "idle",
-  message: "",
-  supplierMinimumState: null,
-};
 
 function text(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -142,13 +131,21 @@ export async function updateSupplierMinimumPolicy(
     await requireOperatorRole("owner", "operator");
     const input = parseSupplierMinimumPolicy(formData);
 
-    const { data: existing, error: existingError } = await supabaseAdmin
-      .from("vault_suppliers")
-      .select("id, is_active, currency_code, minimum_order_value")
-      .eq("id", input.supplierId)
-      .maybeSingle();
+    const [supplierResponse, ruleResponse] = await Promise.all([
+      supabaseAdmin
+        .from("vault_suppliers")
+        .select("id, is_active, currency_code, minimum_order_value")
+        .eq("id", input.supplierId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("vault_supplier_purchasing_rules")
+        .select("supplier_id, minimum_order_packs")
+        .eq("supplier_id", input.supplierId)
+        .maybeSingle(),
+    ]);
+    const existing = supplierResponse.data;
 
-    if (existingError || !existing) {
+    if (supplierResponse.error || ruleResponse.error || !existing) {
       throw new SupplierMinimumInputError("The canonical supplier is unavailable.");
     }
     if (!existing.is_active) {
@@ -158,10 +155,18 @@ export async function updateSupplierMinimumPolicy(
     const existingMinimum = existing.minimum_order_value === null
       ? null
       : Number(existing.minimum_order_value);
-    if (existingMinimum === input.value) {
+    const existingPackMinimum = ruleResponse.data?.minimum_order_packs === null ||
+      ruleResponse.data?.minimum_order_packs === undefined
+      ? null
+      : Number(ruleResponse.data.minimum_order_packs);
+    if (
+      existingMinimum === input.value &&
+      existingPackMinimum === input.minimumOrderPacks
+    ) {
       const unchanged = SupplierMinimumContract.create({
         value: existingMinimum,
         currency: existing.currency_code,
+        minimumOrderPacks: existingPackMinimum,
       });
       return {
         status: "success",
@@ -170,25 +175,39 @@ export async function updateSupplierMinimumPolicy(
       };
     }
 
-    const { error: updateError } = await supabaseAdmin
-      .from("vault_suppliers")
-      .update({
-        minimum_order_value: input.value,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", input.supplierId);
+    const { error: updateError } = await supabaseAdmin.rpc(
+      "update_supplier_minimum_policy",
+      {
+        target_supplier_id: input.supplierId,
+        target_minimum_order_value: input.value,
+        target_minimum_order_packs: input.minimumOrderPacks,
+      },
+    );
 
     if (updateError) {
       throw new Error("Supplier minimum-order policy could not be saved.");
     }
 
-    const { data: canonical, error: canonicalError } = await supabaseAdmin
-      .from("vault_suppliers")
-      .select("id, currency_code, minimum_order_value")
-      .eq("id", input.supplierId)
-      .maybeSingle();
+    const [canonicalSupplierResponse, canonicalRuleResponse] = await Promise.all([
+      supabaseAdmin
+        .from("vault_suppliers")
+        .select("id, currency_code, minimum_order_value")
+        .eq("id", input.supplierId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("vault_supplier_purchasing_rules")
+        .select("supplier_id, minimum_order_packs")
+        .eq("supplier_id", input.supplierId)
+        .maybeSingle(),
+    ]);
+    const canonical = canonicalSupplierResponse.data;
 
-    if (canonicalError || !canonical) {
+    if (
+      canonicalSupplierResponse.error ||
+      canonicalRuleResponse.error ||
+      !canonical ||
+      !canonicalRuleResponse.data
+    ) {
       throw new Error("Supplier policy was saved but could not be reread canonically.");
     }
 
@@ -197,6 +216,9 @@ export async function updateSupplierMinimumPolicy(
         ? null
         : Number(canonical.minimum_order_value),
       currency: canonical.currency_code,
+      minimumOrderPacks: canonicalRuleResponse.data.minimum_order_packs === null
+        ? null
+        : Number(canonicalRuleResponse.data.minimum_order_packs),
     });
 
     await emitCommandCentreRefreshEvent({

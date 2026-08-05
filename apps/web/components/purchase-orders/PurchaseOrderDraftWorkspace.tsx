@@ -28,6 +28,7 @@ export type SupplierDraftOrder = {
   supplierName: string;
   leadTimeDays: number | null;
   minimumOrderValue: number | null;
+  minimumOrderPacks: number | null;
   minimumOrderCurrency: string;
   supplierMinimum: SupplierMinimum;
   currency: string;
@@ -104,6 +105,10 @@ export function PurchaseOrderDraftWorkspace({
             (total, entry) => total + (entry.estimatedCost ?? 0),
             0,
           );
+      const totalPacks = lines.reduce(
+        (total, entry) => total + entry.quantity,
+        0,
+      );
       const minimumOrderSatisfied =
         order.minimumOrderValue === null ||
         order.minimumOrderCurrency !== order.currency ||
@@ -115,6 +120,7 @@ export function PurchaseOrderDraftWorkspace({
         order,
         lines,
         totalCost,
+        totalPacks,
         minimumOrderSatisfied,
       };
     });
@@ -176,7 +182,7 @@ export function PurchaseOrderDraftWorkspace({
         </article>
       </section>
 
-      {summary.orders.map(({ order, lines, totalCost, minimumOrderSatisfied }) => (
+      {summary.orders.map(({ order, lines, totalCost, totalPacks, minimumOrderSatisfied }) => (
         <section className="purchase-order-supplier-draft" key={order.supplierId}>
           <div className="purchase-order-section-heading">
             <div>
@@ -192,6 +198,11 @@ export function PurchaseOrderDraftWorkspace({
                       order.minimumOrderValue,
                       order.minimumOrderCurrency,
                     )}`}
+                {order.minimumOrderPacks === null
+                  ? " · Pack minimum unavailable"
+                  : order.minimumOrderPacks === 0
+                    ? " · No supplier pack minimum"
+                    : ` · ${order.minimumOrderPacks} mixed-pack minimum (not evaluated)`}
               </p>
             </div>
             <span>{lines.length} lines</span>
@@ -307,6 +318,10 @@ export function PurchaseOrderDraftWorkspace({
                     ? "Satisfied"
                     : "Attention required"}
               </strong>
+            </div>
+            <div>
+              <span>Total packs across supplier basket</span>
+              <strong>{totalPacks}</strong>
             </div>
           </div>
 

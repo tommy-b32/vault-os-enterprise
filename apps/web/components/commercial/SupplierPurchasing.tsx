@@ -1,15 +1,14 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState } from "react";
 
-import {
-  INITIAL_SUPPLIER_MINIMUM_ACTION_STATE,
-  updateSupplierMinimumPolicy,
-} from "@/app/commercial/actions";
+import { updateSupplierMinimumPolicy } from "@/app/commercial/actions";
 import {
   SupplierMinimumContract,
   type SupplierMinimumState,
 } from "@/lib/supplier/SupplierMinimum";
+import { INITIAL_SUPPLIER_MINIMUM_ACTION_STATE } from "@/lib/supplier/SupplierMinimumActionState";
 
 export type SupplierPurchasingData = {
   id: string;
@@ -17,11 +16,12 @@ export type SupplierPurchasingData = {
   supplier_name: string;
   default_lead_time_days: number;
   minimum_order_value: number | null;
+  minimum_order_packs: number | null;
   currency_code: string;
   notes: string | null;
 };
 
-function stateCopy(state: SupplierMinimumState, currency: string, value: number | null) {
+function stateCopy(state: SupplierMinimumState) {
   if (state === "unknown") {
     return { label: "Unknown", detail: "Blocks trusted buying recommendations." };
   }
@@ -29,22 +29,28 @@ function stateCopy(state: SupplierMinimumState, currency: string, value: number 
     return { label: "No minimum", detail: "Explicitly confirmed by the operator." };
   }
   return {
-    label: `${currency} ${value?.toFixed(2)}`,
+    label: "Defined minimum",
     detail: "Defined policy; the supplier basket still requires later evaluation.",
   };
 }
 
 function SupplierMinimumEditor({ supplier }: { supplier: SupplierPurchasingData }) {
+  const router = useRouter();
   const minimum = SupplierMinimumContract.create({
     value: supplier.minimum_order_value,
     currency: supplier.currency_code,
+    minimumOrderPacks: supplier.minimum_order_packs,
   });
   const [policy, setPolicy] = useState<SupplierMinimumState>(minimum.state);
   const [state, action, pending] = useActionState(
     updateSupplierMinimumPolicy,
     INITIAL_SUPPLIER_MINIMUM_ACTION_STATE,
   );
-  const copy = stateCopy(minimum.state, supplier.currency_code, minimum.value);
+  const copy = stateCopy(minimum.state);
+
+  useEffect(() => {
+    if (state.status === "success") router.refresh();
+  }, [router, state.status]);
 
   return (
     <article className="supplier-purchasing-card">
@@ -59,7 +65,26 @@ function SupplierMinimumEditor({ supplier }: { supplier: SupplierPurchasingData 
       <div className="supplier-purchasing-metrics">
         <div><span>Lead time</span><strong>{supplier.default_lead_time_days} days</strong></div>
         <div><span>Currency</span><strong>{supplier.currency_code}</strong></div>
-        <div><span>Minimum policy</span><strong>{copy.label}</strong></div>
+        <div>
+          <span>Monetary minimum</span>
+          <strong>
+            {minimum.value === null
+              ? "Unknown"
+              : minimum.value === 0
+                ? "No minimum"
+                : `${supplier.currency_code} ${minimum.value.toFixed(2)}`}
+          </strong>
+        </div>
+        <div>
+          <span>Pack minimum</span>
+          <strong>
+            {minimum.minimumOrderPacks === null
+              ? "Unknown"
+              : minimum.minimumOrderPacks === 0
+                ? "No minimum"
+                : `${minimum.minimumOrderPacks} mixed packs`}
+          </strong>
+        </div>
       </div>
 
       <p className="supplier-minimum-detail">{copy.detail}</p>
@@ -75,23 +100,37 @@ function SupplierMinimumEditor({ supplier }: { supplier: SupplierPurchasingData 
           >
             <option value="unknown">Unknown</option>
             <option value="not_applicable">No minimum / Not applicable</option>
-            <option value="defined">Defined monetary minimum</option>
+            <option value="defined">Defined minimum</option>
           </select>
         </label>
 
         {policy === "defined" ? (
-          <label>
-            <span>Minimum value ({supplier.currency_code})</span>
-            <input
-              defaultValue={minimum.state === "defined" ? minimum.value ?? "" : ""}
-              inputMode="decimal"
-              min="0.01"
-              name="minimum_order_value"
-              required
-              step="0.01"
-              type="number"
-            />
-          </label>
+          <div className="supplier-minimum-defined-fields">
+            <label>
+              <span>Minimum order value ({supplier.currency_code})</span>
+              <input
+                defaultValue={minimum.value && minimum.value > 0 ? minimum.value : ""}
+                inputMode="decimal"
+                min="0.01"
+                name="minimum_order_value"
+                step="0.01"
+                type="number"
+              />
+            </label>
+            <label>
+              <span>Minimum packs per order</span>
+              <input
+                defaultValue={minimum.minimumOrderPacks && minimum.minimumOrderPacks > 0
+                  ? minimum.minimumOrderPacks
+                  : ""}
+                inputMode="numeric"
+                min="1"
+                name="minimum_order_packs"
+                step="1"
+                type="number"
+              />
+            </label>
+          </div>
         ) : null}
 
         <button className="supplier-review-button" disabled={pending} type="submit">

@@ -3,6 +3,7 @@ import type { SupplierMinimumState } from "@/lib/supplier/SupplierMinimum";
 export type SupplierMinimumPolicyInput = {
   supplierId: string;
   value: number | null;
+  minimumOrderPacks: number | null;
   state: SupplierMinimumState;
 };
 
@@ -26,27 +27,38 @@ export function parseSupplierMinimumPolicy(
     throw new Error("Choose a valid canonical supplier.");
   }
   if (policy === "unknown") {
-    return { supplierId, value: null, state: "unknown" };
+    return { supplierId, value: null, minimumOrderPacks: null, state: "unknown" };
   }
   if (policy === "not_applicable") {
-    return { supplierId, value: 0, state: "not_applicable" };
+    return { supplierId, value: 0, minimumOrderPacks: 0, state: "not_applicable" };
   }
   if (policy !== "defined") {
     throw new Error("Choose a valid minimum-order policy.");
   }
 
   const rawValue = text(formData, "minimum_order_value");
-  if (!rawValue) {
-    throw new Error("Enter the defined minimum-order value.");
+  const rawPacks = text(formData, "minimum_order_packs");
+  if (!rawValue && !rawPacks) {
+    throw new Error("Enter a monetary minimum, a pack minimum, or both.");
   }
-  if (!MONEY_PATTERN.test(rawValue)) {
+  if (rawValue && !MONEY_PATTERN.test(rawValue)) {
     throw new Error("Enter a valid non-negative monetary value with no more than two decimal places.");
   }
-
-  const value = Number(rawValue);
-  if (!Number.isFinite(value) || value <= 0 || value > MAXIMUM_MINIMUM_ORDER_VALUE) {
+  const value = rawValue ? Number(rawValue) : null;
+  if (value !== null && (!Number.isFinite(value) || value <= 0 || value > MAXIMUM_MINIMUM_ORDER_VALUE)) {
     throw new Error("A defined minimum must be greater than zero and within the canonical monetary range.");
   }
 
-  return { supplierId, value, state: "defined" };
+  if (rawPacks && !/^\d+$/.test(rawPacks)) {
+    throw new Error("Minimum packs per order must be a whole non-negative number.");
+  }
+  const minimumOrderPacks = rawPacks ? Number(rawPacks) : null;
+  if (
+    minimumOrderPacks !== null &&
+    (!Number.isSafeInteger(minimumOrderPacks) || minimumOrderPacks <= 0)
+  ) {
+    throw new Error("A defined pack minimum must be a positive whole number.");
+  }
+
+  return { supplierId, value, minimumOrderPacks, state: "defined" };
 }

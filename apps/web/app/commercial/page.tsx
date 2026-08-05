@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CommercialPage() {
   const operator = await requireAuthenticatedOperator();
-  const [walletResponse, supplierResponse, cashLedgerResult] =
+  const [walletResponse, supplierResponse, supplierRuleResponse, cashLedgerResult] =
     await Promise.all([
       supabaseAdmin
         .from("vault_purchasing_wallet")
@@ -43,6 +43,9 @@ export default async function CommercialPage() {
         .order("supplier_name", {
           ascending: true,
         }),
+      supabaseAdmin
+        .from("vault_supplier_purchasing_rules")
+        .select("supplier_id, minimum_order_packs"),
       CashLedgerRepository.getSnapshot(20).then(
         (data) => ({ data, error: null }),
         (error: unknown) => ({
@@ -55,7 +58,7 @@ export default async function CommercialPage() {
       ),
     ]);
 
-  const error = walletResponse.error ?? supplierResponse.error;
+  const error = walletResponse.error ?? supplierResponse.error ?? supplierRuleResponse.error;
 
   if (error) {
     return (
@@ -72,8 +75,16 @@ export default async function CommercialPage() {
   }
 
   const wallet = walletResponse.data as PurchasingWalletData;
-  const suppliers =
-    (supplierResponse.data ?? []) as SupplierPurchasingData[];
+  const packMinimumBySupplierId = new Map(
+    (supplierRuleResponse.data ?? []).map((rule) => [
+      rule.supplier_id,
+      rule.minimum_order_packs,
+    ]),
+  );
+  const suppliers = (supplierResponse.data ?? []).map((supplier) => ({
+    ...supplier,
+    minimum_order_packs: packMinimumBySupplierId.get(supplier.id) ?? null,
+  })) as SupplierPurchasingData[];
 
   return (
     <VaultAppShell

@@ -36,7 +36,7 @@ async function capture<T>(promise: PromiseLike<T>): Promise<LoadResult<T>> {
 export default async function PurchaseOrdersPage() {
   await requireAuthenticatedOperator();
 
-  const [catalogueResult, walletResult, supplierResult] = await Promise.all([
+  const [catalogueResult, walletResult, supplierResult, supplierRuleResult] = await Promise.all([
       capture(getCatalogueData()),
       capture(
         supabaseAdmin
@@ -76,7 +76,23 @@ export default async function PurchaseOrdersPage() {
             return (data ?? []) as SupplierPurchasingData[];
           }),
       ),
+      capture(
+        supabaseAdmin
+          .from("vault_supplier_purchasing_rules")
+          .select("supplier_id, minimum_order_packs")
+          .then(({ data, error }) => {
+            if (error) throw error;
+            return data ?? [];
+          }),
+      ),
     ]);
+
+  const packMinimumBySupplierId = new Map(
+    (supplierRuleResult.data ?? []).map((rule) => [
+      rule.supplier_id,
+      rule.minimum_order_packs,
+    ]),
+  );
 
   const candidates = catalogueResult.data
     ? catalogueResult.data.products.map((product) => {
@@ -92,6 +108,7 @@ export default async function PurchaseOrdersPage() {
                 active: supplier.is_active,
                 currency: supplier.currency_code,
                 minimumOrderValue: supplier.minimum_order_value,
+                minimumOrderPacks: packMinimumBySupplierId.get(supplier.id) ?? null,
               }
             : null,
           wallet: walletResult.data
@@ -129,12 +146,18 @@ export default async function PurchaseOrdersPage() {
       const supplierMinimum = SupplierMinimumContract.create({
         value: supplier?.minimum_order_value ?? null,
         currency: supplier?.currency_code ?? null,
+        minimumOrderPacks: supplier
+          ? packMinimumBySupplierId.get(supplier.id) ?? null
+          : null,
       });
-      const order = existing ?? {
+      const order: SupplierDraftOrder = existing ?? {
         supplierId: commercialInput.supplierId,
         supplierName: commercialInput.supplierName,
         leadTimeDays: supplier?.default_lead_time_days ?? null,
         minimumOrderValue: supplier?.minimum_order_value ?? null,
+        minimumOrderPacks: supplier
+          ? packMinimumBySupplierId.get(supplier.id) ?? null
+          : null,
         minimumOrderCurrency: supplier?.currency_code ?? "GBP",
         supplierMinimum,
         currency: "GBP",

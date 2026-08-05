@@ -15,7 +15,7 @@ export async function getCommercialDecisionTimeline(
   generatedAt: string,
 ): Promise<CommercialDecisionTimelineResult | null> {
   try {
-    const [catalogue, walletResponse, supplierResponse] = await Promise.all([
+    const [catalogue, walletResponse, supplierResponse, supplierRuleResponse] = await Promise.all([
       getCatalogueData(),
       supabaseAdmin.from("vault_purchasing_wallet").select(`
         ledger_balance_gbp,
@@ -37,13 +37,26 @@ export async function getCommercialDecisionTimeline(
         currency_code,
         notes
       `),
+      supabaseAdmin.from("vault_supplier_purchasing_rules").select(`
+        supplier_id,
+        minimum_order_packs
+      `),
     ]);
     const wallet = walletResponse.error
       ? null
       : walletResponse.data as PurchasingWalletData;
-    const suppliers = supplierResponse.error
+    const packMinimumBySupplierId = new Map(
+      (supplierRuleResponse.data ?? []).map((rule) => [
+        rule.supplier_id,
+        rule.minimum_order_packs,
+      ]),
+    );
+    const suppliers = supplierResponse.error || supplierRuleResponse.error
       ? []
-      : (supplierResponse.data ?? []) as SupplierPurchasingData[];
+      : (supplierResponse.data ?? []).map((supplier) => ({
+          ...supplier,
+          minimum_order_packs: packMinimumBySupplierId.get(supplier.id) ?? null,
+        })) as SupplierPurchasingData[];
     const candidates = catalogue.products.map((product) => {
       const supplier = suppliers.find((entry) => entry.id === product.supplier_id);
       return TrustedBuyingCandidateClassifier.classify({
@@ -55,6 +68,7 @@ export async function getCommercialDecisionTimeline(
               active: supplier.is_active,
               currency: supplier.currency_code,
               minimumOrderValue: supplier.minimum_order_value,
+              minimumOrderPacks: supplier.minimum_order_packs,
             }
           : null,
         wallet: wallet

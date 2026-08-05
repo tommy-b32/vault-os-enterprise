@@ -71,15 +71,15 @@ test("buying recommendation exposes calculation and MOQ without hiding either", 
 test("supplier minimum contract preserves value, currency, and explicit state", () => {
   assert.deepEqual(
     SupplierMinimumContract.create({ value: null, currency: "EUR" }),
-    { value: null, currency: "EUR", state: "unknown" },
+    { value: null, currency: "EUR", state: "unknown", minimumOrderPacks: null, packState: "unknown" },
   );
   assert.deepEqual(
     SupplierMinimumContract.create({ value: 0, currency: "TRY" }),
-    { value: 0, currency: "TRY", state: "not_applicable" },
+    { value: 0, currency: "TRY", state: "not_applicable", minimumOrderPacks: null, packState: "unknown" },
   );
   assert.deepEqual(
     SupplierMinimumContract.create({ value: 250, currency: "EUR" }),
-    { value: 250, currency: "EUR", state: "defined" },
+    { value: 250, currency: "EUR", state: "defined", minimumOrderPacks: null, packState: "unknown" },
   );
 });
 

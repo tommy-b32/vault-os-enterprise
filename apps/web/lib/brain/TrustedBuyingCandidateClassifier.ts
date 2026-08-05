@@ -56,6 +56,7 @@ export type TrustedBuyingSupplier = {
   active: boolean;
   currency: string | null;
   minimumOrderValue: number | null;
+  minimumOrderPacks?: number | null;
 };
 
 export type TrustedBuyingWallet = {
@@ -202,6 +203,7 @@ export function classifyTrustedBuyingCandidate({
   const supplierMinimum = SupplierMinimumContract.create({
     value: supplier?.minimumOrderValue ?? null,
     currency: supplier?.currency ?? null,
+    minimumOrderPacks: supplier?.minimumOrderPacks ?? null,
   });
 
   if (!product.style_id || !product.parent_product_id) add(reasons, "canonical_product_missing");
