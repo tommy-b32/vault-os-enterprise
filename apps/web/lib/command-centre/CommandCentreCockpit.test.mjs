@@ -13,6 +13,38 @@ import {
   unavailable,
 } from "./CommandCentreCockpit.ts";
 
+test("Command Centre typography has an 11px minimum and preserves readable hierarchy", async () => {
+  const component = await readFile(
+    new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url),
+    "utf8",
+  );
+  const sizes = [...component.matchAll(/font-size:(\d+)px/g)].map((match) => Number(match[1]));
+
+  assert.ok(sizes.length > 0);
+  assert.ok(sizes.every((size) => size >= 11));
+  assert.match(component, /font-size:34px/);
+  assert.match(component, /cc-briefing-headline[^}]*font-size:20px/);
+  assert.match(component, /cc-briefing-summary[^}]*font-size:14px/);
+});
+
+test("readability restyle preserves all executive and domain content", async () => {
+  const [component, contract] = await Promise.all([
+    readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./CommandCentreCockpit.ts", import.meta.url), "utf8"),
+  ]);
+
+  for (const section of ["headline", "summary", "positives", "blockers", "todayFocus", "unlocks", "supportingEvidence"]) {
+    assert.match(component, new RegExp(`executiveBriefing\\.${section}`));
+  }
+  for (const domain of ["Trading", "Website", "Inventory", "Finance", "Marketing", "Operations", "Suppliers", "Advisor"]) {
+    assert.match(contract, new RegExp(`\\b${domain}\\b`));
+  }
+  assert.match(component, /data\.attention\.map/);
+  assert.match(component, /Estimated untracked/);
+  assert.match(component, /Not connected/);
+  assert.match(component, /Unavailable/);
+});
+
 const timelineItem = (overrides) => ({
   id: "item",
   source: "inventory",
