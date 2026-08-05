@@ -1,3 +1,16 @@
+"use client";
+
+import { useActionState, useState } from "react";
+
+import {
+  INITIAL_SUPPLIER_MINIMUM_ACTION_STATE,
+  updateSupplierMinimumPolicy,
+} from "@/app/commercial/actions";
+import {
+  SupplierMinimumContract,
+  type SupplierMinimumState,
+} from "@/lib/supplier/SupplierMinimum";
+
 export type SupplierPurchasingData = {
   id: string;
   is_active: boolean;
@@ -8,149 +21,109 @@ export type SupplierPurchasingData = {
   notes: string | null;
 };
 
-type SupplierPurchasingProps = {
-  suppliers: SupplierPurchasingData[];
-};
-
-function getSupplierRule(
-  supplierName: string,
-): {
-  model: string;
-  status: "ready" | "waiting" | "dropship";
-  statusLabel: string;
-  minimumOrder: string;
-  guidance: string;
-} {
-  const name = supplierName.toLowerCase();
-
-  if (name === "exclusive") {
-    return {
-      model: "Stocked supplier",
-      status: "ready",
-      statusLabel: "Rules configured",
-      minimumOrder: "20 mixed packs",
-      guidance:
-        "Product costs are still required before Vault Brain can build an affordable mixed basket.",
-    };
+function stateCopy(state: SupplierMinimumState, currency: string, value: number | null) {
+  if (state === "unknown") {
+    return { label: "Unknown", detail: "Blocks trusted buying recommendations." };
   }
-
-  if (name === "icon") {
-    return {
-      model: "Stocked supplier",
-      status: "waiting",
-      statusLabel: "Rule incomplete",
-      minimumOrder: "MOQ not confirmed",
-      guidance:
-        "Confirm Icon's minimum order before Vault Brain approves purchasing recommendations.",
-    };
+  if (state === "not_applicable") {
+    return { label: "No minimum", detail: "Explicitly confirmed by the operator." };
   }
-
-  if (
-    name === "tony" ||
-    name.includes("footwear")
-  ) {
-    return {
-      model: "Dropship partner",
-      status: "dropship",
-      statusLabel: "Dropship",
-      minimumOrder: "No stock MOQ",
-      guidance:
-        "Tony is excluded from owned-stock purchasing and will later support customer-order fulfilment.",
-    };
-  }
-
   return {
-    model: "Supplier",
-    status: "waiting",
-    statusLabel: "Setup required",
-    minimumOrder: "Not configured",
-    guidance:
-      "Complete the supplier purchasing rules before Vault Brain uses this supplier.",
+    label: `${currency} ${value?.toFixed(2)}`,
+    detail: "Defined policy; the supplier basket still requires later evaluation.",
   };
 }
 
-export function SupplierPurchasing({
-  suppliers,
-}: SupplierPurchasingProps) {
+function SupplierMinimumEditor({ supplier }: { supplier: SupplierPurchasingData }) {
+  const minimum = SupplierMinimumContract.create({
+    value: supplier.minimum_order_value,
+    currency: supplier.currency_code,
+  });
+  const [policy, setPolicy] = useState<SupplierMinimumState>(minimum.state);
+  const [state, action, pending] = useActionState(
+    updateSupplierMinimumPolicy,
+    INITIAL_SUPPLIER_MINIMUM_ACTION_STATE,
+  );
+  const copy = stateCopy(minimum.state, supplier.currency_code, minimum.value);
+
+  return (
+    <article className="supplier-purchasing-card">
+      <div className="supplier-purchasing-topline">
+        <div>
+          <span>{supplier.is_active ? "Active supplier" : "Inactive supplier"}</span>
+          <h3>{supplier.supplier_name}</h3>
+        </div>
+        <span className={`supplier-readiness state-${minimum.state}`}>{copy.label}</span>
+      </div>
+
+      <div className="supplier-purchasing-metrics">
+        <div><span>Lead time</span><strong>{supplier.default_lead_time_days} days</strong></div>
+        <div><span>Currency</span><strong>{supplier.currency_code}</strong></div>
+        <div><span>Minimum policy</span><strong>{copy.label}</strong></div>
+      </div>
+
+      <p className="supplier-minimum-detail">{copy.detail}</p>
+
+      <form action={action} className="supplier-minimum-form">
+        <input name="supplier_id" type="hidden" value={supplier.id} />
+        <label>
+          <span>Minimum-order policy</span>
+          <select
+            name="minimum_order_policy"
+            onChange={(event) => setPolicy(event.target.value as SupplierMinimumState)}
+            value={policy}
+          >
+            <option value="unknown">Unknown</option>
+            <option value="not_applicable">No minimum / Not applicable</option>
+            <option value="defined">Defined monetary minimum</option>
+          </select>
+        </label>
+
+        {policy === "defined" ? (
+          <label>
+            <span>Minimum value ({supplier.currency_code})</span>
+            <input
+              defaultValue={minimum.state === "defined" ? minimum.value ?? "" : ""}
+              inputMode="decimal"
+              min="0.01"
+              name="minimum_order_value"
+              required
+              step="0.01"
+              type="number"
+            />
+          </label>
+        ) : null}
+
+        <button className="supplier-review-button" disabled={pending} type="submit">
+          {pending ? "Saving…" : "Save minimum policy"}
+        </button>
+        {state.message ? (
+          <p
+            className={`supplier-minimum-feedback is-${state.status}`}
+            role={state.status === "error" ? "alert" : "status"}
+          >
+            {state.message}
+          </p>
+        ) : null}
+      </form>
+    </article>
+  );
+}
+
+export function SupplierPurchasing({ suppliers }: { suppliers: SupplierPurchasingData[] }) {
   return (
     <section className="commercial-card supplier-purchasing">
       <header className="commercial-card-header">
         <div>
-          <p className="vault-eyebrow">
-            Supplier Purchasing
-          </p>
-
+          <p className="vault-eyebrow">Supplier Purchasing</p>
           <h2>Supplier readiness</h2>
-
-          <p>
-            Review the ordering rules Vault Brain must
-            follow before building supplier baskets.
-          </p>
+          <p>Maintain the canonical minimum-order policy used by trusted buying decisions.</p>
         </div>
       </header>
-
       <div className="supplier-purchasing-grid">
-        {suppliers.map((supplier) => {
-          const rule = getSupplierRule(
-            supplier.supplier_name,
-          );
-
-          return (
-            <article
-              className="supplier-purchasing-card"
-              key={supplier.id}
-            >
-              <div className="supplier-purchasing-topline">
-                <div>
-                  <span>{rule.model}</span>
-                  <h3>{supplier.supplier_name}</h3>
-                </div>
-
-                <span
-                  className={`supplier-readiness state-${rule.status}`}
-                >
-                  {rule.statusLabel}
-                </span>
-              </div>
-
-              <div className="supplier-purchasing-metrics">
-                <div>
-                  <span>Minimum order</span>
-                  <strong>{rule.minimumOrder}</strong>
-                </div>
-
-                <div>
-                  <span>Lead time</span>
-                  <strong>
-                    {supplier.default_lead_time_days} days
-                  </strong>
-                </div>
-
-                <div>
-                  <span>Currency</span>
-                  <strong>
-                    {supplier.currency_code}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="supplier-purchasing-guidance">
-                <span>Vault Brain guidance</span>
-                <p>{rule.guidance}</p>
-              </div>
-
-              <button
-                className="supplier-review-button"
-                disabled
-                type="button"
-              >
-                {rule.status === "dropship"
-                  ? "View dropship workflow"
-                  : "Review basket"}
-              </button>
-            </article>
-          );
-        })}
+        {suppliers.map((supplier) => (
+          <SupplierMinimumEditor key={supplier.id} supplier={supplier} />
+        ))}
       </div>
     </section>
   );

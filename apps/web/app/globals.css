@@ -5084,6 +5084,66 @@ grid-template-columns:1fr;
   opacity: 0.55;
 }
 
+.supplier-minimum-detail {
+  color: #a8b1ab;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.supplier-minimum-form {
+  display: grid;
+  gap: 12px;
+}
+
+.supplier-minimum-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.supplier-minimum-form label > span {
+  color: #8f9993;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.supplier-minimum-form input,
+.supplier-minimum-form select {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #f0ede5;
+}
+
+.supplier-minimum-feedback {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.supplier-minimum-feedback.is-success { color: #6fe291; }
+.supplier-minimum-feedback.is-error { color: #ff8b82; }
+
+.supplier-readiness.state-unknown {
+  border-color: rgba(234, 181, 56, 0.28);
+  background: rgba(234, 181, 56, 0.09);
+  color: #eabd45;
+}
+
+.supplier-readiness.state-not_applicable {
+  border-color: rgba(82, 211, 120, 0.25);
+  background: rgba(82, 211, 120, 0.08);
+  color: #6fe291;
+}
+
+.supplier-readiness.state-defined {
+  border-color: rgba(102, 169, 232, 0.28);
+  background: rgba(102, 169, 232, 0.08);
+  color: #8fc4f4;
+}
+
 @media (max-width: 1050px) {
   .supplier-purchasing-grid {
     grid-template-columns: 1fr;

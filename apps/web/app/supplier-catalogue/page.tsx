@@ -1,4 +1,5 @@
 import VaultAppShell from "@/components/layout/VaultAppShell";
+import Link from "next/link";
 
 import {
   SupplierCatalogueImportWorkspace,
@@ -243,11 +244,9 @@ export default async function SupplierCataloguePage() {
                       </strong>
                     </div>
 
-                    <a
-                      href={`/supplier-catalogue/${catalogue.id}`}
-                    >
+                    <Link href="/supplier-catalogue/review">
                       Open Catalogue →
-                    </a>
+                    </Link>
                   </footer>
                 </article>
               ))}
