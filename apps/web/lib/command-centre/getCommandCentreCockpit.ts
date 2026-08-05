@@ -5,16 +5,20 @@ import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecision
 import { getVaultBusinessState } from "@/lib/business/VaultBusinessState";
 import type { FinancePosition } from "@/lib/business/BusinessFinanceRepository";
 import {
+  buildExecutiveSummary,
   createWebsiteTrafficBreakdown,
+  deriveBusinessPulse,
   limitFeed,
   limitInsights,
   notConnected,
   selectAttentionItems,
+  selectTodaysFocus,
   unavailable,
   type CockpitInsight,
   type CockpitMoney,
   type CockpitValue,
   type CommandCentreCockpitData,
+  type DomainPulse,
 } from "@/lib/command-centre/CommandCentreCockpit";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -63,6 +67,77 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     liveTracked: visitors?.liveTracked ?? null,
     updatedAt: websiteAt,
     stale: websiteStale,
+  });
+  const sourceDomain = (
+    domain: DomainPulse["domain"],
+    status: "live" | "stale" | "unavailable" | "error",
+  ): DomainPulse => ({
+    domain,
+    state: status === "live"
+      ? "healthy"
+      : status === "stale" ? "watch" : status === "error" ? "attention" : "unavailable",
+    detail: status === "live"
+      ? "Canonical source current"
+      : status === "stale" ? "Canonical source stale" : status === "error" ? "Source error" : "Source unavailable",
+  });
+  const attention = selectAttentionItems(timeline);
+  const todaysFocus = selectTodaysFocus(timeline);
+  const supplierBlocker = timeline?.items.find((item) =>
+    item.source === "supplier" && item.status === "blocked"
+  );
+  const advisorAction = timeline?.items.find((item) =>
+    item.source === "advisor" && item.status === "actionable"
+  );
+  const advisorNoCandidate = timeline?.items.find((item) =>
+    item.id === "advisor-no-trusted-candidate"
+  );
+  const domains: DomainPulse[] = [
+    sourceDomain("Trading", business.trading.status),
+    sourceDomain("Website", business.websiteAnalytics.status),
+    {
+      ...sourceDomain("Inventory", business.inventory.status),
+      state: business.inventory.status === "stale"
+        ? "attention"
+        : business.inventory.status === "live" && (inventory?.productsRequiringAttention ?? 0) > 0
+          ? "watch"
+          : sourceDomain("Inventory", business.inventory.status).state,
+      detail: business.inventory.status === "stale"
+        ? "Source stale"
+        : business.inventory.status === "live" && (inventory?.productsRequiringAttention ?? 0) > 0
+          ? `${inventory?.productsRequiringAttention} styles require attention`
+          : sourceDomain("Inventory", business.inventory.status).detail,
+    },
+    {
+      domain: "Finance",
+      state: !wallet
+        ? "unavailable"
+        : wallet.purchasing_power_state === "healthy"
+          ? "healthy"
+          : wallet.purchasing_power_state === "no_cash" ? "attention" : "watch",
+      detail: !wallet
+        ? "Purchasing wallet unavailable"
+        : wallet.purchasing_power_state === "healthy"
+          ? "Purchasing capacity available"
+          : wallet.purchasing_power_state === "no_cash"
+            ? "No purchasing power"
+            : wallet.purchasing_power_state.replaceAll("_", " "),
+    },
+    { domain: "Marketing", state: "not_connected", detail: "Meta not connected" },
+    { domain: "Operations", state: "watch", detail: "Partial visibility" },
+    supplierBlocker
+      ? { domain: "Suppliers", state: "attention", detail: supplierBlocker.title }
+      : { domain: "Suppliers", state: "unavailable", detail: "Aggregate readiness unavailable" },
+    advisorAction
+      ? { domain: "Advisor", state: "healthy", detail: "Eligible trusted decision" }
+      : advisorNoCandidate
+        ? { domain: "Advisor", state: "watch", detail: "No trusted candidate" }
+        : { domain: "Advisor", state: "unavailable", detail: "Decision state unavailable" },
+  ];
+  const businessPulse = deriveBusinessPulse({ domains, attention });
+  const executiveSummary = buildExecutiveSummary({
+    trading: domains[0],
+    focus: todaysFocus,
+    domains,
   });
 
   const unavailableMoney = unavailable<CockpitMoney>();
@@ -114,6 +189,10 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     systemStatus: business.freshness.status,
     latestSourceAt: business.freshness.latestSourceAt,
     brainConfidence: unavailable(),
+    businessPulse,
+    domains,
+    todaysFocus,
+    executiveSummary,
     trading: {
       revenue: trading ? tradingMoney(trading.netRevenue) : unavailableMoney,
       orders: trading ? available(trading.orderCount, tradingAt, tradingStale) : unavailable(),
@@ -171,7 +250,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       lateDeliveries: unavailable(),
     },
     insights: limitInsights(insights),
-    attention: selectAttentionItems(timeline),
+    attention,
     feed: limitFeed(business.businessActivity.data ?? []),
   };
 }

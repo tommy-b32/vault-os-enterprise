@@ -3,13 +3,101 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  buildExecutiveSummary,
   createWebsiteTrafficBreakdown,
+  deriveBusinessPulse,
   limitFeed,
   limitInsights,
   notConnected,
   selectAttentionItems,
+  selectTodaysFocus,
   unavailable,
 } from "./CommandCentreCockpit.ts";
+
+const timelineItem = (overrides) => ({
+  id: "item",
+  source: "inventory",
+  category: "blocker",
+  status: "blocked",
+  priority: "high",
+  title: "Resolve inventory blocker",
+  description: "Inventory evidence is incomplete.",
+  effectiveAt: null,
+  deadlineAt: null,
+  predictedAt: null,
+  confidence: null,
+  confidenceMeaning: null,
+  entityType: null,
+  entityId: null,
+  destination: "/inventory",
+  evidence: [],
+  blockerReasons: [],
+  ...overrides,
+});
+
+test("Today’s Focus prefers an eligible Advisor action before a blocker", () => {
+  const focus = selectTodaysFocus({ items: [
+    timelineItem({ id: "critical-blocker", priority: "critical" }),
+    timelineItem({ id: "advisor", source: "advisor", status: "actionable", category: "decision", priority: "high", destination: "/advisor" }),
+  ] });
+  assert.equal(focus.state, "available");
+  assert.equal(focus.source, "advisor");
+  assert.equal(focus.destination, "/advisor");
+});
+
+test("Today’s Focus falls back to the highest-priority resolvable blocker", () => {
+  const focus = selectTodaysFocus({ items: [
+    timelineItem({ id: "medium", priority: "medium" }),
+    timelineItem({ id: "critical", priority: "critical", destination: "/catalogue" }),
+  ] });
+  assert.equal(focus.state, "available");
+  assert.equal(focus.source, "blocker");
+  assert.equal(focus.destination, "/catalogue");
+  assert.equal(selectTodaysFocus(null).state, "unavailable");
+});
+
+test("Business Pulse uses explicit states without a fabricated percentage", () => {
+  const domains = [
+    { domain: "Trading", state: "healthy", detail: "Current" },
+    { domain: "Inventory", state: "attention", detail: "Source stale" },
+    { domain: "Marketing", state: "not_connected", detail: "Meta not connected" },
+    { domain: "Operations", state: "watch", detail: "Partial visibility" },
+    { domain: "Advisor", state: "watch", detail: "No trusted candidate" },
+  ];
+  const pulse = deriveBusinessPulse({ domains, attention: [] });
+  assert.deepEqual(pulse, { state: "attention", label: "Attention" });
+  assert.doesNotMatch(JSON.stringify(pulse), /%/);
+  assert.notEqual(domains.find((domain) => domain.domain === "Inventory").state, "healthy");
+  assert.notEqual(domains.find((domain) => domain.domain === "Operations").detail, "Healthy");
+  assert.notEqual(domains.find((domain) => domain.domain === "Advisor").state, "critical");
+});
+
+test("optional Meta disconnection does not make an otherwise healthy pulse critical", () => {
+  const pulse = deriveBusinessPulse({
+    domains: [
+      { domain: "Trading", state: "healthy", detail: "Current" },
+      { domain: "Marketing", state: "not_connected", detail: "Meta not connected" },
+    ],
+    attention: [],
+  });
+  assert.equal(pulse.state, "healthy");
+});
+
+test("executive summary is deterministic with one sentence and at most two bullets", () => {
+  const input = {
+    trading: { domain: "Trading", state: "healthy", detail: "Current" },
+    focus: { state: "available", source: "blocker", title: "Refresh inventory", description: null, destination: "/inventory", unlocks: [] },
+    domains: [
+      { domain: "Trading", state: "healthy", detail: "Current" },
+      { domain: "Inventory", state: "attention", detail: "Source stale" },
+      { domain: "Operations", state: "watch", detail: "Partial visibility" },
+      { domain: "Suppliers", state: "unavailable", detail: "Unavailable" },
+    ],
+  };
+  assert.deepEqual(buildExecutiveSummary(input), buildExecutiveSummary(input));
+  assert.equal(buildExecutiveSummary(input).sentence, "Trading data is current, while refresh inventory is the highest-priority operator focus.");
+  assert.equal(buildExecutiveSummary(input).bullets.length, 2);
+});
 
 test("canonical consent-aware traffic fields remain separate", () => {
   const traffic = createWebsiteTrafficBreakdown({
@@ -105,6 +193,7 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(loader, /trading\.orderCount/);
   assert.match(loader, /getCommercialDecisionTimeline/);
   assert.doesNotMatch(`${loader}${component}${page}`, /demonstrationPredictionData|demonstrationOperationalSnapshot/);
+  assert.doesNotMatch(`${loader}${component}`, /demonstrationLearningData/);
   assert.doesNotMatch(component, /comparison\.value.*\?\?\s*0/);
   assert.match(component, /Estimated total visitors/);
   assert.match(component, /Estimated untracked/);
@@ -114,6 +203,10 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(loader, /estimatedPrivacy/);
   assert.doesNotMatch(loader, /estimatedTotal\s*=|tracked\s*\+\s*estimatedPrivacy/);
   assert.doesNotMatch(loader, /estimated total visitors today[\s\S]{0,120}directly tracked/);
+  assert.doesNotMatch(component, /CommercialDecisionTimeline/);
+  assert.match(component, /comparison && \(comparison\.state === "available" \|\| comparison\.state === "stale"\)/);
+  assert.match(component, /State-based · no invented score/);
+  assert.match(loader, /Partial visibility/);
 
   for (const route of ["/missions", "/orders"]) {
     assert.match(component, new RegExp(route.replace("/", "\\/")));
