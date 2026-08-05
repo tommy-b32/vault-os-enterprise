@@ -1,5 +1,6 @@
 import type { BusinessActivityEvent } from "@/lib/business/BusinessActivityRepository";
 import type { CommercialDecisionTimelineResult } from "@/lib/brain/CommercialDecisionTimeline";
+import type { ExecutiveBriefing } from "@/lib/brain/ExecutiveIntelligenceEngine";
 
 export type CockpitValue<T> =
   | { state: "available" | "stale"; value: T; updatedAt: string | null }
@@ -44,14 +45,9 @@ export type TodaysFocus =
     title: string;
     description: string | null;
     destination: string;
-    unlocks: string[];
+    blockerReasons: string[];
   }
   | { state: "unavailable" };
-
-export type VaultBrainExecutiveSummary = {
-  sentence: string;
-  bullets: string[];
-};
 
 export type CommandCentreCockpitData = {
   generatedAt: string;
@@ -61,7 +57,7 @@ export type CommandCentreCockpitData = {
   businessPulse: { state: BusinessPulseState; label: string };
   domains: DomainPulse[];
   todaysFocus: TodaysFocus;
-  executiveSummary: VaultBrainExecutiveSummary;
+  executiveBriefing: ExecutiveBriefing;
   trading: {
     revenue: CockpitValue<CockpitMoney>;
     orders: CockpitValue<number>;
@@ -223,7 +219,7 @@ export function selectTodaysFocus(
     title: selected.title,
     description: selected.description,
     destination: selected.destination,
-    unlocks: selected.evidence.slice(0, 3).map((entry) => `${entry.label}: ${entry.value}`),
+    blockerReasons: selected.blockerReasons,
   };
 }
 
@@ -245,31 +241,4 @@ export function deriveBusinessPulse({
   else state = "healthy";
 
   return { state, label: state.charAt(0).toUpperCase() + state.slice(1) };
-}
-
-export function buildExecutiveSummary({
-  trading,
-  focus,
-  domains,
-}: {
-  trading: DomainPulse;
-  focus: TodaysFocus;
-  domains: DomainPulse[];
-}): VaultBrainExecutiveSummary {
-  const tradingText = trading.state === "healthy"
-    ? "Trading data is current"
-    : trading.state === "watch"
-      ? "Trading data needs watching"
-      : trading.state === "unavailable"
-        ? "Trading visibility is unavailable"
-        : "Trading requires attention";
-  const sentence = focus.state === "available"
-    ? `${tradingText}, while ${focus.title.toLowerCase()} is the highest-priority operator focus.`
-    : `${tradingText}, and no structured operator action is currently available.`;
-  const bullets = domains
-    .filter((domain) => domain.domain !== "Trading" && domain.state !== "healthy")
-    .slice(0, 2)
-    .map((domain) => `${domain.domain}: ${domain.detail}`);
-
-  return { sentence, bullets };
 }

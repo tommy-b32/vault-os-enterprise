@@ -1,11 +1,11 @@
 import "server-only";
 
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
+import { ExecutiveIntelligenceEngine } from "@/lib/brain/ExecutiveIntelligenceEngine";
 import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecisionTimeline";
 import { getVaultBusinessState } from "@/lib/business/VaultBusinessState";
 import type { FinancePosition } from "@/lib/business/BusinessFinanceRepository";
 import {
-  buildExecutiveSummary,
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
   limitFeed,
@@ -134,10 +134,26 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
         : { domain: "Advisor", state: "unavailable", detail: "Decision state unavailable" },
   ];
   const businessPulse = deriveBusinessPulse({ domains, attention });
-  const executiveSummary = buildExecutiveSummary({
-    trading: domains[0],
-    focus: todaysFocus,
+  const supportingEvidence: string[] = [];
+  if (inventoryAt) supportingEvidence.push(`Inventory source updated ${inventoryAt}.`);
+  if (inventory) supportingEvidence.push(`${inventory.totalProducts.toLocaleString("en-GB")} styles analysed.`);
+  if (wallet) {
+    supportingEvidence.push(
+      `${new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(wallet.available_purchasing_power_gbp)} purchasing power available.`,
+    );
+  }
+  if (advisorNoCandidate) supportingEvidence.push("No trusted buying candidate is currently available.");
+  if (visitors?.estimatedTotal !== null && visitors?.estimatedTotal !== undefined) {
+    supportingEvidence.push(`${visitors.estimatedTotal.toLocaleString("en-GB")} estimated total visitors today.`);
+  }
+  const executiveBriefing = ExecutiveIntelligenceEngine.build({
+    businessPulse,
     domains,
+    todayFocus: todaysFocus,
+    orderedBlockers: timeline?.items
+      .filter((item) => item.status === "blocked")
+      .map((item) => ({ title: item.title, description: item.description })) ?? [],
+    supportingEvidence,
   });
 
   const unavailableMoney = unavailable<CockpitMoney>();
@@ -192,7 +208,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     businessPulse,
     domains,
     todaysFocus,
-    executiveSummary,
+    executiveBriefing,
     trading: {
       revenue: trading ? tradingMoney(trading.netRevenue) : unavailableMoney,
       orders: trading ? available(trading.orderCount, tradingAt, tradingStale) : unavailable(),

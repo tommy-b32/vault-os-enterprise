@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
-  buildExecutiveSummary,
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
   limitFeed,
@@ -81,22 +80,6 @@ test("optional Meta disconnection does not make an otherwise healthy pulse criti
     attention: [],
   });
   assert.equal(pulse.state, "healthy");
-});
-
-test("executive summary is deterministic with one sentence and at most two bullets", () => {
-  const input = {
-    trading: { domain: "Trading", state: "healthy", detail: "Current" },
-    focus: { state: "available", source: "blocker", title: "Refresh inventory", description: null, destination: "/inventory", unlocks: [] },
-    domains: [
-      { domain: "Trading", state: "healthy", detail: "Current" },
-      { domain: "Inventory", state: "attention", detail: "Source stale" },
-      { domain: "Operations", state: "watch", detail: "Partial visibility" },
-      { domain: "Suppliers", state: "unavailable", detail: "Unavailable" },
-    ],
-  };
-  assert.deepEqual(buildExecutiveSummary(input), buildExecutiveSummary(input));
-  assert.equal(buildExecutiveSummary(input).sentence, "Trading data is current, while refresh inventory is the highest-priority operator focus.");
-  assert.equal(buildExecutiveSummary(input).bullets.length, 2);
 });
 
 test("canonical consent-aware traffic fields remain separate", () => {
@@ -207,6 +190,8 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(component, /comparison && \(comparison\.state === "available" \|\| comparison\.state === "stale"\)/);
   assert.match(component, /State-based · no invented score/);
   assert.match(loader, /Partial visibility/);
+  assert.match(loader, /ExecutiveIntelligenceEngine\.build/);
+  assert.doesNotMatch(component, /cc-focus-body|executiveSummary/);
 
   for (const route of ["/missions", "/orders"]) {
     assert.match(component, new RegExp(route.replace("/", "\\/")));
@@ -214,13 +199,15 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
 });
 
 test("Command Centre presentation dependency graph is acyclic", async () => {
-  const [contract, loader, component, page] = await Promise.all([
+  const [engine, contract, loader, component, page] = await Promise.all([
+    readFile(new URL("../brain/ExecutiveIntelligenceEngine.ts", import.meta.url), "utf8"),
     readFile(new URL("./CommandCentreCockpit.ts", import.meta.url), "utf8"),
     readFile(new URL("./getCommandCentreCockpit.ts", import.meta.url), "utf8"),
     readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
   ]);
 
+  assert.doesNotMatch(engine, /command-centre|getCommandCentreCockpit|CommandCentreCockpit/);
   assert.doesNotMatch(contract, /getCommandCentreCockpit|components\/command-centre/);
   assert.doesNotMatch(loader, /components\/command-centre\/CommandCentreCockpit/);
   assert.doesNotMatch(component, /getCommandCentreCockpit/);
