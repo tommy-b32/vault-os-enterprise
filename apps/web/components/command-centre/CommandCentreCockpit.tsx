@@ -103,6 +103,19 @@ function relativeTime(value: string, now: string): string {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(new Date(value));
 }
 
+function inventoryFreshnessText(
+  value: CockpitValue<string>,
+  generatedAt: string,
+): string {
+  if (value.state === "unavailable") return "Unavailable";
+  if (value.value === "syncing") return "Synchronising…";
+  if (value.value === "failed") return "Unavailable";
+  const age = value.updatedAt ? relativeTime(value.updatedAt, generatedAt) : "update unavailable";
+  return value.value === "delayed"
+    ? `Delayed · Last update ${age}`
+    : `Current · Updated ${age}`;
+}
+
 export function CommandCentreCockpit({ data }: DataProps) {
   const moneyValue = (value: CockpitValue<CockpitMoney>) => display(value, formatMoney);
   const numberValue = (value: CockpitValue<number>) => display(value, (entry) => entry.toLocaleString("en-GB"));
@@ -195,7 +208,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <MetricRow label="Low-stock styles" value={data.inventory.lowStockStyles} />
           <MetricRow label="Out-of-stock styles" value={data.inventory.outOfStockStyles} />
           <MetricRow label="Total stock value" value={data.inventory.stockValue} formatter={(v) => formatMoney(v as CockpitMoney)} />
-          <MetricRow label="Inventory freshness" value={data.inventory.freshness} formatter={(v) => relativeTime(String(v), data.generatedAt)} />
+          <MetricRow label="Inventory" value={data.inventory.freshness} formatter={() => inventoryFreshnessText(data.inventory.freshness, data.generatedAt)} />
           <MetricRow label="Reorder review" value={data.inventory.reorderReview} />
         </Snapshot>
         <Snapshot title="Marketing Snapshot" subtitle="Meta Ads" icon="⌁">

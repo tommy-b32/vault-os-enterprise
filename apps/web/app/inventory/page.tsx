@@ -3,8 +3,10 @@ import MissionControlStyles from "@/components/brain/MissionControlStyles";
 import VaultIcon, {
   type VaultIconName,
 } from "@/components/brain/workspace/VaultIcon";
+import { InventorySyncPanel } from "@/components/inventory/InventorySyncPanel";
 
 import { supabase } from "@/lib/supabase";
+import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 
 export const dynamic = "force-dynamic";
 
@@ -787,6 +789,7 @@ export default async function InventoryPage() {
   const [
     inventoryResponse,
     configurationResponse,
+    inventoryFreshness,
   ] = await Promise.all([
     supabase
       .from("vault_inventory_intelligence")
@@ -813,6 +816,7 @@ export default async function InventoryPage() {
           configuration_state
         `,
       ),
+    InventorySyncRepository.getFreshness(),
   ]);
 
   const error =
@@ -959,20 +963,7 @@ export default async function InventoryPage() {
       .slice(0, 8);
 
   const latestSync =
-    [...inventory]
-      .filter(
-        (record) =>
-          record.last_inventory_sync,
-      )
-      .sort(
-        (a, b) =>
-          new Date(
-            b.last_inventory_sync ?? 0,
-          ).getTime() -
-          new Date(
-            a.last_inventory_sync ?? 0,
-          ).getTime(),
-      )[0]?.last_inventory_sync ?? null;
+    inventoryFreshness.lastInventorySync;
 
   return (
     <VaultAppShell
@@ -982,7 +973,7 @@ export default async function InventoryPage() {
         outOfStock.length +
         lowStock.length
       }
-      systemStatusLabel="Inventory connection healthy"
+      systemStatusLabel={`Inventory sync ${inventoryFreshness.syncStatus}`}
     >
       <div className="vault-content inventory-content">
           <header className="inventory-header">
@@ -1004,7 +995,13 @@ export default async function InventoryPage() {
 
             <span className="inventory-sync-status">
               <i />
-              Live inventory connected
+              {inventoryFreshness.syncStatus === "syncing"
+                ? "Inventory synchronising"
+                : inventoryFreshness.syncStatus === "current"
+                  ? "Inventory current"
+                  : inventoryFreshness.syncStatus === "delayed"
+                    ? "Inventory delayed"
+                    : "Inventory unavailable"}
             </span>
           </header>
 
@@ -1029,6 +1026,8 @@ export default async function InventoryPage() {
               Inventory intelligence online
             </span>
           </section>
+
+          <InventorySyncPanel freshness={inventoryFreshness} />
 
           {inventory.length === 0 ? (
             <article className="vault-panel inventory-empty">

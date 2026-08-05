@@ -93,6 +93,12 @@ Deno.serve(async (request: Request) => {
     );
   }
 
+  let runContext: {
+    supabase: ReturnType<typeof createClient>;
+    id: string;
+    startedAtMs: number;
+  } | null = null;
+
   try {
     const supabaseUrl =
       Deno.env.get("SUPABASE_URL");
@@ -116,6 +122,34 @@ Deno.serve(async (request: Request) => {
         },
       },
     );
+
+    const startedAt = new Date();
+    const { data: run, error: runError } = await supabase
+      .from("vault_shopify_inventory_sync_runs")
+      .insert({
+        sync_status: "syncing",
+        sync_started_at: startedAt.toISOString(),
+        shopify_api_success: null,
+      })
+      .select("id")
+      .single();
+
+    if (runError) {
+      if (runError.code === "23505") {
+        return respond({
+          success: false,
+          sync_status: "syncing",
+          error: "An inventory synchronisation is already running",
+        }, 409);
+      }
+      throw runError;
+    }
+
+    runContext = {
+      supabase,
+      id: run.id,
+      startedAtMs: startedAt.getTime(),
+    };
 
     /*
      * Read every Shopify variant that has an
@@ -381,6 +415,26 @@ Deno.serve(async (request: Request) => {
       }
     }
 
+    const completedAt = new Date();
+    const productsUpdated = new Set(
+      inventoryRows.map((row) => row.variant_id),
+    ).size;
+    const syncDurationMs = completedAt.getTime() - startedAt.getTime();
+    const { error: completionError } = await supabase
+      .from("vault_shopify_inventory_sync_runs")
+      .update({
+        sync_status: "current",
+        sync_completed_at: completedAt.toISOString(),
+        sync_duration_ms: syncDurationMs,
+        products_processed: variants.length,
+        products_updated: productsUpdated,
+        shopify_api_success: true,
+        error_message: null,
+      })
+      .eq("id", run.id);
+
+    if (completionError) throw completionError;
+
     return respond({
       success: true,
       sync_mode:
@@ -397,14 +451,33 @@ Deno.serve(async (request: Request) => {
         locationNames.size,
       inventory_levels_synced:
         inventoryRows.length,
-      completed_at:
-        new Date().toISOString(),
+      sync_status: "current",
+      sync_duration_ms: syncDurationMs,
+      products_processed: variants.length,
+      products_updated: productsUpdated,
+      completed_at: completedAt.toISOString(),
     });
   } catch (error) {
     console.error(
       "[Vault Shopify Inventory Sync]",
       error,
     );
+
+    if (runContext) {
+      const completedAt = new Date();
+      await runContext.supabase
+        .from("vault_shopify_inventory_sync_runs")
+        .update({
+          sync_status: "failed",
+          sync_completed_at: completedAt.toISOString(),
+          sync_duration_ms: completedAt.getTime() - runContext.startedAtMs,
+          shopify_api_success: false,
+          error_message: error instanceof Error
+            ? error.message
+            : "Unexpected inventory synchronisation error",
+        })
+        .eq("id", runContext.id);
+    }
 
     return respond(
       {

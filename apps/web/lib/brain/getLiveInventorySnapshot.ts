@@ -9,12 +9,15 @@ import {
 import {
   supabaseAdmin,
 } from "@/lib/supabase-admin";
+import {
+  InventorySyncRepository,
+} from "@/lib/inventory/InventorySyncRepository";
+import type { InventoryFreshness } from "@/lib/inventory/InventoryFreshness";
 
 type LiveInventoryRow = {
   product_id: string;
   committed_stock: number | null;
   incoming_stock: number | null;
-  last_inventory_sync: string | null;
 };
 
 export type LiveInventorySnapshot = {
@@ -41,6 +44,7 @@ export type LiveInventorySnapshot = {
 
   healthScore: number;
   productsRequiringAttention: number;
+  sync: InventoryFreshness;
 };
 
 function calculateHealthScore({
@@ -64,28 +68,11 @@ function calculateHealthScore({
   );
 }
 
-function getLatestSync(
-  rows: LiveInventoryRow[],
-): string | null {
-  const timestamps = rows
-    .map((row) => row.last_inventory_sync)
-    .filter(
-      (value): value is string =>
-        Boolean(value),
-    )
-    .sort(
-      (a, b) =>
-        new Date(b).getTime() -
-        new Date(a).getTime(),
-    );
-
-  return timestamps[0] ?? null;
-}
-
 export async function getLiveInventorySnapshot(): Promise<LiveInventorySnapshot> {
   const [
     catalogueProducts,
     inventoryResponse,
+    sync,
   ] = await Promise.all([
     getCatalogueProducts(),
 
@@ -94,9 +81,9 @@ export async function getLiveInventorySnapshot(): Promise<LiveInventorySnapshot>
       .select(`
         product_id,
         committed_stock,
-        incoming_stock,
-        last_inventory_sync
+        incoming_stock
       `),
+    InventorySyncRepository.getFreshness(),
   ]);
 
   if (inventoryResponse.error) {
@@ -238,7 +225,7 @@ export async function getLiveInventorySnapshot(): Promise<LiveInventorySnapshot>
       new Date().toISOString(),
 
     latestSyncAt:
-      getLatestSync(inventoryRows),
+      sync.lastInventorySync,
 
     totalProducts:
       profiles.length,
@@ -291,5 +278,6 @@ export async function getLiveInventorySnapshot(): Promise<LiveInventorySnapshot>
       }),
 
     productsRequiringAttention,
+    sync,
   };
 }

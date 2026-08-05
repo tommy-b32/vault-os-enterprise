@@ -175,7 +175,6 @@ export type VaultBusinessState = {
   trustpilot: VaultBusinessDataState<VaultTrustpilotData>;
 };
 
-const INVENTORY_STALE_AFTER_MS = 30 * 60 * 1000;
 const SHOPIFY_TRADING_STALE_AFTER_MS = 30 * 60 * 1000;
 const WEBSITE_ANALYTICS_STALE_AFTER_MS = 30 * 60 * 1000;
 const BUSINESS_FINANCE_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
@@ -319,27 +318,23 @@ function mapTopProduct(
 
 function getInventoryState(
   inventory: LiveInventorySnapshot,
-  checkedAt: string,
 ): VaultAvailableData<LiveInventorySnapshot> {
   const lastUpdatedAt =
-    inventory.latestSyncAt ?? inventory.generatedAt;
-
-  const lastUpdatedTime = new Date(lastUpdatedAt).getTime();
-  const checkedTime = new Date(checkedAt).getTime();
-  const isStale =
-    !inventory.latestSyncAt ||
-    !Number.isFinite(lastUpdatedTime) ||
-    checkedTime - lastUpdatedTime > INVENTORY_STALE_AFTER_MS;
+    inventory.sync.lastInventorySync ?? inventory.generatedAt;
+  const isStale = inventory.sync.syncStatus === "delayed" ||
+    inventory.sync.syncStatus === "failed";
 
   return {
     status: isStale ? "stale" : "live",
     data: inventory,
     lastUpdatedAt,
     message: isStale
-      ? inventory.latestSyncAt
-        ? "Inventory data is older than the 30-minute freshness threshold."
-        : "Inventory is available, but no completed inventory sync timestamp was reported."
-      : null,
+      ? inventory.sync.syncStatus === "failed"
+        ? "The latest canonical Shopify inventory sync failed."
+        : "The latest successful inventory sync exceeded the approved freshness threshold."
+      : inventory.sync.syncStatus === "syncing"
+        ? "Canonical Shopify inventory synchronisation is running."
+        : null,
   };
 }
 
@@ -447,7 +442,6 @@ export async function getVaultBusinessState({
   try {
     inventory = getInventoryState(
       await getLiveInventorySnapshot(),
-      generatedAt,
     );
   } catch (error) {
     inventory = {

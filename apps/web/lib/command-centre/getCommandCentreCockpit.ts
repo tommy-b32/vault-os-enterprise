@@ -96,13 +96,21 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     sourceDomain("Website", business.websiteAnalytics.status),
     {
       ...sourceDomain("Inventory", business.inventory.status),
-      state: business.inventory.status === "stale"
+      state: inventory?.sync.syncStatus === "failed"
         ? "attention"
+        : inventory?.sync.syncStatus === "delayed"
+        ? "attention"
+        : inventory?.sync.syncStatus === "syncing"
+          ? "watch"
         : business.inventory.status === "live" && (inventory?.productsRequiringAttention ?? 0) > 0
           ? "watch"
           : sourceDomain("Inventory", business.inventory.status).state,
-      detail: business.inventory.status === "stale"
-        ? "Source stale"
+      detail: inventory?.sync.syncStatus === "failed"
+        ? "Shopify sync failed"
+        : inventory?.sync.syncStatus === "delayed"
+          ? "Shopify sync delayed"
+          : inventory?.sync.syncStatus === "syncing"
+            ? "Shopify sync running"
         : business.inventory.status === "live" && (inventory?.productsRequiringAttention ?? 0) > 0
           ? `${inventory?.productsRequiringAttention} styles require attention`
           : sourceDomain("Inventory", business.inventory.status).detail,
@@ -255,7 +263,13 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       lowStockStyles: inventory ? available(inventory.lowStockProducts, inventoryAt, inventoryStale) : unavailable(),
       outOfStockStyles: inventory ? available(inventory.outOfStockProducts, inventoryAt, inventoryStale) : unavailable(),
       stockValue: unavailable(),
-      freshness: inventoryAt ? available(inventoryAt, inventoryAt, inventoryStale) : unavailable(),
+      freshness: inventory
+        ? available(
+          inventory.sync.syncStatus,
+          inventory.sync.lastInventorySync,
+          inventory.sync.syncStatus === "delayed" || inventory.sync.syncStatus === "failed",
+        )
+        : unavailable(),
       reorderReview: inventory ? available(inventory.productsRequiringAttention, inventoryAt, inventoryStale) : unavailable(),
     },
     operations: {

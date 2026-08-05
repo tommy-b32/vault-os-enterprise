@@ -15,3 +15,6 @@ verify_jwt = false
 
 [functions.shopify-payments-sync]
 verify_jwt = true
+
+[functions.shopify-inventory-sync]
+verify_jwt = true
