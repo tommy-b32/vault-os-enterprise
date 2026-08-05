@@ -10,6 +10,7 @@ import {
   parsePositiveAmountToPence,
   type CashDirection,
 } from "@/lib/business/CashLedgerRules";
+import { emitCommandCentreRefreshEvent } from "@/lib/command-centre/emitCommandCentreRefreshEvent";
 
 export type CashLedgerActionState = {
   status: "idle" | "success" | "error";
@@ -76,6 +77,14 @@ export async function addCashTransaction(
     });
 
     console.info("Cash ledger transaction attributed", { operatorId: operator.id, result });
+
+    if (result === "created") {
+      await emitCommandCentreRefreshEvent({
+        domain: "finance",
+        eventType: "cash-transaction-created",
+        source: "cash-ledger-action",
+      });
+    }
 
     revalidatePath("/commercial");
     revalidatePath("/");

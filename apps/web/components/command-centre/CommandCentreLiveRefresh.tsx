@@ -1,156 +1,260 @@
 "use client";
 
-import { useEffect, useRef, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { isCommandCentreRefreshEvent } from "@/lib/command-centre/CommandCentreRefreshEvents";
+import {
+  decideRefreshRequest,
+  RECOVERY_REFRESH_MS,
+  REFRESH_DEBOUNCE_MS,
+  shouldScheduleFinalRefresh,
+} from "@/lib/command-centre/CommandCentreLiveRefreshPolicy";
 import { supabase } from "@/lib/supabase";
 
-const TRADING_TOPIC = "vault-os:trading";
-const TRADING_EVENT = "trading-changed";
-const REFRESH_DEBOUNCE_MS = 750;
-const STORED_DATA_REFRESH_MS = 30_000;
+const UPDATED_VISIBLE_MS = 1_500;
+const REFRESH_TABLE = "vault_command_centre_refresh_events";
 
-type CommandCentreLiveRefreshProps = {
-  onActivityDetected: () => void;
-  onRefreshComplete: () => void;
+export type CommandCentreLiveStatus =
+  | "connecting"
+  | "live"
+  | "refreshing"
+  | "updated"
+  | "reconnecting"
+  | "delayed"
+  | "unavailable";
+
+const STATUS_LABELS: Record<CommandCentreLiveStatus, string> = {
+  connecting: "Connecting…",
+  live: "Live",
+  refreshing: "Refreshing…",
+  updated: "Updated",
+  reconnecting: "Reconnecting…",
+  delayed: "Delayed",
+  unavailable: "Unavailable",
 };
 
 export function CommandCentreLiveRefresh({
-  onActivityDetected,
-  onRefreshComplete,
-}: CommandCentreLiveRefreshProps) {
+  generatedAt,
+}: {
+  generatedAt: string;
+}) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [, startTransition] = useTransition();
+  const [status, setStatus] = useState<CommandCentreLiveStatus>("connecting");
+  const previousGeneratedAtRef = useRef(generatedAt);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const updatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recoveryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshInFlightRef = useRef(false);
   const refreshQueuedRef = useRef(false);
-  const announceRefreshRef = useRef(false);
+  const recoveryRequiredRef = useRef(false);
+  const subscriptionConfirmedRef = useRef(false);
+  const lastRefreshCompletedAtRef = useRef(0);
 
-  useEffect(() => {
-    if (isPending || !refreshInFlightRef.current) {
+  const clearDebounce = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  }, []);
+
+  const clearUpdatedTimer = useCallback(() => {
+    if (updatedTimerRef.current) {
+      clearTimeout(updatedTimerRef.current);
+      updatedTimerRef.current = null;
+    }
+  }, []);
+
+  const startRefresh = useCallback(() => {
+    if (document.hidden) {
+      recoveryRequiredRef.current = true;
+      return;
+    }
+    if (!navigator.onLine) {
+      recoveryRequiredRef.current = true;
+      setStatus("unavailable");
+      return;
+    }
+    if (refreshInFlightRef.current) {
+      refreshQueuedRef.current = true;
       return;
     }
 
-    refreshInFlightRef.current = false;
-    if (announceRefreshRef.current) {
-      announceRefreshRef.current = false;
-      onRefreshComplete();
+    clearUpdatedTimer();
+    refreshInFlightRef.current = true;
+    recoveryRequiredRef.current = false;
+    setStatus("refreshing");
+    startTransition(() => router.refresh());
+  }, [clearUpdatedTimer, router]);
+
+  const requestDebouncedRefresh = useCallback(() => {
+    const decision = decideRefreshRequest({
+      hidden: document.hidden,
+      online: navigator.onLine,
+      refreshInFlight: refreshInFlightRef.current,
+    });
+
+    if (decision === "defer") {
+      recoveryRequiredRef.current = true;
+      if (!navigator.onLine) setStatus("unavailable");
+      return;
+    }
+    if (decision === "queue") {
+      refreshQueuedRef.current = true;
+      return;
     }
 
-    if (refreshQueuedRef.current) {
-      refreshQueuedRef.current = false;
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-
-        if (document.hidden) {
-          announceRefreshRef.current = false;
-          return;
-        }
-
-        if (refreshInFlightRef.current) {
-          refreshQueuedRef.current = true;
-          return;
-        }
-
-        refreshInFlightRef.current = true;
-        startTransition(() => router.refresh());
-      }, REFRESH_DEBOUNCE_MS);
-    }
-  }, [isPending, onRefreshComplete, router, startTransition]);
+    clearDebounce();
+    setStatus("refreshing");
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      startRefresh();
+    }, REFRESH_DEBOUNCE_MS);
+  }, [clearDebounce, startRefresh]);
 
   useEffect(() => {
-    const startRefresh = (announce: boolean) => {
-      if (document.hidden) {
-        return;
+    if (previousGeneratedAtRef.current === generatedAt) return;
+    previousGeneratedAtRef.current = generatedAt;
+    lastRefreshCompletedAtRef.current = Date.now();
+
+    if (!refreshInFlightRef.current) return;
+
+    refreshInFlightRef.current = false;
+    const finalRefreshRequired = shouldScheduleFinalRefresh(refreshQueuedRef.current);
+    refreshQueuedRef.current = false;
+    setStatus("updated");
+    clearUpdatedTimer();
+
+    updatedTimerRef.current = setTimeout(() => {
+      updatedTimerRef.current = null;
+      if (!finalRefreshRequired) {
+        setStatus(subscriptionConfirmedRef.current ? "live" : "reconnecting");
       }
+    }, UPDATED_VISIBLE_MS);
 
-      if (refreshInFlightRef.current) {
-        refreshQueuedRef.current = true;
-        announceRefreshRef.current ||= announce;
-        return;
-      }
+    if (finalRefreshRequired) requestDebouncedRefresh();
+  }, [clearUpdatedTimer, generatedAt, requestDebouncedRefresh]);
 
-      announceRefreshRef.current ||= announce;
-      refreshInFlightRef.current = true;
-      startTransition(() => router.refresh());
-    };
-
-    const requestBroadcastRefresh = () => {
-      if (!timerRef.current && !refreshInFlightRef.current) {
-        onActivityDetected();
-      }
-
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-
-        startRefresh(true);
-      }, REFRESH_DEBOUNCE_MS);
-    };
-
-    const stopPolling = () => {
-      if (pollingTimerRef.current) {
-        clearInterval(pollingTimerRef.current);
-        pollingTimerRef.current = null;
+  useEffect(() => {
+    const stopRecoveryTimer = () => {
+      if (recoveryTimerRef.current) {
+        clearInterval(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
       }
     };
 
-    const startPolling = (refreshImmediately: boolean) => {
-      stopPolling();
+    const startRecoveryTimer = () => {
+      stopRecoveryTimer();
+      if (document.hidden || !navigator.onLine) return;
 
-      if (document.hidden) {
-        return;
-      }
-
-      if (refreshImmediately) {
-        startRefresh(false);
-      }
-
-      pollingTimerRef.current = setInterval(() => {
-        startRefresh(false);
-      }, STORED_DATA_REFRESH_MS);
+      // Realtime is an acceleration layer rather than a durable queue. One
+      // visible-page refresh every 90 seconds recovers a missed notification.
+      recoveryTimerRef.current = setInterval(() => {
+        if (
+          document.hidden ||
+          !navigator.onLine ||
+          refreshInFlightRef.current ||
+          Date.now() - lastRefreshCompletedAtRef.current < RECOVERY_REFRESH_MS
+        ) {
+          return;
+        }
+        startRefresh();
+      }, RECOVERY_REFRESH_MS);
     };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        stopPolling();
+        stopRecoveryTimer();
         return;
       }
 
-      startPolling(true);
+      startRecoveryTimer();
+      recoveryRequiredRef.current = false;
+      startRefresh();
     };
 
+    const handleOffline = () => {
+      subscriptionConfirmedRef.current = false;
+      recoveryRequiredRef.current = true;
+      setStatus("unavailable");
+      stopRecoveryTimer();
+    };
+
+    const handleOnline = () => {
+      recoveryRequiredRef.current = true;
+      setStatus("reconnecting");
+      startRecoveryTimer();
+    };
+
+    lastRefreshCompletedAtRef.current = Date.now();
+    if (!navigator.onLine) queueMicrotask(handleOffline);
+
     const channel = supabase
-      .channel(TRADING_TOPIC, {
-        config: {
-          private: false,
+      .channel("command-centre-refresh-events")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: REFRESH_TABLE,
         },
-      })
-      .on("broadcast", { event: TRADING_EVENT }, requestBroadcastRefresh)
-      .subscribe();
+        (payload) => {
+          if (isCommandCentreRefreshEvent(payload.new)) {
+            requestDebouncedRefresh();
+          }
+        },
+      )
+      .subscribe((subscriptionStatus) => {
+        if (subscriptionStatus === "SUBSCRIBED") {
+          const needsRecovery = recoveryRequiredRef.current;
+          subscriptionConfirmedRef.current = true;
+          setStatus(refreshInFlightRef.current ? "refreshing" : "live");
+          if (needsRecovery) startRefresh();
+          return;
+        }
+
+        subscriptionConfirmedRef.current = false;
+        recoveryRequiredRef.current = true;
+        if (!navigator.onLine) {
+          setStatus("unavailable");
+        } else if (subscriptionStatus === "TIMED_OUT") {
+          setStatus("delayed");
+        } else if (
+          subscriptionStatus === "CHANNEL_ERROR" ||
+          subscriptionStatus === "CLOSED"
+        ) {
+          setStatus("reconnecting");
+        }
+      });
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    startPolling(false);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    startRecoveryTimer();
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      stopPolling();
-
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+      stopRecoveryTimer();
+      clearDebounce();
+      clearUpdatedTimer();
       refreshQueuedRef.current = false;
       refreshInFlightRef.current = false;
-      announceRefreshRef.current = false;
       void supabase.removeChannel(channel);
     };
-  }, [onActivityDetected, router, startTransition]);
+  }, [clearDebounce, clearUpdatedTimer, requestDebouncedRefresh, startRefresh]);
 
-  return null;
+  return (
+    <span
+      aria-atomic="true"
+      aria-label={`Command Centre live refresh: ${STATUS_LABELS[status]}`}
+      aria-live="polite"
+      className={`cc-live-refresh is-${status}`}
+      role="status"
+    >
+      <i aria-hidden="true">●</i> {STATUS_LABELS[status]}
+    </span>
+  );
 }

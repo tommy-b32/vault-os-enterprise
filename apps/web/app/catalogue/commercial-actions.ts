@@ -8,6 +8,7 @@ import {
   type ProductCommercialActionState,
 } from "@/lib/commercial-action-state";
 import { parseCommercialInputs } from "@/lib/commercial-inputs";
+import { emitCommandCentreRefreshEvent } from "@/lib/command-centre/emitCommandCentreRefreshEvent";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function updateCommercialCosts(
@@ -126,6 +127,12 @@ export async function updateCommercialCosts(
   revalidatePath("/advisor");
   revalidatePath("/purchase-orders");
   revalidatePath("/commercial");
+  await emitCommandCentreRefreshEvent({
+    domain: "catalogue",
+    eventType: "commercial-costs-updated",
+    entityId: inputs.parentProductId,
+    source: "commercial-cost-action",
+  });
 
   if (canonicalError || !canonical) {
     return {

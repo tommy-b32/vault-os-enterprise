@@ -1,9 +1,10 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import {
   fetchShopifyInventoryItems,
   type ShopifyInventoryQuantity,
 } from "../_shared/shopify/inventory.ts";
+import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
 
 const SHOPIFY_BATCH_SIZE = 20;
 const DATABASE_PAGE_SIZE = 200;
@@ -94,7 +95,7 @@ Deno.serve(async (request: Request) => {
   }
 
   let runContext: {
-    supabase: ReturnType<typeof createClient>;
+    supabase: SupabaseClient<any, "public", "public", any, any>;
     id: string;
     startedAtMs: number;
   } | null = null;
@@ -150,6 +151,14 @@ Deno.serve(async (request: Request) => {
       id: run.id,
       startedAtMs: startedAt.getTime(),
     };
+
+    await emitCommandCentreRefreshEvent({
+      supabase,
+      domain: "inventory",
+      eventType: "inventory-sync-started",
+      entityId: run.id,
+      source: "shopify-inventory-sync",
+    });
 
     /*
      * Read every Shopify variant that has an
@@ -435,6 +444,14 @@ Deno.serve(async (request: Request) => {
 
     if (completionError) throw completionError;
 
+    await emitCommandCentreRefreshEvent({
+      supabase,
+      domain: "inventory",
+      eventType: "inventory-sync-completed",
+      entityId: run.id,
+      source: "shopify-inventory-sync",
+    });
+
     return respond({
       success: true,
       sync_mode:
@@ -465,7 +482,7 @@ Deno.serve(async (request: Request) => {
 
     if (runContext) {
       const completedAt = new Date();
-      await runContext.supabase
+      const { error: failureUpdateError } = await runContext.supabase
         .from("vault_shopify_inventory_sync_runs")
         .update({
           sync_status: "failed",
@@ -477,6 +494,16 @@ Deno.serve(async (request: Request) => {
             : "Unexpected inventory synchronisation error",
         })
         .eq("id", runContext.id);
+
+      if (!failureUpdateError) {
+        await emitCommandCentreRefreshEvent({
+          supabase: runContext.supabase,
+          domain: "inventory",
+          eventType: "inventory-sync-failed",
+          entityId: runContext.id,
+          source: "shopify-inventory-sync",
+        });
+      }
     }
 
     return respond(

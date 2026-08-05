@@ -4,6 +4,7 @@ import {
   fetchRecentShopifyOrders,
   upsertShopifyOrder,
 } from "../_shared/shopify/orders.ts";
+import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
 
 const DEFAULT_SYNC_DAYS = 7;
 const MAX_SYNC_DAYS = 90;
@@ -53,6 +54,7 @@ Deno.serve(async (request: Request) => {
   }
 
   try {
+    const startedAt = new Date().toISOString();
     const configuredSyncSecret = Deno.env.get("VAULT_ORDER_SYNC_SECRET");
     const providedSyncSecret = request.headers.get("x-vault-sync-secret");
 
@@ -94,6 +96,34 @@ Deno.serve(async (request: Request) => {
       linesSynced += result.linesSynced;
     }
 
+    const completedAt = new Date().toISOString();
+    const { data: syncRun, error: syncRunError } = await supabase
+      .from("vault_shopify_order_sync_runs")
+      .insert({
+        sync_mode: "recent_orders_by_updated_at",
+        sync_days: syncDays,
+        orders_synced: orders.length,
+        order_lines_synced: linesSynced,
+        started_at: startedAt,
+        completed_at: completedAt,
+      })
+      .select("id")
+      .single();
+
+    if (syncRunError) {
+      throw new Error(
+        `Unable to record completed Shopify order sync: ${syncRunError.message}`,
+      );
+    }
+
+    await emitCommandCentreRefreshEvent({
+      supabase,
+      domain: "trading",
+      eventType: "order-sync-completed",
+      entityId: syncRun.id,
+      source: "shopify-order-sync",
+    });
+
     return respond({
       success: true,
       sync_mode: "recent_orders_by_updated_at",
@@ -101,7 +131,7 @@ Deno.serve(async (request: Request) => {
       updated_since: updatedSince,
       orders_synced: orders.length,
       order_lines_synced: linesSynced,
-      completed_at: new Date().toISOString(),
+      completed_at: completedAt,
     });
   } catch (error) {
     console.error(

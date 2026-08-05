@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requireOperatorRole } from "@/lib/auth/operators";
 import { parseParentProductId } from "@/lib/catalogue-identifiers";
+import { emitCommandCentreRefreshEvent } from "@/lib/command-centre/emitCommandCentreRefreshEvent";
 
 export type ProductSettingsActionState = {
   status: "idle" | "success" | "error";
@@ -94,6 +95,13 @@ export async function approveProductForReorder(
     throw new Error("The product could not be approved for reorder");
   }
 
+  await emitCommandCentreRefreshEvent({
+    domain: "advisor-input",
+    eventType: "reorder-approval-approved",
+    entityId: parentProductId,
+    source: "reorder-approval-action",
+  });
+
   revalidateReorderApprovalRoutes();
 }
 
@@ -142,6 +150,13 @@ export async function revokeProductReorderApproval(
   if (error) {
     throw new Error("The reorder approval could not be revoked");
   }
+
+  await emitCommandCentreRefreshEvent({
+    domain: "advisor-input",
+    eventType: "reorder-approval-revoked",
+    entityId: parentProductId,
+    source: "reorder-approval-action",
+  });
 
   revalidateReorderApprovalRoutes();
 }
@@ -304,6 +319,12 @@ export async function updateProductSettings(
   revalidatePath("/inventory");
   revalidatePath("/advisor");
   revalidatePath("/purchase-orders");
+  await emitCommandCentreRefreshEvent({
+    domain: "catalogue",
+    eventType: "product-settings-updated",
+    entityId: parentProductId,
+    source: "product-settings-action",
+  });
   return {
   status: "success",
   message: "Product settings saved successfully.",
