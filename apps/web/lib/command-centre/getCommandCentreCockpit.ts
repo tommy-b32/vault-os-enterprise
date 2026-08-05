@@ -11,6 +11,7 @@ import {
   limitFeed,
   limitInsights,
   notConnected,
+  reconcileTimelineInventoryFreshness,
   selectAttentionItems,
   selectTodaysFocus,
   unavailable,
@@ -68,6 +69,10 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     updatedAt: websiteAt,
     stale: websiteStale,
   });
+  const canonicalTimeline = reconcileTimelineInventoryFreshness({
+    timeline,
+    syncStatus: inventory?.sync.syncStatus ?? null,
+  });
   const sourceDomain = (
     domain: DomainPulse["domain"],
     status: "live" | "stale" | "unavailable" | "error",
@@ -80,15 +85,15 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       ? "Canonical source current"
       : status === "stale" ? "Canonical source stale" : status === "error" ? "Source error" : "Source unavailable",
   });
-  const attention = selectAttentionItems(timeline);
-  const todaysFocus = selectTodaysFocus(timeline);
-  const supplierBlocker = timeline?.items.find((item) =>
+  const attention = selectAttentionItems(canonicalTimeline);
+  const todaysFocus = selectTodaysFocus(canonicalTimeline);
+  const supplierBlocker = canonicalTimeline?.items.find((item) =>
     item.source === "supplier" && item.status === "blocked"
   );
-  const advisorAction = timeline?.items.find((item) =>
+  const advisorAction = canonicalTimeline?.items.find((item) =>
     item.source === "advisor" && item.status === "actionable"
   );
-  const advisorNoCandidate = timeline?.items.find((item) =>
+  const advisorNoCandidate = canonicalTimeline?.items.find((item) =>
     item.id === "advisor-no-trusted-candidate"
   );
   const domains: DomainPulse[] = [
@@ -158,7 +163,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     businessPulse,
     domains,
     todayFocus: todaysFocus,
-    orderedBlockers: timeline?.items
+    orderedBlockers: canonicalTimeline?.items
       .filter((item) => item.status === "blocked")
       .map((item) => ({ title: item.title, description: item.description })) ?? [],
     supportingEvidence,
@@ -193,7 +198,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       detail: `${visitors.tracked.toLocaleString("en-GB")} tracked and ${visitors.estimatedPrivacy.toLocaleString("en-GB")} estimated from declined-cookie traffic.`,
     });
   }
-  const firstAttention = selectAttentionItems(timeline)[0];
+  const firstAttention = selectAttentionItems(canonicalTimeline)[0];
   if (firstAttention) {
     insights.push({
       id: `risk-${firstAttention.id}`,

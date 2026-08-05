@@ -1,6 +1,7 @@
 import type { BusinessActivityEvent } from "@/lib/business/BusinessActivityRepository";
 import type { CommercialDecisionTimelineResult } from "@/lib/brain/CommercialDecisionTimeline";
 import type { ExecutiveBriefing } from "@/lib/brain/ExecutiveIntelligenceEngine";
+import type { InventorySyncStatus } from "@/lib/inventory/InventoryFreshness";
 
 export type CockpitValue<T> =
   | { state: "available" | "stale"; value: T; updatedAt: string | null }
@@ -179,6 +180,38 @@ export function selectAttentionItems(
       description: item.description,
       destination: item.destination!,
     }));
+}
+
+export function reconcileTimelineInventoryFreshness({
+  timeline,
+  syncStatus,
+}: {
+  timeline: CommercialDecisionTimelineResult | null;
+  syncStatus: InventorySyncStatus | null;
+}): CommercialDecisionTimelineResult | null {
+  if (!timeline || (syncStatus !== "current" && syncStatus !== "syncing")) {
+    return timeline;
+  }
+
+  const items = timeline.items.filter((item) =>
+    !item.blockerReasons.includes("inventory_stale")
+  );
+  const itemIds = new Set(items.map((item) => item.id));
+
+  return {
+    ...timeline,
+    highestPriorityAction: timeline.highestPriorityAction &&
+        itemIds.has(timeline.highestPriorityAction.id)
+      ? timeline.highestPriorityAction
+      : null,
+    items,
+    groups: timeline.groups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => itemIds.has(item.id)),
+      }))
+      .filter((group) => group.items.length > 0),
+  };
 }
 
 export function limitInsights(insights: CockpitInsight[]): CockpitInsight[] {

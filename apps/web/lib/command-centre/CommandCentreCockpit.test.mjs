@@ -8,10 +8,37 @@ import {
   limitFeed,
   limitInsights,
   notConnected,
+  reconcileTimelineInventoryFreshness,
   selectAttentionItems,
   selectTodaysFocus,
   unavailable,
 } from "./CommandCentreCockpit.ts";
+
+test("Command Centre reconciles obsolete stale presentation with canonical inventory status", () => {
+  const staleItem = timelineItem({
+    id: "classifier-inventory-stale",
+    blockerReasons: ["inventory_stale"],
+  });
+  const supplierItem = timelineItem({
+    id: "classifier-supplier-minimum",
+    source: "supplier",
+    blockerReasons: ["supplier_minimum_unknown"],
+  });
+  const timeline = {
+    generatedAt: "2026-08-05T12:00:00.000Z",
+    highestPriorityAction: null,
+    items: [staleItem, supplierItem],
+    groups: [{ label: "Blocked", items: [staleItem, supplierItem] }],
+  };
+
+  const current = reconcileTimelineInventoryFreshness({ timeline, syncStatus: "current" });
+  assert.deepEqual(current.items.map((item) => item.id), ["classifier-supplier-minimum"]);
+  assert.deepEqual(current.groups[0].items.map((item) => item.id), ["classifier-supplier-minimum"]);
+  assert.equal(timeline.items.length, 2);
+
+  const delayed = reconcileTimelineInventoryFreshness({ timeline, syncStatus: "delayed" });
+  assert.equal(delayed.items.length, 2);
+});
 
 test("Command Centre typography has an 11px minimum and preserves readable hierarchy", async () => {
   const component = await readFile(
