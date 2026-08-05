@@ -13,6 +13,45 @@ import {
   selectTodaysFocus,
   unavailable,
 } from "./CommandCentreCockpit.ts";
+import { getAttentionPriorityPresentation } from "./AttentionPriorityPresentation.ts";
+
+test("attention severity presentation maps every canonical priority to a distinct labelled tone", () => {
+  const expected = {
+    critical: ["is-critical", "CRITICAL"],
+    high: ["is-high", "HIGH"],
+    medium: ["is-medium", "MEDIUM"],
+    low: ["is-low", "LOW"],
+    informational: ["is-informational", "INFORMATIONAL"],
+  };
+
+  for (const [priority, [className, label]] of Object.entries(expected)) {
+    const presentation = getAttentionPriorityPresentation(priority);
+    assert.equal(presentation.className, className);
+    assert.equal(presentation.label, label);
+    assert.equal(presentation.accessibilityLabel, `Severity: ${label[0]}${label.slice(1).toLowerCase()}`);
+  }
+});
+
+test("unknown attention severity falls back to visible unavailable presentation", () => {
+  assert.deepEqual(getAttentionPriorityPresentation("unexpected"), {
+    className: "is-unavailable",
+    label: "UNAVAILABLE",
+    accessibilityLabel: "Severity: Unavailable",
+  });
+});
+
+test("attention badges retain visible severity text, accessible labels, and distinct colour classes", async () => {
+  const component = await readFile(
+    new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(component, /aria-label=\{severity\.accessibilityLabel\}/);
+  assert.match(component, />\{severity\.label\}<\/span>/);
+  for (const className of ["critical", "high", "medium", "low", "informational", "unavailable"]) {
+    assert.match(component, new RegExp(`\\.cc-priority\\.is-${className}\\{[^}]*border-color:[^}]*color:[^}]*background:`));
+  }
+});
 
 test("Command Centre reconciles obsolete stale presentation with canonical inventory status", () => {
   const staleItem = timelineItem({
@@ -205,6 +244,10 @@ test("brief, attention, and business feed respect compact limits", () => {
     })),
   };
   assert.equal(selectAttentionItems(timeline).length, 4);
+  assert.deepEqual(
+    selectAttentionItems(timeline).map((item) => item.id),
+    ["blocker-0", "blocker-1", "blocker-2", "blocker-3"],
+  );
 });
 
 test("timeline business events are not promoted without intelligence evidence", () => {
