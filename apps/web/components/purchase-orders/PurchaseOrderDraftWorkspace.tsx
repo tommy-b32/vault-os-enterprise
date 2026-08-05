@@ -6,9 +6,11 @@ import { useMemo, useState } from "react";
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import { BuyingIntelligenceEngine } from "@/lib/brain/BuyingIntelligenceEngine";
 import { CapitalEngine } from "@/lib/brain/CapitalEngine";
+import type { SupplierMinimum } from "@/lib/supplier/SupplierMinimum";
 
 export type PurchaseOrderDraftLine = {
   id: string;
+  supplierId: string;
   productName: string;
   supplierName: string;
   suggestedQuantity: number;
@@ -22,10 +24,12 @@ export type PurchaseOrderDraftLine = {
 };
 
 export type SupplierDraftOrder = {
+  supplierId: string;
   supplierName: string;
   leadTimeDays: number | null;
   minimumOrderValue: number | null;
   minimumOrderCurrency: string;
+  supplierMinimum: SupplierMinimum;
   currency: string;
   lines: PurchaseOrderDraftLine[];
 };
@@ -131,6 +135,8 @@ export function PurchaseOrderDraftWorkspace({
             committedOrdersGbp: wallet.committed_orders_gbp,
             manualSpendingLimitGbp: wallet.manual_spending_limit_gbp,
             proposedPurchaseGbp: basketCost,
+            walletAvailable: !walletUnavailable,
+            walletLastUpdated: wallet.wallet_last_updated,
           })
         : null;
 
@@ -139,7 +145,7 @@ export function PurchaseOrderDraftWorkspace({
       basketCost,
       capital,
     };
-  }, [orders, quantities, wallet]);
+  }, [orders, quantities, wallet, walletUnavailable]);
 
   const lineCount = orders.reduce(
     (total, order) => total + order.lines.length,
@@ -171,7 +177,7 @@ export function PurchaseOrderDraftWorkspace({
       </section>
 
       {summary.orders.map(({ order, lines, totalCost, minimumOrderSatisfied }) => (
-        <section className="purchase-order-supplier-draft" key={order.supplierName}>
+        <section className="purchase-order-supplier-draft" key={order.supplierId}>
           <div className="purchase-order-section-heading">
             <div>
               <p className="vault-eyebrow">Draft Purchase Order</p>

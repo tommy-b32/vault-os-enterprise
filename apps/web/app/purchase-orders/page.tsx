@@ -9,6 +9,7 @@ import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
 import { getCatalogueData } from "@/lib/catalogue";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,7 @@ export default async function PurchaseOrdersPage() {
             available_purchasing_power_gbp,
             manual_spending_limit_gbp,
             reserve_override_allowed,
+            wallet_last_updated,
             purchasing_power_state
           `)
           .single()
@@ -92,22 +94,27 @@ export default async function PurchaseOrdersPage() {
       if (!commercialInput || !product) continue;
 
       const supplier = supplierResult.data?.find(
-        (candidate) =>
-          candidate.supplier_name.toLowerCase() ===
-          commercialInput.supplierName.toLowerCase(),
+        (candidate) => candidate.id === commercialInput.supplierId,
       );
-      const existing = orderMap.get(commercialInput.supplierName);
+      const existing = orderMap.get(commercialInput.supplierId);
+      const supplierMinimum = SupplierMinimumContract.create({
+        value: supplier?.minimum_order_value ?? null,
+        currency: supplier?.currency_code ?? null,
+      });
       const order = existing ?? {
+        supplierId: commercialInput.supplierId,
         supplierName: commercialInput.supplierName,
         leadTimeDays: supplier?.default_lead_time_days ?? null,
         minimumOrderValue: supplier?.minimum_order_value ?? null,
         minimumOrderCurrency: supplier?.currency_code ?? "GBP",
+        supplierMinimum,
         currency: "GBP",
         lines: [],
       };
 
       order.lines.push({
         id: recommendation.id,
+        supplierId: commercialInput.supplierId,
         productName: product.product_name,
         supplierName: commercialInput.supplierName,
         suggestedQuantity: commercialInput.recommendedOrderQuantity,
@@ -120,7 +127,7 @@ export default async function PurchaseOrdersPage() {
         supplierMoqPacks: product.supplier_moq_packs,
       });
 
-      orderMap.set(commercialInput.supplierName, order);
+      orderMap.set(commercialInput.supplierId, order);
     }
   }
 

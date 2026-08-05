@@ -217,6 +217,7 @@ function buildCommercialInput(
 
   if (
     !hasValidCanonicalCost(product) ||
+    !product.supplier_id ||
     purchaseCost === null ||
     !buying.trusted ||
     buying.suggestedPacks === null ||
@@ -229,6 +230,8 @@ function buildCommercialInput(
 
   return {
     productId: product.style_id,
+
+    supplierId: product.supplier_id,
 
     productName:
       product.product_name,

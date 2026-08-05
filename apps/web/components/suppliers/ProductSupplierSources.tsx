@@ -76,10 +76,7 @@ function findSourceScore(
   return (
     scores.find(
       (score) =>
-        score.supplierId ===
-          source.supplierId &&
-        score.supplierName ===
-          source.supplierName,
+        score.supplierId === source.supplierId,
     ) ??
     null
   );

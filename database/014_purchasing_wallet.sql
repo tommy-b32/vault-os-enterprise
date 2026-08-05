@@ -368,7 +368,8 @@ create or replace view public.vault_purchasing_wallet as
 with ledger as (
   select
     coalesce(sum(amount_gbp), 0)::numeric(12, 2)
-      as ledger_balance_gbp
+      as ledger_balance_gbp,
+    max(updated_at) as last_updated_at
   from public.vault_cash_transactions
 ),
 
@@ -393,7 +394,15 @@ commitments as (
         )
       ),
       0
-    )::numeric(12, 2) as committed_orders_gbp
+    )::numeric(12, 2) as committed_orders_gbp,
+    max(updated_at) filter (
+      where status in (
+        'approved',
+        'ordered',
+        'part_paid',
+        'shipped'
+      )
+    ) as last_updated_at
   from public.vault_purchase_orders
 ),
 
@@ -401,7 +410,8 @@ policy as (
   select
     protected_reserve_gbp,
     manual_spending_limit_gbp,
-    reserve_override_allowed
+    reserve_override_allowed,
+    updated_at
   from public.vault_purchasing_policy
   where policy_key = 'primary'
 )
@@ -470,7 +480,13 @@ select
       then 'limited'
 
     else 'healthy'
-  end as purchasing_power_state
+  end as purchasing_power_state,
+
+  greatest(
+    ledger.last_updated_at,
+    commitments.last_updated_at,
+    policy.updated_at
+  ) as wallet_last_updated
 
 from ledger
 cross join commitments

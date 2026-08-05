@@ -5,6 +5,8 @@ import type {
 export type CommercialOpportunityInput = {
   productId: string;
 
+  supplierId: string;
+
   productName: string;
 
   supplierName: string;

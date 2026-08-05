@@ -1,11 +1,11 @@
 import { CommercialWorkspace } from "@/components/commercial/CommercialWorkspace";
-import Link from "next/link";
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import type { SupplierPurchasingData } from "@/components/commercial/SupplierPurchasing";
-import { supabaseAdmin } from "@/lib/supabase-admin";
-import { CashLedgerRepository } from "@/lib/business/CashLedgerRepository";
+import VaultAppShell from "@/components/layout/VaultAppShell";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { canCreateCashTransactions } from "@/lib/auth/rules";
+import { CashLedgerRepository } from "@/lib/business/CashLedgerRepository";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,7 @@ export default async function CommercialPage() {
           available_purchasing_power_gbp,
           manual_spending_limit_gbp,
           reserve_override_allowed,
+          wallet_last_updated,
           purchasing_power_state
         `)
         .single(),
@@ -45,58 +46,65 @@ export default async function CommercialPage() {
         (data) => ({ data, error: null }),
         (error: unknown) => ({
           data: null,
-          error: error instanceof Error ? error.message : "Unable to load the cash ledger.",
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to load the cash ledger.",
         }),
       ),
     ]);
 
-  const error =
-    walletResponse.error ?? supplierResponse.error;
+  const error = walletResponse.error ?? supplierResponse.error;
 
   if (error) {
     return (
-      <main className="commercial-error">
-        <h1>Commercial Intelligence unavailable</h1>
-        <p>{error.message}</p>
-      </main>
+      <VaultAppShell
+        searchPlaceholder="Search Commercial Intelligence..."
+        systemStatusLabel="Commercial intelligence unavailable"
+      >
+        <main className="commercial-error">
+          <h1>Commercial Intelligence unavailable</h1>
+          <p>{error.message}</p>
+        </main>
+      </VaultAppShell>
     );
   }
 
-  const wallet =
-    walletResponse.data as PurchasingWalletData;
-
+  const wallet = walletResponse.data as PurchasingWalletData;
   const suppliers =
-    (supplierResponse.data ??
-      []) as SupplierPurchasingData[];
+    (supplierResponse.data ?? []) as SupplierPurchasingData[];
 
   return (
-    <main className="commercial-page">
-      <header className="commercial-page-header">
-        <div>
-          <p className="vault-eyebrow">
-            Vault Commercial Engine
-          </p>
+    <VaultAppShell
+      searchPlaceholder="Search Commercial Intelligence..."
+      systemStatusLabel="Commercial intelligence online"
+    >
+      <main className="commercial-page">
+        <header className="commercial-page-header">
+          <div>
+            <p className="vault-eyebrow">
+              COMMERCIAL INTELLIGENCE
+            </p>
 
-          <h1>Commercial Intelligence</h1>
+            <h1>Commercial Intelligence</h1>
 
-          <p>
-            Understand purchasing power, supplier
-            readiness and the safest action to take next.
-          </p>
-        </div>
+            <p>
+              Cash, purchasing power, commitments and supplier
+              readiness.
+            </p>
+          </div>
+        </header>
 
-        <Link className="catalogue-back" href="/">
-          ← Command Centre
-        </Link>
-      </header>
-
-      <CommercialWorkspace
-        canCreateCashTransactions={canCreateCashTransactions(operator.role)}
-        cashLedger={cashLedgerResult.data}
-        cashLedgerError={cashLedgerResult.error}
-        suppliers={suppliers}
-        wallet={wallet}
-      />
-    </main>
+        <CommercialWorkspace
+          canCreateCashTransactions={canCreateCashTransactions(
+            operator.role,
+          )}
+          cashLedger={cashLedgerResult.data}
+          cashLedgerError={cashLedgerResult.error}
+          suppliers={suppliers}
+          wallet={wallet}
+        />
+      </main>
+    </VaultAppShell>
   );
 }

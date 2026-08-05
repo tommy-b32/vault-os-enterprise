@@ -43,6 +43,9 @@ export type BuyingRecommendationResult = {
   unitsPerPack: number | null;
   supplierMoqPacks: number | null;
 
+  calculatedQuantity: number | null;
+  minimumRequiredQuantity: number | null;
+
   suggestedPacks: number | null;
   suggestedUnits: number | null;
   projectedStockAfterOrder: number | null;
@@ -380,6 +383,9 @@ export const BuyingRecommendationEngine = {
       supplierMoqPacks:
         product.supplier_moq_packs,
 
+      minimumRequiredQuantity:
+        product.supplier_moq_packs,
+
       currency,
       confidence,
       trusted,
@@ -411,6 +417,9 @@ export const BuyingRecommendationEngine = {
           "This product is not currently enabled for replenishment.",
 
         suggestedPacks:
+          null,
+
+        calculatedQuantity:
           null,
 
         suggestedUnits:
@@ -457,6 +466,9 @@ export const BuyingRecommendationEngine = {
           "Vault Brain needs more sales or pack data before it can calculate an exact order quantity.",
 
         suggestedPacks:
+          null,
+
+        calculatedQuantity:
           null,
 
         suggestedUnits:
@@ -607,6 +619,7 @@ export const BuyingRecommendationEngine = {
               : "Current stock is at or below the calculated reorder threshold.",
 
         suggestedPacks,
+        calculatedQuantity: calculatedPacks,
         suggestedUnits,
         projectedStockAfterOrder,
         estimatedOrderCost,
@@ -635,6 +648,7 @@ export const BuyingRecommendationEngine = {
           "Stock is not immediately critical, but the target stock position indicates a replenishment opportunity.",
 
         suggestedPacks,
+        calculatedQuantity: calculatedPacks,
         suggestedUnits,
         projectedStockAfterOrder,
         estimatedOrderCost,
@@ -659,6 +673,9 @@ export const BuyingRecommendationEngine = {
 
       suggestedPacks:
         0,
+
+      calculatedQuantity:
+        calculatedPacks,
 
       suggestedUnits:
         0,

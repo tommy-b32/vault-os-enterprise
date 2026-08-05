@@ -38,25 +38,43 @@ export type CapitalState =
   | "healthy"
   | "limited"
   | "reserve_protected"
-  | "no_cash";
+  | "no_cash"
+  | "unavailable";
 
 export type CapitalDecision =
   | "approved"
   | "limited"
-  | "rejected";
+  | "rejected"
+  | "unavailable";
+
+export type CapitalInputState = {
+  state: "available" | "missing" | "invalid";
+  value: number | null;
+};
 
 export type CapitalDecisionInput = {
-  ledgerBalanceGbp: number;
-  protectedReserveGbp: number;
-  committedOrdersGbp: number;
+  ledgerBalanceGbp: number | null | undefined;
+  protectedReserveGbp: number | null | undefined;
+  committedOrdersGbp: number | null | undefined;
 
-  proposedPurchaseGbp?: number;
+  proposedPurchaseGbp?: number | null;
   manualSpendingLimitGbp?: number | null;
+  walletAvailable?: boolean;
+  walletLastUpdated?: string | null;
 };
 
 export type CapitalDecisionResult = {
   decision: CapitalDecision;
   state: CapitalState;
+  availability: "available" | "unavailable";
+  walletLastUpdated: string | null;
+  inputStates: {
+    ledgerBalanceGbp: CapitalInputState;
+    protectedReserveGbp: CapitalInputState;
+    committedOrdersGbp: CapitalInputState;
+    proposedPurchaseGbp: CapitalInputState;
+    manualSpendingLimitGbp: CapitalInputState | null;
+  };
 
   ledgerBalanceGbp: number;
   protectedReserveGbp: number;

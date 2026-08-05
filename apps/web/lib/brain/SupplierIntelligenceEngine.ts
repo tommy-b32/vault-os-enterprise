@@ -81,15 +81,6 @@ function findSupplierProfile(
         profile.id ===
         source.supplierId,
     ) ??
-    supplierProfiles.find(
-      (profile) =>
-        profile.supplierName
-          .trim()
-          .toLowerCase() ===
-        source.supplierName
-          .trim()
-          .toLowerCase(),
-    ) ??
     null
   );
 }
@@ -379,10 +370,7 @@ function buildSourceScores({
       const source =
         sources.find(
           (candidate) =>
-            candidate.supplierId ===
-              score.supplierId &&
-            candidate.supplierName ===
-              score.supplierName,
+            candidate.supplierId === score.supplierId,
         );
 
       if (!source) {
@@ -509,10 +497,7 @@ export const SupplierIntelligenceEngine = {
       recommendedScore
         ? orderedSources.find(
             (source) =>
-              source.supplierId ===
-                recommendedScore.supplierId &&
-              source.supplierName ===
-                recommendedScore.supplierName,
+              source.supplierId === recommendedScore.supplierId,
           ) ??
           null
         : null;

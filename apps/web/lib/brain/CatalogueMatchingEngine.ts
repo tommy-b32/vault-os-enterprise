@@ -385,21 +385,10 @@ function buildMatch({
     };
   }
 
-  const supplierName =
-    normaliseText(
-      card.supplierName,
-    );
-
-  const productSupplier =
-    normaliseText(
-      product.supplier_company,
-    );
-
   if (
-    supplierName &&
-    productSupplier &&
-    supplierName ===
-      productSupplier
+    card.supplierId &&
+    product.supplier_id &&
+    card.supplierId === product.supplier_id
   ) {
     addSignal(
       signals,
