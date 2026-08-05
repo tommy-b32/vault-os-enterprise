@@ -3,7 +3,6 @@ import Link from "next/link";
 import ProductVisionWorkspace from "@/components/brain/ProductVisionWorkspace";
 import { CatalogueWorkspace } from "@/components/catalogue/CatalogueWorkspace";
 import VaultAppShell from "@/components/layout/VaultAppShell";
-import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
 import { getCatalogueData } from "@/lib/catalogue";
 
 export const dynamic = "force-dynamic";
@@ -61,8 +60,25 @@ export default async function CataloguePage() {
     const analysedProducts = products.filter(
       (product) => product.product_vision !== null,
     ).length;
-    const advisorDiagnostics =
-      AdvisorEngine.analyse({ products }).diagnostics;
+    const commercialDataComplete = products.filter((product) =>
+      product.commercial_cost.estimated_margin_percent !== null &&
+      product.commercial_cost.estimated_return_on_pack_capital_percent !== null &&
+      product.commercial_cost.estimated_gross_profit_per_unit !== null
+    ).length;
+    const supplierAssigned = products.filter((product) => Boolean(product.supplier_id)).length;
+    const advisorDiagnostics = {
+      supplierAssigned,
+      configurationTrusted: products.filter((product) => product.configuration_trusted).length,
+      commercialCostTrusted: products.filter((product) =>
+        product.commercial_cost.commercial_cost_trusted).length,
+      restockEnabled: products.filter((product) => product.restock_enabled).length,
+      marginThresholdPassed: products.filter((product) =>
+        product.commercial_cost.estimated_margin_percent !== null &&
+        product.commercial_cost.estimated_margin_percent >= 45).length,
+      returnThresholdPassed: products.filter((product) =>
+        product.commercial_cost.estimated_return_on_pack_capital_percent !== null &&
+        product.commercial_cost.estimated_return_on_pack_capital_percent >= 100).length,
+    };
     const productsRequiringReview = products.filter(
       (product) => !product.configuration_trusted,
     ).length;
@@ -87,8 +103,8 @@ export default async function CataloguePage() {
       },
       {
         label: "Incomplete commercial data",
-        value: advisorDiagnostics.commercialDataMissing,
-        detail: `${advisorDiagnostics.commercialDataComplete} products have complete commercial data`,
+        value: products.length - commercialDataComplete,
+        detail: `${commercialDataComplete} products have complete commercial data`,
       },
       {
         label: "Image and vision coverage",
@@ -97,7 +113,7 @@ export default async function CataloguePage() {
       },
       {
         label: "Supplier assignment coverage",
-        value: `${percentage(advisorDiagnostics.supplierAssigned, totalProducts)}%`,
+        value: `${percentage(supplierAssigned, totalProducts)}%`,
         detail: `${advisorDiagnostics.supplierAssigned} products assigned`,
       },
       {

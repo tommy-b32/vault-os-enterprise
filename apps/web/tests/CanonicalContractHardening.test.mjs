@@ -121,15 +121,15 @@ test("wallet contract exposes provenance without defining a stale threshold", as
 });
 
 test("buying and purchase-order identity uses supplier IDs", async () => {
-  const [advisor, purchaseOrders, supplierEngine, supplierSources] =
+  const [classifier, purchaseOrders, supplierEngine, supplierSources] =
     await Promise.all([
-      readFile(new URL("../lib/brain/AdvisorEngine.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/purchase-orders/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/brain/SupplierIntelligenceEngine.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/suppliers/ProductSupplierSources.tsx", import.meta.url), "utf8"),
     ]);
 
-  assert.match(advisor, /supplierId: product\.supplier_id/);
+  assert.match(classifier, /supplierId: product\.supplier_id/);
   assert.match(purchaseOrders, /candidate\.id === commercialInput\.supplierId/);
   assert.match(purchaseOrders, /orderMap\.get\(commercialInput\.supplierId\)/);
   assert.match(purchaseOrders, /orderMap\.set\(commercialInput\.supplierId/);

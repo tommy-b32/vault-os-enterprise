@@ -7,6 +7,7 @@ import {
 } from "@/components/purchase-orders/PurchaseOrderDraftWorkspace";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
+import { TrustedBuyingCandidateClassifier } from "@/lib/brain/TrustedBuyingCandidateClassifier";
 import { getCatalogueData } from "@/lib/catalogue";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
@@ -63,12 +64,12 @@ export default async function PurchaseOrdersPage() {
           .select(`
             id,
             supplier_name,
+            is_active,
             default_lead_time_days,
             minimum_order_value,
             currency_code,
             notes
           `)
-          .eq("is_active", true)
           .order("supplier_name", { ascending: true })
           .then(({ data, error }) => {
             if (error) throw error;
@@ -77,8 +78,36 @@ export default async function PurchaseOrdersPage() {
       ),
     ]);
 
+  const candidates = catalogueResult.data
+    ? catalogueResult.data.products.map((product) => {
+        const supplier = supplierResult.data?.find(
+          (entry) => entry.id === product.supplier_id,
+        );
+        return TrustedBuyingCandidateClassifier.classify({
+          product,
+          supplier: supplier
+            ? {
+                id: supplier.id,
+                name: supplier.supplier_name,
+                active: supplier.is_active,
+                currency: supplier.currency_code,
+                minimumOrderValue: supplier.minimum_order_value,
+              }
+            : null,
+          wallet: walletResult.data
+            ? {
+                available: true,
+                lastUpdated: walletResult.data.wallet_last_updated,
+              }
+            : null,
+        });
+      })
+    : [];
   const advisor = catalogueResult.data
-    ? AdvisorEngine.analyse({ products: catalogueResult.data.products })
+    ? AdvisorEngine.analyse({
+        products: catalogueResult.data.products,
+        candidates,
+      })
     : null;
   const orderMap = new Map<string, SupplierDraftOrder>();
 

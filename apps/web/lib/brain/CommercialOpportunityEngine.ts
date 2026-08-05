@@ -17,6 +17,8 @@ export type CommercialOpportunityInput = {
 
   grossProfitPerUnit: number | null;
 
+  estimatedGrossProfit: number;
+
   stockRemaining: number;
 
   recommendedOrderQuantity: number;
@@ -27,25 +29,6 @@ export type CommercialOpportunityInput = {
 function createCommercialOpportunity(
   input: CommercialOpportunityInput,
 ): Opportunity | null {
-  if (
-    input.marginPercent === null ||
-    input.returnOnCapital === null ||
-    input.grossProfitPerUnit === null
-  ) {
-    return null;
-  }
-
-  if (input.stockRemaining > 10) {
-    return null;
-  }
-
-  if (
-    input.marginPercent < 45 ||
-    input.returnOnCapital < 100
-  ) {
-    return null;
-  }
-
   return {
     id: input.productId,
 
@@ -58,9 +41,7 @@ function createCommercialOpportunity(
         ? "critical"
         : "high",
 
-    estimatedProfit:
-      input.grossProfitPerUnit *
-      input.recommendedOrderQuantity,
+    estimatedProfit: input.estimatedGrossProfit,
 
     confidence:
       input.stockRemaining <= 5

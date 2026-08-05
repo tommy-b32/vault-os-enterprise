@@ -1,32 +1,34 @@
 import { OpportunityCollector } from "@/lib/brain/OpportunityCollector";
-import { BuyingRecommendationEngine } from "@/lib/brain/BuyingRecommendationEngine";
-import type {
-  Opportunity,
-  OpportunityEngineResult,
-} from "@/lib/brain/OpportunityEngine";
+import type { CommercialOpportunityInput } from "@/lib/brain/CommercialOpportunityEngine";
+import type { Opportunity, OpportunityEngineResult } from "@/lib/brain/OpportunityEngine";
 import { OpportunityEngine } from "@/lib/brain/OpportunityEngine";
-
 import type {
-  CommercialOpportunityInput,
-} from "@/lib/brain/CommercialOpportunityEngine";
-
-import type {
-  CatalogueProduct,
-} from "@/types/catalogue";
+  TrustedBuyingCandidateRejectionReason,
+  TrustedBuyingCandidateResult,
+} from "@/lib/brain/TrustedBuyingCandidateClassifier";
+import type { CatalogueProduct } from "@/types/catalogue";
 
 export type AdvisorDiagnostics = {
   productsScanned: number;
-
+  stylesEvaluated: number;
+  eligible: number;
+  ineligible: number;
+  blockedByPolicy: number;
+  unavailable: number;
+  topRejectionReasons: Array<{
+    reason: TrustedBuyingCandidateRejectionReason;
+    count: number;
+  }>;
+  supplierMinimumPolicyBlockers: number;
+  walletFreshnessPolicyBlockers: number;
   stockedProducts: number;
   restockEnabled: number;
   supplierAssigned: number;
-
   configurationTrusted: number;
   trustedForReorder: number;
   reorderApprovalMissing: number;
   commercialCostTrusted: number;
   invalidOrMissingCommercialCost: number;
-
   mappedToSalesHistory: number;
   validSalesVelocity: number;
   validStockInputs: number;
@@ -44,32 +46,15 @@ export type AdvisorDiagnostics = {
   targetStockDaysMissing: number;
   supplierLeadTimeMissing: number;
   supplierMoqMissing: number;
-
   commercialDataComplete: number;
   commercialDataMissing: number;
-
   lowStock: number;
   marginThresholdPassed: number;
   returnThresholdPassed: number;
-
   productsQualifying: number;
 };
 
-export type AdvisorExclusionReason =
-  | "not_stocked"
-  | "restock_disabled"
-  | "supplier_missing"
-  | "configuration_untrusted"
-  | "reorder_approval_missing"
-  | "reorder_untrusted"
-  | "commercial_cost_untrusted"
-  | "invalid_or_missing_commercial_cost"
-  | "commercial_data_missing"
-  | "replenishment_intelligence_untrusted"
-  | "trusted_quantity_unavailable"
-  | "stock_above_threshold"
-  | "margin_below_threshold"
-  | "return_below_threshold";
+export type AdvisorExclusionReason = TrustedBuyingCandidateRejectionReason;
 
 export type AdvisorExcludedProduct = {
   productId: string;
@@ -79,425 +64,143 @@ export type AdvisorExcludedProduct = {
 
 export type AdvisorEngineInput = {
   products: CatalogueProduct[];
+  candidates: TrustedBuyingCandidateResult[];
 };
 
 export type AdvisorEngineResult = {
   diagnostics: AdvisorDiagnostics;
-
+  candidates: TrustedBuyingCandidateResult[];
   commercialInputs: CommercialOpportunityInput[];
-
   opportunities: Opportunity[];
   analysis: OpportunityEngineResult;
-
   excludedProducts: AdvisorExcludedProduct[];
 };
 
-const LOW_STOCK_THRESHOLD = 10;
-const MINIMUM_MARGIN_PERCENT = 45;
-const MINIMUM_RETURN_ON_CAPITAL_PERCENT = 100;
-
-function hasCommercialData(
-  product: CatalogueProduct,
+function hasReason(
+  candidate: TrustedBuyingCandidateResult,
+  reason: TrustedBuyingCandidateRejectionReason,
 ): boolean {
-  const commercial =
-    product.commercial_cost;
-
-  return (
-    commercial.estimated_margin_percent !== null &&
-    commercial
-      .estimated_return_on_pack_capital_percent !==
-      null &&
-    commercial.estimated_gross_profit_per_unit !== null
-  );
+  return candidate.rejectionReasons.includes(reason);
 }
 
-function hasValidCanonicalCost(product: CatalogueProduct): boolean {
-  const cost = product.commercial_cost.landed_cost_per_pack_gbp;
-
-  return cost !== null && Number.isFinite(cost) && cost > 0;
-}
-
-function getExclusionReasons(
-  product: CatalogueProduct,
-): AdvisorExclusionReason[] {
-  const commercial =
-    product.commercial_cost;
-
-  const reasons: AdvisorExclusionReason[] = [];
-
-  if (product.inventory_strategy !== "stocked") {
-    reasons.push("not_stocked");
-  }
-
-  if (!product.restock_enabled) {
-    reasons.push("restock_disabled");
-  }
-
-  if (!product.supplier_id) {
-    reasons.push("supplier_missing");
-  }
-
-  if (!product.configuration_trusted) {
-    reasons.push("configuration_untrusted");
-  }
-
-  if (
-    product.reorder_approval?.approval_state !==
-    "approved"
-  ) {
-    reasons.push("reorder_approval_missing");
-  } else if (!product.trusted_for_reorder) {
-    reasons.push("reorder_untrusted");
-  }
-
-  if (!commercial.commercial_cost_trusted) {
-    reasons.push("commercial_cost_untrusted");
-  }
-
-  if (!hasValidCanonicalCost(product)) {
-    reasons.push("invalid_or_missing_commercial_cost");
-  }
-
-  if (!hasCommercialData(product)) {
-    reasons.push("commercial_data_missing");
-
-    return reasons;
-  }
-
-  const buying = BuyingRecommendationEngine.buildRecommendation({ product });
-
-  if (!product.replenishment_intelligence.trusted) {
-    reasons.push("replenishment_intelligence_untrusted");
-  }
-
-  if (
-    !buying.trusted ||
-    buying.suggestedPacks === null ||
-    buying.suggestedPacks <= 0
-  ) {
-    reasons.push("trusted_quantity_unavailable");
-  }
-
-  if (
-    product.stock_on_hand >
-    LOW_STOCK_THRESHOLD
-  ) {
-    reasons.push("stock_above_threshold");
-  }
-
-  if (
-    commercial.estimated_margin_percent !== null &&
-    commercial.estimated_margin_percent <
-      MINIMUM_MARGIN_PERCENT
-  ) {
-    reasons.push("margin_below_threshold");
-  }
-
-  if (
-    commercial
-      .estimated_return_on_pack_capital_percent !==
-      null &&
-    commercial
-      .estimated_return_on_pack_capital_percent <
-      MINIMUM_RETURN_ON_CAPITAL_PERCENT
-  ) {
-    reasons.push("return_below_threshold");
-  }
-
-  return reasons;
+function countWithoutReason(
+  candidates: TrustedBuyingCandidateResult[],
+  reason: TrustedBuyingCandidateRejectionReason,
+): number {
+  return candidates.filter((candidate) => !hasReason(candidate, reason)).length;
 }
 
 function buildCommercialInput(
-  product: CatalogueProduct,
+  candidate: TrustedBuyingCandidateResult,
 ): CommercialOpportunityInput | null {
-  const commercial =
-    product.commercial_cost;
-  const purchaseCost = commercial.landed_cost_per_pack_gbp;
-  const buying = BuyingRecommendationEngine.buildRecommendation({ product });
-
   if (
-    !hasValidCanonicalCost(product) ||
-    !product.supplier_id ||
-    purchaseCost === null ||
-    !buying.trusted ||
-    buying.suggestedPacks === null ||
-    buying.suggestedPacks <= 0
-  ) {
-    return null;
-  }
-
-  const recommendedOrderQuantity = buying.suggestedPacks;
+    !candidate.eligible ||
+    !candidate.supplierId ||
+    candidate.suggestedQuantity === null ||
+    candidate.canonicalPackCostGbp === null ||
+    candidate.estimatedGrossProfitGbp === null ||
+    candidate.stockRemaining === null
+  ) return null;
 
   return {
-    productId: product.style_id,
-
-    supplierId: product.supplier_id,
-
-    productName:
-      product.product_name,
-
-    supplierName:
-      product.supplier_company ??
-      "Supplier not named",
-
-    marginPercent:
-      commercial.estimated_margin_percent,
-
-    returnOnCapital:
-      commercial
-        .estimated_return_on_pack_capital_percent,
-
-    grossProfitPerUnit:
-      commercial
-        .estimated_gross_profit_per_unit,
-
-    stockRemaining:
-      product.stock_on_hand,
-
-    recommendedOrderQuantity,
-
-    purchaseCost,
+    productId: candidate.styleId,
+    supplierId: candidate.supplierId,
+    productName: candidate.productName,
+    supplierName: candidate.supplierName ?? "Supplier not named",
+    marginPercent: candidate.marginPercent,
+    returnOnCapital: candidate.returnOnCapitalPercent,
+    grossProfitPerUnit: candidate.grossProfitPerUnitGbp,
+    estimatedGrossProfit: candidate.estimatedGrossProfitGbp,
+    stockRemaining: candidate.stockRemaining,
+    recommendedOrderQuantity: candidate.suggestedQuantity,
+    purchaseCost: candidate.canonicalPackCostGbp,
   };
 }
 
 function buildDiagnostics(
   products: CatalogueProduct[],
-  qualifyingProducts: CatalogueProduct[],
+  candidates: TrustedBuyingCandidateResult[],
 ): AdvisorDiagnostics {
-  const commercialDataComplete =
-    products.filter(hasCommercialData).length;
-  const buyingResults = products.map((product) =>
-    BuyingRecommendationEngine.buildRecommendation({ product }),
-  );
+  const reasonCounts = new Map<TrustedBuyingCandidateRejectionReason, number>();
+  for (const candidate of candidates) {
+    for (const reason of candidate.rejectionReasons) {
+      reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1);
+    }
+  }
+  const countReason = (reason: TrustedBuyingCandidateRejectionReason) =>
+    reasonCounts.get(reason) ?? 0;
+  const topRejectionReasons = [...reasonCounts.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason))
+    .slice(0, 10);
 
   return {
-    productsScanned:
-      products.length,
-
-    stockedProducts:
-      products.filter(
-        (product) =>
-          product.inventory_strategy ===
-          "stocked",
-      ).length,
-
-    restockEnabled:
-      products.filter(
-        (product) =>
-          product.restock_enabled,
-      ).length,
-
-    supplierAssigned:
-      products.filter(
-        (product) =>
-          Boolean(product.supplier_id),
-      ).length,
-
-    configurationTrusted:
-      products.filter(
-        (product) =>
-          product.configuration_trusted,
-      ).length,
-
-    trustedForReorder:
-      products.filter(
-        (product) =>
-          product.trusted_for_reorder,
-      ).length,
-
-    reorderApprovalMissing:
-      products.filter(
-        (product) =>
-          product.reorder_approval?.approval_state !==
-          "approved",
-      ).length,
-
-    commercialCostTrusted:
-      products.filter(
-        (product) =>
-          product.commercial_cost
-            .commercial_cost_trusted,
-      ).length,
-
-    invalidOrMissingCommercialCost:
-      products.filter(
-        (product) => !hasValidCanonicalCost(product),
-      ).length,
-
-    mappedToSalesHistory: products.filter(
-      (product) =>
-        !product.replenishment_intelligence.missingRequirements.includes(
-          "variant_mapping_missing",
-        ),
-    ).length,
-    validSalesVelocity: products.filter(
-      (product) =>
-        product.replenishment_intelligence.averageDailySales !== null,
-    ).length,
-    validStockInputs: products.filter(
-      (product) => product.replenishment_intelligence.stockOnHand !== null,
-    ).length,
-    validCommittedIncomingInputs: products.filter(
-      (product) =>
-        product.replenishment_intelligence.committedStock !== null &&
-        product.replenishment_intelligence.incomingStock !== null,
-    ).length,
-    validLeadTime: products.filter(
-      (product) =>
-        (product.replenishment_intelligence.supplierLeadTimeDays ?? 0) > 0,
-    ).length,
-    validTargetDays: products.filter(
-      (product) =>
-        (product.replenishment_intelligence.targetStockDays ?? 0) > 0,
-    ).length,
-    validPackSize: products.filter(
-      (product) =>
-        (product.replenishment_intelligence.unitsPerPack ?? 0) > 0,
-    ).length,
-    validMoq: products.filter(
-      (product) =>
-        product.replenishment_intelligence.supplierMoqPacks !== null &&
-        product.replenishment_intelligence.supplierMoqPacks >= 0,
-    ).length,
-    trustedReplenishmentInputs: products.filter(
-      (product) => product.replenishment_intelligence.trusted,
-    ).length,
-    trustedQuantityProduced: buyingResults.filter(
-      (result) =>
-        result.trusted &&
-        result.suggestedPacks !== null &&
-        result.suggestedPacks > 0,
-    ).length,
-    noReorderNeeded: buyingResults.filter(
-      (result) => result.status === "healthy",
-    ).length,
-    insufficientQuantityData: buyingResults.filter(
-      (result) => result.status === "insufficient_data",
-    ).length,
-    staleInventory: products.filter((product) =>
-      product.replenishment_intelligence.missingRequirements.includes(
-        "inventory_stale",
-      ),
-    ).length,
-    supplierMinimumUnknown: products.filter((product) =>
-      product.replenishment_intelligence.missingRequirements.includes(
-        "supplier_minimum_order_unknown",
-      ),
-    ).length,
-    targetStockDaysMissing: products.filter((product) =>
-      product.replenishment_intelligence.missingRequirements.includes(
-        "target_stock_days_missing",
-      ),
-    ).length,
-    supplierLeadTimeMissing: products.filter((product) =>
-      product.replenishment_intelligence.missingRequirements.includes(
-        "supplier_lead_time_missing",
-      ),
-    ).length,
-    supplierMoqMissing: products.filter((product) =>
-      product.replenishment_intelligence.missingRequirements.includes(
-        "supplier_moq_missing",
-      ),
-    ).length,
-
-    commercialDataComplete,
-
-    commercialDataMissing:
-      products.length -
-      commercialDataComplete,
-
-    lowStock:
-      products.filter(
-        (product) =>
-          product.stock_on_hand <=
-          LOW_STOCK_THRESHOLD,
-      ).length,
-
-    marginThresholdPassed:
-      products.filter((product) => {
-        const margin =
-          product.commercial_cost
-            .estimated_margin_percent;
-
-        return (
-          margin !== null &&
-          margin >=
-            MINIMUM_MARGIN_PERCENT
-        );
-      }).length,
-
-    returnThresholdPassed:
-      products.filter((product) => {
-        const returnOnCapital =
-          product.commercial_cost
-            .estimated_return_on_pack_capital_percent;
-
-        return (
-          returnOnCapital !== null &&
-          returnOnCapital >=
-            MINIMUM_RETURN_ON_CAPITAL_PERCENT
-        );
-      }).length,
-
-    productsQualifying:
-      qualifyingProducts.length,
+    productsScanned: products.length,
+    stylesEvaluated: candidates.length,
+    eligible: candidates.filter((candidate) => candidate.status === "eligible").length,
+    ineligible: candidates.filter((candidate) => candidate.status === "ineligible").length,
+    blockedByPolicy: candidates.filter((candidate) => candidate.status === "blocked_by_policy").length,
+    unavailable: candidates.filter((candidate) => candidate.status === "unavailable").length,
+    topRejectionReasons,
+    supplierMinimumPolicyBlockers:
+      countReason("supplier_minimum_unknown") + countReason("supplier_minimum_not_evaluated"),
+    walletFreshnessPolicyBlockers: countReason("wallet_freshness_policy_missing"),
+    stockedProducts: countWithoutReason(candidates, "inventory_strategy_not_stocked"),
+    restockEnabled: countWithoutReason(candidates, "restock_disabled"),
+    supplierAssigned: countWithoutReason(candidates, "supplier_missing"),
+    configurationTrusted: countWithoutReason(candidates, "configuration_untrusted"),
+    trustedForReorder: countWithoutReason(candidates, "reorder_approval_missing"),
+    reorderApprovalMissing: countReason("reorder_approval_missing"),
+    commercialCostTrusted: countWithoutReason(candidates, "commercial_data_missing"),
+    invalidOrMissingCommercialCost: countReason("invalid_or_missing_commercial_cost"),
+    mappedToSalesHistory: countWithoutReason(candidates, "sales_history_unavailable"),
+    validSalesVelocity: countWithoutReason(candidates, "sales_history_unavailable"),
+    validStockInputs: countWithoutReason(candidates, "inventory_unavailable"),
+    validCommittedIncomingInputs: products.filter((product) =>
+      product.replenishment_intelligence.committedStock !== null &&
+      product.replenishment_intelligence.incomingStock !== null).length,
+    validLeadTime: countWithoutReason(candidates, "supplier_lead_time_missing"),
+    validTargetDays: countWithoutReason(candidates, "target_stock_days_missing"),
+    validPackSize: countWithoutReason(candidates, "units_per_pack_missing"),
+    validMoq: countWithoutReason(candidates, "supplier_moq_missing"),
+    trustedReplenishmentInputs: countWithoutReason(candidates, "replenishment_untrusted"),
+    trustedQuantityProduced: candidates.filter((candidate) =>
+      candidate.calculatedQuantity !== null && candidate.calculatedQuantity > 0).length,
+    noReorderNeeded: countReason("quantity_not_positive"),
+    insufficientQuantityData: countReason("quantity_unavailable"),
+    staleInventory: countReason("inventory_stale"),
+    supplierMinimumUnknown: countReason("supplier_minimum_unknown"),
+    targetStockDaysMissing: countReason("target_stock_days_missing"),
+    supplierLeadTimeMissing: countReason("supplier_lead_time_missing"),
+    supplierMoqMissing: countReason("supplier_moq_missing"),
+    commercialDataComplete: countWithoutReason(candidates, "profitability_incomplete"),
+    commercialDataMissing: countReason("profitability_incomplete"),
+    lowStock: countWithoutReason(candidates, "stock_above_threshold"),
+    marginThresholdPassed: countWithoutReason(candidates, "margin_below_threshold"),
+    returnThresholdPassed: countWithoutReason(candidates, "return_below_threshold"),
+    productsQualifying: candidates.filter((candidate) => candidate.eligible).length,
   };
 }
 
-export function analyseAdvisor({
-  products,
-}: AdvisorEngineInput): AdvisorEngineResult {
-  const excludedProducts =
-    products
-      .map((product) => ({
-        productId:
-          product.style_id,
-
-        productName:
-          product.product_name,
-
-        reasons:
-          getExclusionReasons(product),
-      }))
-      .filter(
-        (product) =>
-          product.reasons.length > 0,
-      );
-
-  const qualifyingProducts =
-    products.filter(
-      (product) =>
-        getExclusionReasons(product)
-          .length === 0,
-    );
-
-  const commercialInputs =
-    qualifyingProducts
-      .map(buildCommercialInput)
-      .filter(
-        (input): input is CommercialOpportunityInput =>
-          input !== null,
-      );
-
-  const opportunities =
-    OpportunityCollector.collect({
-      commercial:
-        commercialInputs,
-    });
-
-  const analysis =
-    OpportunityEngine.analyse({
-      opportunities,
-    });
-
-  const diagnostics =
-    buildDiagnostics(
-      products,
-      qualifyingProducts,
-    );
+export function analyseAdvisor({ products, candidates }: AdvisorEngineInput): AdvisorEngineResult {
+  const commercialInputs = candidates
+    .filter((candidate) => candidate.status === "eligible")
+    .map(buildCommercialInput)
+    .filter((input): input is CommercialOpportunityInput => input !== null);
+  const opportunities = OpportunityCollector.collect({ commercial: commercialInputs });
+  const analysis = OpportunityEngine.analyse({ opportunities });
+  const productNames = new Map(products.map((product) => [product.style_id, product.product_name]));
+  const excludedProducts = candidates
+    .filter((candidate) => !candidate.eligible)
+    .map((candidate) => ({
+      productId: candidate.styleId,
+      productName: candidate.productName || productNames.get(candidate.styleId) || "Unknown product",
+      reasons: candidate.rejectionReasons,
+    }));
 
   return {
-    diagnostics,
+    diagnostics: buildDiagnostics(products, candidates),
+    candidates,
     commercialInputs,
     opportunities,
     analysis,
@@ -505,6 +208,4 @@ export function analyseAdvisor({
   };
 }
 
-export const AdvisorEngine = {
-  analyse: analyseAdvisor,
-} as const;
+export const AdvisorEngine = { analyse: analyseAdvisor } as const;

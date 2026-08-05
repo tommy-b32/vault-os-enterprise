@@ -154,13 +154,13 @@ test("canonical SQL deduplicates lines and excludes cancelled and test orders", 
   assert.doesNotMatch(sql, /line\.title\s*=/);
 });
 
-test("Advisor no longer exposes MOQ-or-one as a trusted quantity", async () => {
+test("upstream classifier preserves explicit quantity evidence", async () => {
   const source = await readFile(
-    new URL("../lib/brain/AdvisorEngine.ts", import.meta.url),
+    new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url),
     "utf8",
   );
 
   assert.doesNotMatch(source, /Math\.max\(\s*1,\s*product\.supplier_moq_packs/);
   assert.match(source, /BuyingRecommendationEngine\.buildRecommendation/);
-  assert.match(source, /trusted_quantity_unavailable/);
+  assert.match(source, /quantity_below_minimum_policy_unresolved/);
 });

@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import VaultAppShell from "@/components/layout/VaultAppShell";
+import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
+import type { SupplierPurchasingData } from "@/components/commercial/SupplierPurchasing";
 import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
 import type {
   AdvisorDiagnostics,
@@ -8,7 +10,9 @@ import type {
 import type {
   Opportunity,
 } from "@/lib/brain/OpportunityEngine";
+import { TrustedBuyingCandidateClassifier } from "@/lib/brain/TrustedBuyingCandidateClassifier";
 import { getCatalogueData } from "@/lib/catalogue";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import type {
   CatalogueProduct,
 } from "@/types/catalogue";
@@ -345,10 +349,56 @@ function buildReadinessChecks(
 
 async function loadAdvisorPage() {
   try {
-    const { products } = await getCatalogueData();
+    const [{ products }, walletResponse, supplierResponse] = await Promise.all([
+      getCatalogueData(),
+      supabaseAdmin.from("vault_purchasing_wallet").select(`
+        ledger_balance_gbp,
+        protected_reserve_gbp,
+        committed_orders_gbp,
+        calculated_purchasing_power_gbp,
+        available_purchasing_power_gbp,
+        manual_spending_limit_gbp,
+        reserve_override_allowed,
+        wallet_last_updated,
+        purchasing_power_state
+      `).single(),
+      supabaseAdmin.from("vault_suppliers").select(`
+        id,
+        supplier_name,
+        is_active,
+        default_lead_time_days,
+        minimum_order_value,
+        currency_code,
+        notes
+      `),
+    ]);
+    const wallet = walletResponse.error
+      ? null
+      : walletResponse.data as PurchasingWalletData;
+    const suppliers = supplierResponse.error
+      ? []
+      : (supplierResponse.data ?? []) as SupplierPurchasingData[];
+    const candidates = products.map((product) => {
+      const supplier = suppliers.find((entry) => entry.id === product.supplier_id);
+      return TrustedBuyingCandidateClassifier.classify({
+        product,
+        supplier: supplier
+          ? {
+              id: supplier.id,
+              name: supplier.supplier_name,
+              active: supplier.is_active,
+              currency: supplier.currency_code,
+              minimumOrderValue: supplier.minimum_order_value,
+            }
+          : null,
+        wallet: wallet
+          ? { available: true, lastUpdated: wallet.wallet_last_updated }
+          : null,
+      });
+    });
 
     return {
-      advisor: AdvisorEngine.analyse({ products }),
+      advisor: AdvisorEngine.analyse({ products, candidates }),
       products,
       error: null,
     };
@@ -631,6 +681,10 @@ export default async function AdvisorPage() {
               </div>
               <dl>
                 <div><dt>Products evaluated</dt><dd>{diagnostics.productsScanned}</dd></div>
+                <div><dt>Eligible</dt><dd>{diagnostics.eligible}</dd></div>
+                <div><dt>Ineligible</dt><dd>{diagnostics.ineligible}</dd></div>
+                <div><dt>Blocked by policy</dt><dd>{diagnostics.blockedByPolicy}</dd></div>
+                <div><dt>Unavailable</dt><dd>{diagnostics.unavailable}</dd></div>
                 <div><dt>Trusted replenishment inputs</dt><dd>{diagnostics.trustedReplenishmentInputs}</dd></div>
                 <div><dt>Trusted positive quantity</dt><dd>{diagnostics.trustedQuantityProduced}</dd></div>
                 <div><dt>Fully eligible</dt><dd>{trustedCandidates}</dd></div>

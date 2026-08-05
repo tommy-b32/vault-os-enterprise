@@ -1,5 +1,6 @@
 export type SupplierPurchasingData = {
   id: string;
+  is_active: boolean;
   supplier_name: string;
   default_lead_time_days: number;
   minimum_order_value: number | null;

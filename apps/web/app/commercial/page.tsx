@@ -33,6 +33,7 @@ export default async function CommercialPage() {
         .select(`
           id,
           supplier_name,
+          is_active,
           default_lead_time_days,
           minimum_order_value,
           currency_code,
