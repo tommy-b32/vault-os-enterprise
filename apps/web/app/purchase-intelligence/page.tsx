@@ -6,7 +6,6 @@ import {
   type PurchaseIntelligenceSupplier,
 } from "@/lib/brain/PurchaseIntelligenceEngine";
 import { PurchaseIntelligenceDiagnostics } from "@/lib/brain/PurchaseIntelligenceDiagnostics";
-import { TrustedBuyingCandidateClassifier } from "@/lib/brain/TrustedBuyingCandidateClassifier";
 import { getCatalogueData } from "@/lib/catalogue";
 import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -44,18 +43,9 @@ export default async function PurchaseIntelligencePage() {
     inventoryTrusted: freshness.syncStatus === "current",
   });
   const wallet = walletResult.data as PurchasingWalletData;
-  const candidates = catalogue.products.map((product) => {
-    const supplier = suppliers.find((entry) => entry.id === product.supplier_id) ?? null;
-    return TrustedBuyingCandidateClassifier.classify({
-      product,
-      supplier,
-      wallet: { available: true, lastUpdated: wallet.wallet_last_updated },
-    });
-  });
   const diagnostics = PurchaseIntelligenceDiagnostics.build({
     products: catalogue.products,
     suppliers,
-    candidates,
     recommendations,
     wallet,
     inventoryTrusted: freshness.syncStatus === "current",
@@ -73,10 +63,12 @@ export default async function PurchaseIntelligencePage() {
           <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">SUPPLIER DIAGNOSTICS</p><h2>Trust evaluation</h2><p>Every evaluated supplier is shown, including suppliers blocked from recommendation.</p></div><span>{diagnostics.length} suppliers evaluated</span></div>
           <div className="purchase-intelligence-diagnostic-grid">
             {diagnostics.map((diagnostic) => (
-              <article className={`purchase-intelligence-diagnostic is-${diagnostic.finalDecision === "Trusted" ? "trusted" : "blocked"}`} key={diagnostic.supplier.id}>
-                <header><div><span>Supplier</span><h3>{diagnostic.supplier.name}</h3></div><strong>{diagnostic.finalDecision}</strong></header>
+              <article className={`purchase-intelligence-diagnostic is-${diagnostic.finalRecommendationStatus.startsWith("Trusted") ? "trusted" : "blocked"}`} key={diagnostic.supplier.id}>
+                <header><div><span>Supplier</span><h3>{diagnostic.supplier.name}</h3></div><strong>{diagnostic.finalRecommendationStatus}</strong></header>
                 <dl>
                   <div><dt>Products evaluated</dt><dd>{diagnostic.productsEvaluated}</dd></div>
+                  <div><dt>Products needing replenishment</dt><dd>{diagnostic.productsNeedingReplenishment}</dd></div>
+                  <div><dt>Products excluded</dt><dd>{diagnostic.productsExcluded}</dd></div>
                   <div><dt>Inventory trust</dt><dd>{diagnostic.inventoryTrust}</dd></div>
                   <div><dt>Catalogue trust</dt><dd>{diagnostic.catalogueTrust}</dd></div>
                   <div><dt>Supplier configuration</dt><dd>{diagnostic.supplierConfiguration}</dd></div>
@@ -86,8 +78,10 @@ export default async function PurchaseIntelligencePage() {
                   <div><dt>Capital availability</dt><dd>{diagnostic.capitalAvailability}</dd></div>
                   <div><dt>Confidence</dt><dd>{diagnostic.confidence}</dd></div>
                 </dl>
-                <div className="purchase-intelligence-rejections"><span>Classifier rejection reasons</span>{diagnostic.classifierRejectionReasons.length > 0 ? <ul>{diagnostic.classifierRejectionReasons.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
-                <footer><strong>Final decision: {diagnostic.finalDecision}</strong><span>{diagnostic.decisionExplanation}</span></footer>
+                <div className="purchase-intelligence-rejections"><span>Hard blockers</span>{diagnostic.hardBlockers.length > 0 ? <ul>{diagnostic.hardBlockers.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
+                <div className="purchase-intelligence-rejections"><span>Operator warnings</span>{diagnostic.operatorWarnings.length > 0 ? <ul>{diagnostic.operatorWarnings.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
+                <div className="purchase-intelligence-rejections"><span>All classifier rejection reasons</span>{diagnostic.classifierRejectionReasons.length > 0 ? <ul>{diagnostic.classifierRejectionReasons.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
+                <footer><strong>Final recommendation status: {diagnostic.finalRecommendationStatus}</strong><span>{diagnostic.decisionExplanation}</span></footer>
               </article>
             ))}
           </div>
@@ -106,7 +100,7 @@ export default async function PurchaseIntelligencePage() {
             <div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Product</th><th>Stock</th><th>Daily sales</th><th>Days left</th><th>Target</th><th>Required</th><th>Pack rounding</th><th>Cost</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>
               {recommendation.recommendedProducts.map((product) => <tr key={product.styleId}><td><strong>{product.productName}</strong><small>{product.styleId}</small></td><td>{product.currentStock}</td><td>{product.averageDailySales}</td><td>{product.daysOfStockRemaining ?? "—"}</td><td>{product.targetDays}</td><td>{product.quantityRequired} units</td><td>{product.packRounding.calculatedPacks} → {product.packRounding.recommendedPacks} packs</td><td>{currency(product.expectedSupplierCostGbp)}</td><td>{currency(product.expectedSellingRevenueGbp)}</td><td>{currency(product.expectedGrossProfitGbp)}</td></tr>)}
             </tbody></table></div>
-            <footer><span>Supplier minimum: {recommendation.supplierMinimumStatus}</span><span>Confidence: {recommendation.confidence}</span></footer>
+            <footer><span>Supplier minimum: {recommendation.supplierMinimumStatus}</span><span>Confidence: {recommendation.confidence.replaceAll("_", " ")}</span></footer>
           </section>
         ))}
         {recommendations.length === 0 ? <section className="purchase-intelligence-empty"><h2>No supplier recommendation is trusted</h2><p>Vault OS will display a recommendation only when catalogue, inventory, supplier, commercial, wallet and approval evidence are all complete and trusted.</p></section> : null}
