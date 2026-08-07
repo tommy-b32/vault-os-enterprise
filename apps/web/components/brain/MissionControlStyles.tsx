@@ -732,6 +732,20 @@ export default function MissionControlStyles() {
         }
 
         @media (max-width: 760px) {
+          .vault-nav {
+            display: flex;
+            overflow-x: auto;
+          }
+
+          .vault-nav-item {
+            min-width: 46px;
+            flex: 0 0 46px;
+          }
+
+          .vault-nav-item:nth-child(n + 6) {
+            display: flex;
+          }
+
           .mission-control-content {
             padding-right: 18px;
             padding-bottom: 100px;

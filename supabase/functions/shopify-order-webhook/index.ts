@@ -4,6 +4,7 @@ import {
   fetchShopifyOrderById,
   upsertShopifyOrder,
 } from "../_shared/shopify/orders.ts";
+import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
 
 const SUPPORTED_TOPICS = new Set([
   "orders/create",
@@ -64,7 +65,7 @@ async function verifyShopifyHmac(
     ["sign"],
   );
   const calculated = new Uint8Array(
-    await crypto.subtle.sign("HMAC", key, rawBody),
+    await crypto.subtle.sign("HMAC", key, rawBody as Uint8Array<ArrayBuffer>),
   );
   const provided = decodeBase64(providedHmac);
 
@@ -187,6 +188,17 @@ Deno.serve(async (request: Request) => {
       throw new Error("Shopify order was not found during webhook reconciliation");
     }
 
+    const { data: previousOrder, error: previousOrderError } = await supabase
+      .from("vault_shopify_orders")
+      .select("fulfilment_status")
+      .eq("source", "shopify")
+      .eq("shopify_order_id", order.id)
+      .maybeSingle();
+
+    if (previousOrderError) {
+      throw previousOrderError;
+    }
+
     await upsertShopifyOrder(supabase, order);
 
     const { error: completionError } = await supabase
@@ -199,6 +211,33 @@ Deno.serve(async (request: Request) => {
 
     if (completionError) {
       throw completionError;
+    }
+
+    const refreshSignal = topic === "refunds/create"
+      ? { domain: "refund" as const, eventType: "refund-sync-completed" }
+      : topic === "orders/create"
+        ? { domain: "trading" as const, eventType: "order-created-completed" }
+        : { domain: "trading" as const, eventType: "order-updated-completed" };
+
+    await emitCommandCentreRefreshEvent({
+      supabase,
+      ...refreshSignal,
+      entityId: order.id,
+      source: "shopify-order-webhook",
+    });
+
+    if (
+      topic === "orders/updated" &&
+      order.displayFulfillmentStatus.toUpperCase() === "FULFILLED" &&
+      previousOrder?.fulfilment_status?.toUpperCase() !== "FULFILLED"
+    ) {
+      await emitCommandCentreRefreshEvent({
+        supabase,
+        domain: "fulfilment",
+        eventType: "fulfilment-sync-completed",
+        entityId: order.id,
+        source: "shopify-order-webhook",
+      });
     }
 
     return respond({ success: true });

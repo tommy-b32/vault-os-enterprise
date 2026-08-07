@@ -4,6 +4,9 @@ import {
   fetchShopifyInventoryItems,
   type ShopifyInventoryQuantity,
 } from "../_shared/shopify/inventory.ts";
+import {
+  findUnavailableInventoryVariantIds,
+} from "../_shared/shopify/inventory-reconciliation.ts";
 import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
 
 const SHOPIFY_BATCH_SIZE = 20;
@@ -235,6 +238,9 @@ Deno.serve(async (request: Request) => {
 
     let shopifyBatchesFetched = 0;
     let inventoryItemsFetched = 0;
+    const returnedInventoryItems: Array<{
+      id: string;
+    }> = [];
 
     for (
       const idBatch of chunk(
@@ -254,6 +260,10 @@ Deno.serve(async (request: Request) => {
       for (
         const inventoryItem of inventoryItems
       ) {
+        returnedInventoryItems.push({
+          id: inventoryItem.id,
+        });
+
         const variant =
           variantByInventoryItemId.get(
             inventoryItem.id,
@@ -424,6 +434,36 @@ Deno.serve(async (request: Request) => {
       }
     }
 
+    /*
+     * Shopify returns null for inventory-item IDs that no longer exist. Those
+     * exact mappings cannot be treated as freshly synchronized, and their old
+     * inventory rows must not keep presenting stale stock as current canonical
+     * inventory. Reconcile only IDs included in this successful fetch; product
+     * titles, option names and SKUs are deliberately not involved.
+     */
+    const orphanedVariantIds =
+      findUnavailableInventoryVariantIds(
+        variants,
+        returnedInventoryItems,
+      );
+
+    for (
+      const variantIdBatch of chunk(
+        orphanedVariantIds,
+        DATABASE_WRITE_SIZE,
+      )
+    ) {
+      const { error: orphanCleanupError } =
+        await supabase
+          .from("vault_inventory_levels")
+          .delete()
+          .in("variant_id", variantIdBatch);
+
+      if (orphanCleanupError) {
+        throw orphanCleanupError;
+      }
+    }
+
     const completedAt = new Date();
     const productsUpdated = new Set(
       inventoryRows.map((row) => row.variant_id),
@@ -468,6 +508,8 @@ Deno.serve(async (request: Request) => {
         locationNames.size,
       inventory_levels_synced:
         inventoryRows.length,
+      inventory_mappings_unavailable:
+        orphanedVariantIds.length,
       sync_status: "current",
       sync_duration_ms: syncDurationMs,
       products_processed: variants.length,

@@ -22,3 +22,53 @@ The Shopify custom app must grant the Admin API scopes used by the enabled synch
 Shopify Payments synchronization additionally requires the narrow scopes `read_shopify_payments_accounts` for account balances and `read_shopify_payments_payouts` for payout summaries. A Dev Dashboard app version containing both scopes must be released and approved for the installed store before synchronization can succeed.
 
 The webhook endpoint must be registered for the required topics (`orders/create`, `orders/updated`, `orders/cancelled`, and `refunds/create`). The order webhook has Supabase JWT verification disabled because Shopify signs requests with HMAC; the function verifies that signature before processing the payload. The reconciliation endpoint retains Supabase JWT verification and also requires `VAULT_ORDER_SYNC_SECRET`.
+
+## Scheduled order reconciliation fallback
+
+Shopify webhooks remain the preferred instant order-ingestion path. The database
+schedule named `vault-shopify-order-reconciliation` invokes
+`shopify-order-sync` every ten minutes as a reconciliation fallback.
+
+Before applying `20260804000000_shopify_order_reconciliation_schedule.sql`, add
+these database-only secrets through the Supabase SQL editor. Replace the two
+placeholders locally; never commit their values:
+
+```sql
+select vault.create_secret(
+  '<SUPABASE_SERVICE_ROLE_JWT>',
+  'vault_shopify_order_sync_service_role_jwt',
+  'JWT used by pg_net to invoke the protected Shopify order sync function'
+);
+
+select vault.create_secret(
+  '<VAULT_ORDER_SYNC_SECRET>',
+  'vault_order_sync_secret',
+  'Caller secret used by scheduled Shopify order reconciliation'
+);
+```
+
+The second value must equal the Edge Function secret named
+`VAULT_ORDER_SYNC_SECRET`. The service-role value must be the project service-role
+JWT, not a browser publishable key or the newer `sb_secret_...` server key. The
+cron command stores only Vault secret names; decrypted values are resolved only
+when the job runs.
+
+If either named Vault secret already exists, rotate it instead of creating a
+duplicate:
+
+```sql
+select vault.update_secret(
+  (select id from vault.secrets where name = 'vault_shopify_order_sync_service_role_jwt'),
+  '<SUPABASE_SERVICE_ROLE_JWT>'
+);
+
+select vault.update_secret(
+  (select id from vault.secrets where name = 'vault_order_sync_secret'),
+  '<VAULT_ORDER_SYNC_SECRET>'
+);
+```
+
+Vault OS records each successful reconciliation in the private
+`vault_shopify_order_sync_runs` table, including runs where Shopify returns no
+orders. The Command Centre uses the latest completed run for Shopify freshness.
+No access to this table is granted to `anon` or `authenticated`.

@@ -67,6 +67,11 @@ const navigation = [
     href: "/purchase-orders",
   },
   {
+    label: "Purchase Intelligence",
+    icon: "advisor",
+    href: "/purchase-intelligence",
+  },
+  {
     label: "Analytics",
     icon: "analytics",
     href: "/analytics",

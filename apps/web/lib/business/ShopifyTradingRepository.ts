@@ -237,6 +237,23 @@ async function getOrdersInRange(
 
 export const ShopifyTradingRepository = {
   async getLatestSyncAt(): Promise<string | null> {
+    const { data: syncRun, error: syncRunError } = await supabaseAdmin
+      .from("vault_shopify_order_sync_runs")
+      .select("completed_at")
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (syncRunError) {
+      throw new Error(
+        `Unable to read Shopify reconciliation freshness: ${syncRunError.message}`,
+      );
+    }
+
+    if (syncRun?.completed_at) {
+      return syncRun.completed_at;
+    }
+
     const { data, error } = await supabaseAdmin
       .from("vault_shopify_orders")
       .select("synced_at")

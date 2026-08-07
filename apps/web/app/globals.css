@@ -9795,6 +9795,30 @@ grid-template-columns:1fr;
   }
 }
 
+.purchase-intelligence-page { display: grid; gap: 20px; padding: 28px; }
+.purchase-intelligence-header, .purchase-intelligence-supplier-heading, .purchase-intelligence-supplier footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.purchase-intelligence-header h1, .purchase-intelligence-supplier h2 { margin: 5px 0 8px; }
+.purchase-intelligence-header p, .purchase-intelligence-supplier-heading p { margin: 0; color: var(--vault-muted); }
+.purchase-intelligence-header > span, .purchase-intelligence-supplier-heading > span { padding: 8px 11px; border: 1px solid rgba(97,208,138,.25); border-radius: 999px; color: #61d08a; background: rgba(97,208,138,.08); font-size: .7rem; }
+.purchase-intelligence-notice, .purchase-intelligence-empty, .purchase-intelligence-supplier { border: 1px solid var(--vault-border); border-radius: 14px; background: var(--vault-panel); }
+.purchase-intelligence-notice { display: flex; gap: 14px; padding: 14px 16px; color: var(--vault-muted); font-size: .75rem; }
+.purchase-intelligence-notice strong { color: var(--vault-gold-bright); }
+.purchase-intelligence-supplier { overflow: hidden; }
+.purchase-intelligence-supplier-heading, .purchase-intelligence-supplier footer { padding: 18px; }
+.purchase-intelligence-metrics { display: grid; grid-template-columns: repeat(6, minmax(120px,1fr)); border-block: 1px solid var(--vault-border); }
+.purchase-intelligence-metrics article { padding: 15px 18px; border-right: 1px solid var(--vault-border); }
+.purchase-intelligence-metrics span, .purchase-intelligence-supplier small { display: block; color: var(--vault-muted); font-size: .66rem; }
+.purchase-intelligence-metrics strong { display: block; margin-top: 6px; font-size: .95rem; }
+.purchase-intelligence-table-wrap { overflow-x: auto; }
+.purchase-intelligence-table-wrap table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+.purchase-intelligence-table-wrap th, .purchase-intelligence-table-wrap td { padding: 13px 15px; border-bottom: 1px solid var(--vault-border); text-align: left; white-space: nowrap; }
+.purchase-intelligence-table-wrap th { color: var(--vault-muted); font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; }
+.purchase-intelligence-supplier footer { color: #61d08a; font-size: .7rem; }
+.purchase-intelligence-empty { padding: 30px; text-align: center; }
+.purchase-intelligence-empty p { color: var(--vault-muted); }
+@media (max-width: 900px) { .purchase-intelligence-metrics { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 680px) { .purchase-intelligence-page { padding: 16px; } .purchase-intelligence-header, .purchase-intelligence-notice { flex-direction: column; } }
+
 /* ==========================================================
    SUPPLIER REVIEW — LIVE BUYING BASKET
 ========================================================== */
