@@ -9826,6 +9826,8 @@ grid-template-columns:1fr;
 .purchase-intelligence-diagnostic header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .purchase-intelligence-diagnostic header span, .purchase-intelligence-rejections > span { color: var(--vault-muted); font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; }
 .purchase-intelligence-diagnostic h3 { margin: 4px 0 0; }
+.purchase-intelligence-stage { display: grid; gap: 10px; margin-top: 16px; }
+.purchase-intelligence-stage > .vault-eyebrow { margin: 0; }
 .purchase-intelligence-diagnostic header > strong { color: #d8ad43; font-size: .72rem; }
 .purchase-intelligence-diagnostic.is-trusted header > strong { color: #61d08a; }
 .purchase-intelligence-diagnostic dl { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 16px 0; background: var(--vault-border); }
@@ -9836,6 +9838,11 @@ grid-template-columns:1fr;
 .purchase-intelligence-rejections ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0 0; padding: 0; list-style: none; }
 .purchase-intelligence-rejections li { padding: 5px 7px; border-radius: 5px; color: #d7b766; background: rgba(216,173,67,.08); font-size: .62rem; }
 .purchase-intelligence-rejections p { margin: 8px 0 0; color: #61d08a; font-size: .7rem; }
+.purchase-intelligence-demand-items { display: grid; gap: 7px; }
+.purchase-intelligence-demand-items > span { color: var(--vault-muted); font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; }
+.purchase-intelligence-demand-items > div { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--vault-border); border-radius: 8px; background: rgba(255,255,255,.015); }
+.purchase-intelligence-demand-items strong { font-size: .7rem; }
+.purchase-intelligence-demand-items small { color: var(--vault-muted); font-size: .64rem; }
 .purchase-intelligence-diagnostic > footer { display: grid; gap: 4px; padding: 13px 0 0; }
 .purchase-intelligence-diagnostic > footer strong { color: #f4f1e9; font-size: .73rem; }
 .purchase-intelligence-diagnostic > footer span { color: var(--vault-muted); font-size: .68rem; }

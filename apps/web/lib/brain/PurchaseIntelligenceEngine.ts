@@ -1,7 +1,13 @@
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
-import { BuyingRecommendationEngine } from "@/lib/brain/BuyingRecommendationEngine";
 import { CapitalEngine } from "@/lib/brain/CapitalEngine";
-import { PurchaseIntelligenceTrust } from "@/lib/brain/PurchaseIntelligenceTrust";
+import {
+  DemandIntelligenceEngine,
+  type DemandIntelligenceResult,
+} from "@/lib/brain/DemandIntelligenceEngine";
+import {
+  TRUSTED_BUYING_MARGIN_PERCENT,
+  TRUSTED_BUYING_RETURN_PERCENT,
+} from "@/lib/brain/TrustedBuyingCandidateClassifier";
 import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
 import type { CatalogueProduct } from "@/types/catalogue";
 
@@ -30,6 +36,27 @@ export type PurchaseRecommendationProduct = {
   confidence: number;
 };
 
+export type PurchasingQualificationState =
+  | "ready_to_purchase"
+  | "blocked_by_supplier_policy"
+  | "blocked_by_approval"
+  | "blocked_by_capital"
+  | "policy_unresolved"
+  | "evidence_unavailable";
+
+export type SupplierPurchasingQualification = {
+  supplier: { id: string; name: string; currency: string | null };
+  demandProducts: DemandIntelligenceResult[];
+  totalDemandPacks: number;
+  totalDemandUnits: number;
+  spendGbp: number | null;
+  supplierMinimumValue: number | null;
+  supplierMinimumPacks: number | null;
+  state: PurchasingQualificationState;
+  blockers: string[];
+  purchasingPowerAfterOrderGbp: number | null;
+};
+
 export type SupplierPurchaseRecommendation = {
   supplier: { id: string; name: string; currency: string };
   recommendedProducts: PurchaseRecommendationProduct[];
@@ -38,10 +65,16 @@ export type SupplierPurchaseRecommendation = {
   spendGbp: number;
   projectedRevenueGbp: number;
   projectedProfitGbp: number;
-  supplierMinimumStatus: "satisfied" | "warning";
+  supplierMinimumStatus: "satisfied";
   purchasingPowerAfterOrderGbp: number;
-  confidence: "trusted" | "trusted_with_operator_warnings";
+  confidence: "trusted";
   operatorWarnings: string[];
+};
+
+export type PurchaseIntelligenceEvaluation = {
+  demands: DemandIntelligenceResult[];
+  qualifications: SupplierPurchasingQualification[];
+  recommendations: SupplierPurchaseRecommendation[];
 };
 
 type Input = {
@@ -49,149 +82,187 @@ type Input = {
   suppliers: PurchaseIntelligenceSupplier[];
   wallet: PurchasingWalletData | null;
   inventoryTrusted: boolean;
+  walletFreshnessPolicyDefined?: boolean;
 };
 
 function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-export function buildPurchaseRecommendations({
+export function evaluatePurchaseIntelligence({
   products,
   suppliers,
   wallet,
   inventoryTrusted,
-}: Input): SupplierPurchaseRecommendation[] {
-  if (!wallet || !inventoryTrusted) return [];
-
+  walletFreshnessPolicyDefined = false,
+}: Input): PurchaseIntelligenceEvaluation {
+  const demands = products.map((product) => {
+    const demand = DemandIntelligenceEngine.evaluate(product);
+    return !inventoryTrusted && demand.status !== "excluded_by_strategy"
+      ? {
+          ...demand,
+          calculatedPacks: null,
+          suggestedPacks: null,
+          suggestedUnits: null,
+          status: "evidence_unavailable" as const,
+          trusted: false,
+          missingRequirements: Array.from(new Set([...demand.missingRequirements, "inventory_sync_not_current"])),
+        }
+      : demand;
+  });
+  const productByStyle = new Map(products.map((product) => [product.style_id, product]));
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
-  const grouped = new Map<string, PurchaseRecommendationProduct[]>();
-
-  for (const product of products) {
-    const supplier = product.supplier_id ? supplierById.get(product.supplier_id) : null;
-    const commercial = product.commercial_cost;
-    const trust = PurchaseIntelligenceTrust.evaluate({
-      product,
-      supplier: supplier ?? null,
-      walletLastUpdated: wallet.wallet_last_updated,
-    });
-
-    if (
-      trust.excluded ||
-      !trust.needsReplenishment ||
-      trust.hardBlockers.length > 0 ||
-      !supplier
-    ) continue;
-
-    const recommendation = BuyingRecommendationEngine.buildRecommendation({ product });
-    const unitsPerPack = recommendation.unitsPerPack;
-    const packs = recommendation.suggestedPacks;
-    const units = recommendation.suggestedUnits;
-    const packCost = commercial.landed_cost_per_pack_gbp;
-    const sellingPrice = commercial.average_selling_price;
-    const profitPerUnit = commercial.estimated_gross_profit_per_unit;
-
-    if (
-      recommendation.confidence !== 100 ||
-      recommendation.calculatedQuantity === null ||
-      recommendation.calculatedQuantity <= 0 ||
-      packs === null || packs <= 0 || units === null ||
-      unitsPerPack === null || unitsPerPack <= 0 ||
-      recommendation.averageDailySales === null ||
-      recommendation.targetStockDays === null ||
-      packCost === null || packCost <= 0 ||
-      sellingPrice === null || sellingPrice < 0 ||
-      profitPerUnit === null
-    ) continue;
-
-    const line: PurchaseRecommendationProduct = {
-      styleId: product.style_id,
-      productName: product.product_name,
-      currentStock: recommendation.currentStock,
-      averageDailySales: recommendation.averageDailySales,
-      daysOfStockRemaining: recommendation.estimatedDaysRemaining,
-      targetDays: recommendation.targetStockDays,
-      quantityRequired: recommendation.calculatedQuantity * unitsPerPack,
-      packRounding: {
-        unitsPerPack,
-        calculatedPacks: recommendation.calculatedQuantity,
-        recommendedPacks: packs,
-      },
-      supplier: { id: supplier.id, name: supplier.name },
-      expectedSupplierCostGbp: money(packCost * packs),
-      expectedSellingRevenueGbp: money(sellingPrice * units),
-      expectedGrossProfitGbp: money(profitPerUnit * units),
-      confidence: recommendation.confidence,
-    };
-    grouped.set(supplier.id, [...(grouped.get(supplier.id) ?? []), line]);
+  const grouped = new Map<string, DemandIntelligenceResult[]>();
+  for (const demand of demands) {
+    if (demand.status !== "needs_replenishment" || !demand.supplierId) continue;
+    grouped.set(demand.supplierId, [...(grouped.get(demand.supplierId) ?? []), demand]);
   }
 
+  const qualifications: SupplierPurchasingQualification[] = [];
   const recommendations: SupplierPurchaseRecommendation[] = [];
-  for (const [supplierId, lines] of grouped) {
+  for (const [supplierId, demandProducts] of grouped) {
     const supplier = supplierById.get(supplierId);
-    if (!supplier || supplier.currency !== "GBP") continue;
-    const minimum = SupplierMinimumContract.create({
-      value: supplier.minimumOrderValue,
-      currency: supplier.currency,
-      minimumOrderPacks: supplier.minimumOrderPacks,
-    });
-    const packs = lines.reduce((total, line) => total + line.packRounding.recommendedPacks, 0);
-    const units = lines.reduce(
-      (total, line) => total + line.packRounding.recommendedPacks * line.packRounding.unitsPerPack,
-      0,
+    const blockers: string[] = [];
+    const totalDemandPacks = demandProducts.reduce((total, demand) => total + (demand.suggestedPacks ?? 0), 0);
+    const totalDemandUnits = demandProducts.reduce((total, demand) => total + (demand.suggestedUnits ?? 0), 0);
+    const lineProducts = demandProducts.map((demand) => productByStyle.get(demand.styleId)).filter(
+      (product): product is CatalogueProduct => product !== undefined,
     );
-    const spendGbp = money(lines.reduce((total, line) => total + line.expectedSupplierCostGbp, 0));
-    const capital = CapitalEngine.reviewPosition({
-      ledgerBalanceGbp: wallet.ledger_balance_gbp,
-      protectedReserveGbp: wallet.protected_reserve_gbp,
-      committedOrdersGbp: wallet.committed_orders_gbp,
-      manualSpendingLimitGbp: wallet.manual_spending_limit_gbp,
-      proposedPurchaseGbp: spendGbp,
-      walletAvailable: true,
-      walletLastUpdated: wallet.wallet_last_updated,
-    });
-    if (
-      capital.availability !== "available" ||
-      !capital.affordable ||
-      !capital.reserveProtected ||
-      capital.confidence !== 100
-    ) continue;
 
-    const supplierProducts = products.filter((product) => product.supplier_id === supplier.id);
-    const operatorWarnings: string[] = supplierProducts.flatMap((product) => {
-      const evaluation = PurchaseIntelligenceTrust.evaluate({
-        product,
-        supplier,
-        walletLastUpdated: wallet.wallet_last_updated,
-      });
-      return evaluation.needsReplenishment && !evaluation.excluded && evaluation.hardBlockers.length === 0
-        ? evaluation.operatorWarnings
-        : [];
-    });
-    if (!wallet.wallet_last_updated) operatorWarnings.push("wallet_freshness_unavailable");
-    if (minimum.value === null) operatorWarnings.push("supplier_minimum_value_unknown");
-    else if (minimum.value > 0 && spendGbp < minimum.value) operatorWarnings.push("supplier_minimum_value_not_satisfied");
-    if (minimum.minimumOrderPacks === null) operatorWarnings.push("supplier_minimum_packs_unknown");
-    else if (minimum.minimumOrderPacks > 0 && packs < minimum.minimumOrderPacks) operatorWarnings.push("supplier_minimum_packs_not_satisfied");
-    const uniqueWarnings = Array.from(new Set(operatorWarnings)).sort();
+    if (!supplier?.active) blockers.push("supplier_inactive_or_unknown");
+    if (!supplier?.currency) blockers.push("supplier_currency_missing");
+    else if (supplier.currency !== "GBP") blockers.push("supplier_currency_basket_evaluation_unavailable");
+    if (lineProducts.some((product) => product.reorder_approval?.approval_state !== "approved")) {
+      blockers.push("reorder_approval_missing");
+    }
+    if (lineProducts.some((product) => !product.commercial_cost.commercial_cost_trusted)) {
+      blockers.push("commercial_data_missing");
+    }
+    if (lineProducts.some((product) =>
+      (product.commercial_cost.estimated_margin_percent ?? Number.NEGATIVE_INFINITY) < TRUSTED_BUYING_MARGIN_PERCENT ||
+      (product.commercial_cost.estimated_return_on_pack_capital_percent ?? Number.NEGATIVE_INFINITY) < TRUSTED_BUYING_RETURN_PERCENT
+    )) blockers.push("commercial_profitability_below_threshold");
 
-    recommendations.push({
-      supplier: { id: supplier.id, name: supplier.name, currency: supplier.currency },
-      recommendedProducts: [...lines].sort((a, b) => a.productName.localeCompare(b.productName)),
-      packs,
-      units,
+    const costs = lineProducts.map((product) => {
+      const demand = demandProducts.find((entry) => entry.styleId === product.style_id);
+      const packCost = product.commercial_cost.landed_cost_per_pack_gbp;
+      return demand?.suggestedPacks !== null && demand?.suggestedPacks !== undefined && packCost !== null
+        ? demand.suggestedPacks * packCost
+        : null;
+    });
+    const spendGbp = costs.some((cost) => cost === null)
+      ? null
+      : money(costs.reduce<number>((total, cost) => total + (cost ?? 0), 0));
+    if (spendGbp === null) blockers.push("supplier_basket_cost_unavailable");
+
+    const minimum = SupplierMinimumContract.create({
+      value: supplier?.minimumOrderValue ?? null,
+      currency: supplier?.currency ?? null,
+      minimumOrderPacks: supplier?.minimumOrderPacks ?? null,
+    });
+    if (minimum.state === "unknown") blockers.push("supplier_minimum_policy_unknown");
+    if (minimum.minimumOrderPacks !== null && totalDemandPacks < minimum.minimumOrderPacks) {
+      blockers.push("supplier_minimum_packs_not_satisfied");
+    }
+    if (minimum.value !== null && minimum.value > 0) {
+      if (supplier?.currency !== "GBP" || spendGbp === null) blockers.push("supplier_minimum_value_not_evaluated");
+      else if (spendGbp < minimum.value) blockers.push("supplier_minimum_value_not_satisfied");
+    }
+    if (!wallet) blockers.push("wallet_unavailable");
+    else if (!walletFreshnessPolicyDefined) blockers.push("wallet_freshness_policy_missing");
+
+    const capital = wallet && spendGbp !== null
+      ? CapitalEngine.reviewPosition({
+          ledgerBalanceGbp: wallet.ledger_balance_gbp,
+          protectedReserveGbp: wallet.protected_reserve_gbp,
+          committedOrdersGbp: wallet.committed_orders_gbp,
+          manualSpendingLimitGbp: wallet.manual_spending_limit_gbp,
+          proposedPurchaseGbp: spendGbp,
+          walletAvailable: true,
+          walletLastUpdated: wallet.wallet_last_updated,
+        })
+      : null;
+    if (capital && (!capital.affordable || !capital.reserveProtected)) blockers.push("insufficient_reserve_safe_capacity");
+
+    let state: PurchasingQualificationState = "ready_to_purchase";
+    if (blockers.some((reason) => reason === "wallet_unavailable" || reason.includes("unavailable") || reason === "commercial_data_missing")) {
+      state = "evidence_unavailable";
+    } else if (blockers.includes("reorder_approval_missing")) {
+      state = "blocked_by_approval";
+    } else if (blockers.includes("insufficient_reserve_safe_capacity")) {
+      state = "blocked_by_capital";
+    } else if (blockers.some((reason) => reason.startsWith("supplier_minimum") || reason.startsWith("supplier_currency") || reason.startsWith("supplier_inactive"))) {
+      state = blockers.some((reason) => reason.endsWith("unknown") || reason.endsWith("not_evaluated"))
+        ? "policy_unresolved"
+        : "blocked_by_supplier_policy";
+    } else if (blockers.length > 0) {
+      state = "policy_unresolved";
+    }
+
+    const qualification: SupplierPurchasingQualification = {
+      supplier: { id: supplierId, name: supplier?.name ?? "Unknown supplier", currency: supplier?.currency ?? null },
+      demandProducts,
+      totalDemandPacks,
+      totalDemandUnits,
       spendGbp,
-      projectedRevenueGbp: money(lines.reduce((total, line) => total + line.expectedSellingRevenueGbp, 0)),
-      projectedProfitGbp: money(lines.reduce((total, line) => total + line.expectedGrossProfitGbp, 0)),
-      supplierMinimumStatus: uniqueWarnings.some((warning) => warning.startsWith("supplier_minimum"))
-        ? "warning"
-        : "satisfied",
+      supplierMinimumValue: minimum.value,
+      supplierMinimumPacks: minimum.minimumOrderPacks,
+      state,
+      blockers: Array.from(new Set(blockers)).sort(),
+      purchasingPowerAfterOrderGbp: capital?.remainingPurchasingPowerGbp ?? null,
+    };
+    qualifications.push(qualification);
+
+    if (state !== "ready_to_purchase" || !supplier || spendGbp === null || !capital) continue;
+    const recommendedProducts: PurchaseRecommendationProduct[] = demandProducts.map((demand) => {
+      const product = productByStyle.get(demand.styleId) as CatalogueProduct;
+      const unitsPerPack = demand.unitsPerPack as number;
+      const packs = demand.suggestedPacks as number;
+      const units = demand.suggestedUnits as number;
+      const averageDailySales = demand.averageDailySales as number;
+      return {
+        styleId: demand.styleId,
+        productName: demand.productName,
+        currentStock: demand.currentStock as number,
+        averageDailySales,
+        daysOfStockRemaining: averageDailySales > 0 ? Math.round((demand.currentStock as number) / averageDailySales * 10) / 10 : null,
+        targetDays: demand.targetStockDays as number,
+        quantityRequired: (demand.calculatedPacks as number) * unitsPerPack,
+        packRounding: { unitsPerPack, calculatedPacks: demand.calculatedPacks as number, recommendedPacks: packs },
+        supplier: { id: supplier.id, name: supplier.name },
+        expectedSupplierCostGbp: money((product.commercial_cost.landed_cost_per_pack_gbp as number) * packs),
+        expectedSellingRevenueGbp: money((product.commercial_cost.average_selling_price as number) * units),
+        expectedGrossProfitGbp: money((product.commercial_cost.estimated_gross_profit_per_unit as number) * units),
+        confidence: 100,
+      };
+    });
+    recommendations.push({
+      supplier: { id: supplier.id, name: supplier.name, currency: supplier.currency as string },
+      recommendedProducts,
+      packs: totalDemandPacks,
+      units: totalDemandUnits,
+      spendGbp,
+      projectedRevenueGbp: money(recommendedProducts.reduce((total, line) => total + line.expectedSellingRevenueGbp, 0)),
+      projectedProfitGbp: money(recommendedProducts.reduce((total, line) => total + line.expectedGrossProfitGbp, 0)),
+      supplierMinimumStatus: "satisfied",
       purchasingPowerAfterOrderGbp: capital.remainingPurchasingPowerGbp,
-      confidence: uniqueWarnings.length === 0 ? "trusted" : "trusted_with_operator_warnings",
-      operatorWarnings: uniqueWarnings,
+      confidence: "trusted",
+      operatorWarnings: [],
     });
   }
 
-  return recommendations.sort((a, b) => a.supplier.name.localeCompare(b.supplier.name));
+  return {
+    demands,
+    qualifications: qualifications.sort((a, b) => a.supplier.name.localeCompare(b.supplier.name)),
+    recommendations: recommendations.sort((a, b) => a.supplier.name.localeCompare(b.supplier.name)),
+  };
 }
 
-export const PurchaseIntelligenceEngine = { build: buildPurchaseRecommendations } as const;
+export function buildPurchaseRecommendations(input: Input): SupplierPurchaseRecommendation[] {
+  return evaluatePurchaseIntelligence(input).recommendations;
+}
+
+export const PurchaseIntelligenceEngine = {
+  evaluate: evaluatePurchaseIntelligence,
+  build: buildPurchaseRecommendations,
+} as const;

@@ -46,11 +46,13 @@ test("approval writes require an authorized operator and current eligibility", a
 });
 
 test("Advisor reports missing approval without changing ranking", async () => {
-  const source = await readFile(
-    new URL("../lib/brain/AdvisorEngine.ts", import.meta.url),
-    "utf8",
-  );
+  const [advisor, classifier] = await Promise.all([
+    readFile(new URL("../lib/brain/AdvisorEngine.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url), "utf8"),
+  ]);
 
-  assert.match(source, /reorder_approval_missing/);
-  assert.match(source, /product\.reorder_approval\?\.approval_state/);
+  assert.match(classifier, /reorder_approval_missing/);
+  assert.match(classifier, /product\.reorder_approval\?\.approval_state/);
+  assert.match(advisor, /candidates: TrustedBuyingCandidateResult\[\]/);
+  assert.match(advisor, /reorderApprovalMissing: countReason\("reorder_approval_missing"\)/);
 });

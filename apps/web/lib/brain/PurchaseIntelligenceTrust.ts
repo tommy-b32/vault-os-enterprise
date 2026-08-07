@@ -3,14 +3,12 @@ import {
   type TrustedBuyingCandidateRejectionReason,
   type TrustedBuyingCandidateResult,
 } from "@/lib/brain/TrustedBuyingCandidateClassifier";
+import {
+  DemandIntelligenceEngine,
+  type DemandIntelligenceResult,
+} from "@/lib/brain/DemandIntelligenceEngine";
 import type { PurchaseIntelligenceSupplier } from "@/lib/brain/PurchaseIntelligenceEngine";
 import type { CatalogueProduct } from "@/types/catalogue";
-
-const EXCLUSION_REASONS = new Set<TrustedBuyingCandidateRejectionReason>([
-  "stock_above_threshold",
-  "quantity_unavailable",
-  "quantity_not_positive",
-]);
 
 const OPERATOR_WARNING_REASONS = new Set<TrustedBuyingCandidateRejectionReason>([
   "reorder_approval_missing",
@@ -32,6 +30,7 @@ const SUPPLIER_MINIMUM_REPLENISHMENT_GAPS = new Set([
 
 export type PurchaseProductTrustEvaluation = {
   candidate: TrustedBuyingCandidateResult;
+  demand: DemandIntelligenceResult;
   needsReplenishment: boolean;
   excluded: boolean;
   exclusionReasons: TrustedBuyingCandidateRejectionReason[];
@@ -53,7 +52,12 @@ export function evaluatePurchaseProductTrust({
     supplier,
     wallet: { available: true, lastUpdated: walletLastUpdated },
   });
-  const exclusionReasons = candidate.rejectionReasons.filter((reason) => EXCLUSION_REASONS.has(reason));
+  const demand = DemandIntelligenceEngine.evaluate(product);
+  const exclusionReasons = demand.status === "excluded_by_strategy"
+    ? candidate.rejectionReasons.filter(
+        (reason) => reason === "inventory_strategy_not_stocked" || reason === "restock_disabled",
+      )
+    : [];
   const operatorWarnings = candidate.rejectionReasons.filter((reason) => OPERATOR_WARNING_REASONS.has(reason));
   const minimumOnlyReplenishmentGap =
     candidate.rejectionReasons.includes("replenishment_untrusted") &&
@@ -61,24 +65,24 @@ export function evaluatePurchaseProductTrust({
     product.replenishment_intelligence.missingRequirements.every(
       (reason) => SUPPLIER_MINIMUM_REPLENISHMENT_GAPS.has(reason),
     );
-  const hardBlockers = candidate.rejectionReasons.filter(
-    (reason) =>
-      !EXCLUSION_REASONS.has(reason) &&
-      !OPERATOR_WARNING_REASONS.has(reason) &&
-      !RESOLVED_AT_SUPPLIER_LEVEL.has(reason) &&
-      !(
-        reason === "replenishment_untrusted" &&
-        (product.replenishment_intelligence.trusted || minimumOnlyReplenishmentGap)
-      ),
-  );
+  const hardBlockers = demand.status === "evidence_unavailable"
+    ? candidate.rejectionReasons.filter(
+        (reason) =>
+          !OPERATOR_WARNING_REASONS.has(reason) &&
+          !RESOLVED_AT_SUPPLIER_LEVEL.has(reason) &&
+          reason !== "quantity_not_positive" &&
+          reason !== "stock_above_threshold",
+      )
+    : [];
   if (minimumOnlyReplenishmentGap && !operatorWarnings.includes("supplier_minimum_not_evaluated")) {
     operatorWarnings.push("supplier_minimum_not_evaluated");
   }
 
   return {
     candidate,
-    needsReplenishment: exclusionReasons.length === 0 && candidate.calculatedQuantity !== null && candidate.calculatedQuantity > 0,
-    excluded: exclusionReasons.length > 0,
+    demand,
+    needsReplenishment: demand.status === "needs_replenishment",
+    excluded: demand.status === "excluded_by_strategy",
     exclusionReasons,
     hardBlockers,
     operatorWarnings,

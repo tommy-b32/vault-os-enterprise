@@ -154,13 +154,14 @@ test("canonical SQL deduplicates lines and excludes cancelled and test orders", 
   assert.doesNotMatch(sql, /line\.title\s*=/);
 });
 
-test("upstream classifier preserves explicit quantity evidence", async () => {
+test("upstream classifier consumes canonical demand evidence", async () => {
   const source = await readFile(
     new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url),
     "utf8",
   );
 
   assert.doesNotMatch(source, /Math\.max\(\s*1,\s*product\.supplier_moq_packs/);
-  assert.match(source, /BuyingRecommendationEngine\.buildRecommendation/);
+  assert.match(source, /DemandIntelligenceEngine\.evaluate/);
+  assert.doesNotMatch(source, /BuyingRecommendationEngine/);
   assert.match(source, /quantity_below_minimum_policy_unresolved/);
 });

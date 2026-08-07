@@ -8,9 +8,10 @@ const diagnosticsUrl = new URL("../lib/brain/PurchaseIntelligenceDiagnostics.ts"
 
 test("purchase intelligence uses only canonical decision contracts", async () => {
   const source = await readFile(engineUrl, "utf8");
-  assert.match(source, /BuyingRecommendationEngine\.buildRecommendation/);
+  assert.match(source, /DemandIntelligenceEngine\.evaluate/);
   assert.match(source, /CapitalEngine\.reviewPosition/);
   assert.match(source, /SupplierMinimumContract\.create/);
+  assert.doesNotMatch(source, /BuyingRecommendationEngine/);
   assert.doesNotMatch(source, /Math\.random|Date\.now|fetch\(/);
 });
 
@@ -21,23 +22,21 @@ test("diagnostics expose every requested supplier trust dimension without changi
     readFile(engineUrl, "utf8"),
   ]);
   for (const field of [
-    "productsEvaluated", "productsNeedingReplenishment", "productsExcluded",
-    "inventoryTrust", "catalogueTrust", "supplierConfiguration",
-    "minimumOrderValueStatus", "minimumPackStatus", "reorderApproval",
-    "capitalAvailability", "confidence", "classifierRejectionReasons", "hardBlockers",
-    "operatorWarnings", "finalRecommendationStatus",
+    "evaluated", "needsReplenishment", "genuineNoReorder", "evidenceUnavailable",
+    "excludedByStrategy", "purchasingEligible", "purchasingBlocked",
+    "demandMissingRequirements", "purchasingBlockers", "finalRecommendationStatus",
   ]) assert.match(diagnostics, new RegExp(field));
-  assert.match(diagnostics, /PurchaseIntelligenceTrust\.evaluate/);
+  assert.match(diagnostics, /evaluation\.demands/);
   assert.match(page, /diagnostics\.map/);
   assert.match(page, /recommendations\.map/);
   assert.doesNotMatch(diagnostics + page + engine, /insert\(|update\(|delete\(/);
 });
 
-test("trust classification separates exclusions, hard blockers and operator warnings", async () => {
+test("trust classification consumes canonical demand outcomes without disguising unavailable evidence", async () => {
   const source = await readFile(new URL("../lib/brain/PurchaseIntelligenceTrust.ts", import.meta.url), "utf8");
-  assert.match(source, /EXCLUSION_REASONS/);
-  assert.match(source, /"stock_above_threshold"/);
-  assert.match(source, /"quantity_unavailable"/);
+  assert.match(source, /DemandIntelligenceEngine\.evaluate/);
+  assert.match(source, /"excluded_by_strategy"/);
+  assert.match(source, /"evidence_unavailable"/);
   assert.match(source, /OPERATOR_WARNING_REASONS/);
   assert.match(source, /"reorder_approval_missing"/);
   assert.match(source, /"supplier_minimum_not_evaluated"/);
@@ -51,10 +50,10 @@ test("blocked catalogue and trust states cannot become recommendations", async (
   ]);
   assert.match(classifier, /product\.inventory_strategy !== "stocked"/);
   assert.match(classifier, /!product\.configuration_trusted/);
-  assert.match(classifier, /!replenishment\.trusted/);
+  assert.match(classifier, /demand\.status === "evidence_unavailable"/);
   assert.match(classifier, /product\.reorder_approval\?\.approval_state !== "approved"/);
   assert.match(classifier, /!supplier\.active/);
-  assert.match(engine, /trust\.hardBlockers\.length > 0/);
+  assert.match(engine, /demand\.status !== "needs_replenishment"/);
 });
 
 test("supplier recommendations require minima, capital and trusted confidence", async () => {
@@ -63,7 +62,7 @@ test("supplier recommendations require minima, capital and trusted confidence", 
   assert.match(source, /supplier_minimum_packs_not_satisfied/);
   assert.match(source, /!capital\.affordable/);
   assert.match(source, /!capital\.reserveProtected/);
-  assert.match(source, /recommendation\.confidence !== 100/);
+  assert.match(source, /state !== "ready_to_purchase"/);
   assert.match(source, /confidence: "trusted"/);
 });
 

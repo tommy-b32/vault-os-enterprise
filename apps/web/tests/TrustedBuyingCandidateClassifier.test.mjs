@@ -48,13 +48,14 @@ function quantityProduct() {
   };
 }
 
-test("classifier is upstream of Advisor without a circular import", async () => {
+test("classifier consumes Demand Intelligence upstream of Advisor without a circular import", async () => {
   const [classifier, advisor] = await Promise.all([
     readFile(classifierUrl, "utf8"),
     readFile(new URL("../lib/brain/AdvisorEngine.ts", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(classifier, /AdvisorEngine/);
-  assert.match(classifier, /BuyingRecommendationEngine\.buildRecommendation/);
+  assert.match(classifier, /DemandIntelligenceEngine\.evaluate/);
+  assert.doesNotMatch(classifier, /BuyingRecommendationEngine/);
   assert.match(advisor, /TrustedBuyingCandidateResult/);
   assert.doesNotMatch(advisor, /BuyingRecommendationEngine/);
 });
@@ -83,7 +84,7 @@ test("calculated quantity and MOQ remain distinct and unresolved", async () => {
   assert.equal(recommendation.calculatedQuantity, 3);
   assert.equal(recommendation.minimumRequiredQuantity, 10);
   assert.equal(recommendation.suggestedPacks, 10);
-  assert.match(source, /buying\.calculatedQuantity < buying\.minimumRequiredQuantity/);
+  assert.match(source, /demand\.calculatedPacks < demand\.productMoqPacks/);
   assert.match(source, /quantity_below_minimum_policy_unresolved/);
 });
 

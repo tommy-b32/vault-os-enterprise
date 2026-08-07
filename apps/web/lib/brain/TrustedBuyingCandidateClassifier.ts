@@ -1,4 +1,4 @@
-import { BuyingRecommendationEngine } from "@/lib/brain/BuyingRecommendationEngine";
+import { DemandIntelligenceEngine } from "@/lib/brain/DemandIntelligenceEngine";
 import {
   SupplierMinimumContract,
   type SupplierMinimum,
@@ -199,7 +199,7 @@ export function classifyTrustedBuyingCandidate({
 
   const commercial = product.commercial_cost;
   const replenishment = product.replenishment_intelligence;
-  const buying = BuyingRecommendationEngine.buildRecommendation({ product });
+  const demand = DemandIntelligenceEngine.evaluate(product);
   const supplierMinimum = SupplierMinimumContract.create({
     value: supplier?.minimumOrderValue ?? null,
     currency: supplier?.currency ?? null,
@@ -242,14 +242,14 @@ export function classifyTrustedBuyingCandidate({
   if ((replenishment.targetStockDays ?? 0) <= 0) add(reasons, "target_stock_days_missing");
   if ((replenishment.unitsPerPack ?? 0) <= 0) add(reasons, "units_per_pack_missing");
   if (replenishment.supplierMoqPacks === null || replenishment.supplierMoqPacks < 0) add(reasons, "supplier_moq_missing");
-  if (!replenishment.trusted || !buying.trusted) add(reasons, "replenishment_untrusted");
-  if (buying.calculatedQuantity === null || buying.suggestedPacks === null) add(reasons, "quantity_unavailable");
-  else if (buying.calculatedQuantity <= 0) add(reasons, "quantity_not_positive");
+  if (demand.status === "evidence_unavailable") add(reasons, "replenishment_untrusted");
+  if (demand.calculatedPacks === null || demand.suggestedPacks === null) add(reasons, "quantity_unavailable");
+  else if (demand.calculatedPacks <= 0) add(reasons, "quantity_not_positive");
   if (
-    buying.calculatedQuantity !== null &&
-    buying.minimumRequiredQuantity !== null &&
-    buying.calculatedQuantity > 0 &&
-    buying.calculatedQuantity < buying.minimumRequiredQuantity
+    demand.calculatedPacks !== null &&
+    demand.productMoqPacks !== null &&
+    demand.calculatedPacks > 0 &&
+    demand.calculatedPacks < demand.productMoqPacks
   ) add(reasons, "quantity_below_minimum_policy_unresolved");
 
   let minimumEvaluation: TrustedBuyingCandidateResult["supplierMinimum"]["evaluation"] = "not_evaluated";
@@ -265,14 +265,14 @@ export function classifyTrustedBuyingCandidate({
   add(reasons, "capital_not_evaluated");
 
   const packCost = commercial.landed_cost_per_pack_gbp;
-  const suggestedQuantity = buying.suggestedPacks;
+  const suggestedQuantity = demand.suggestedPacks;
   const estimatedOrderCostGbp =
     packCost !== null && suggestedQuantity !== null
       ? Math.round(packCost * suggestedQuantity * 100) / 100
       : null;
   const estimatedGrossProfitGbp =
-    commercial.estimated_gross_profit_per_unit !== null && buying.suggestedUnits !== null
-      ? Math.round(commercial.estimated_gross_profit_per_unit * buying.suggestedUnits * 100) / 100
+    commercial.estimated_gross_profit_per_unit !== null && demand.suggestedUnits !== null
+      ? Math.round(commercial.estimated_gross_profit_per_unit * demand.suggestedUnits * 100) / 100
       : null;
   const status = statusFor(reasons);
 
@@ -285,11 +285,11 @@ export function classifyTrustedBuyingCandidate({
     status,
     eligible: status === "eligible",
     rejectionReasons: reasons,
-    calculatedQuantity: buying.calculatedQuantity,
-    minimumRequiredQuantity: buying.minimumRequiredQuantity,
+    calculatedQuantity: demand.calculatedPacks,
+    minimumRequiredQuantity: demand.productMoqPacks,
     suggestedQuantity,
-    suggestedUnits: buying.suggestedUnits,
-    unitsPerPack: buying.unitsPerPack,
+    suggestedUnits: demand.suggestedUnits,
+    unitsPerPack: demand.unitsPerPack,
     stockRemaining: replenishment.stockOnHand,
     canonicalPackCostGbp: packCost,
     canonicalUnitCostGbp: commercial.landed_cost_per_unit,
@@ -305,9 +305,9 @@ export function classifyTrustedBuyingCandidate({
       remainingPurchasingPowerGbp: null,
       walletLastUpdated: wallet?.lastUpdated ?? null,
     },
-    confidence: buying.confidence,
+    confidence: demand.trusted ? 100 : null,
     evidence: [
-      "BuyingRecommendationEngine",
+      "DemandIntelligenceEngine",
       "canonical commercial intelligence",
       "canonical replenishment intelligence",
       "canonical supplier minimum",

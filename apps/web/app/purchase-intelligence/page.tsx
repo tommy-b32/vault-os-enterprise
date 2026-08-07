@@ -36,19 +36,16 @@ export default async function PurchaseIntelligencePage() {
     minimumOrderValue: supplier.minimum_order_value,
     minimumOrderPacks: rules.get(supplier.id) ?? null,
   }));
-  const recommendations = PurchaseIntelligenceEngine.build({
+  const evaluation = PurchaseIntelligenceEngine.evaluate({
     products: catalogue.products,
     suppliers,
     wallet: walletResult.data as PurchasingWalletData,
     inventoryTrusted: freshness.syncStatus === "current",
   });
-  const wallet = walletResult.data as PurchasingWalletData;
+  const recommendations = evaluation.recommendations;
   const diagnostics = PurchaseIntelligenceDiagnostics.build({
-    products: catalogue.products,
     suppliers,
-    recommendations,
-    wallet,
-    inventoryTrusted: freshness.syncStatus === "current",
+    evaluation,
   });
 
   return (
@@ -65,23 +62,28 @@ export default async function PurchaseIntelligencePage() {
             {diagnostics.map((diagnostic) => (
               <article className={`purchase-intelligence-diagnostic is-${diagnostic.finalRecommendationStatus.startsWith("Trusted") ? "trusted" : "blocked"}`} key={diagnostic.supplier.id}>
                 <header><div><span>Supplier</span><h3>{diagnostic.supplier.name}</h3></div><strong>{diagnostic.finalRecommendationStatus}</strong></header>
-                <dl>
-                  <div><dt>Products evaluated</dt><dd>{diagnostic.productsEvaluated}</dd></div>
-                  <div><dt>Products needing replenishment</dt><dd>{diagnostic.productsNeedingReplenishment}</dd></div>
-                  <div><dt>Products excluded</dt><dd>{diagnostic.productsExcluded}</dd></div>
-                  <div><dt>Inventory trust</dt><dd>{diagnostic.inventoryTrust}</dd></div>
-                  <div><dt>Catalogue trust</dt><dd>{diagnostic.catalogueTrust}</dd></div>
-                  <div><dt>Supplier configuration</dt><dd>{diagnostic.supplierConfiguration}</dd></div>
-                  <div><dt>Minimum order value</dt><dd>{diagnostic.minimumOrderValueStatus}</dd></div>
-                  <div><dt>Minimum packs</dt><dd>{diagnostic.minimumPackStatus}</dd></div>
-                  <div><dt>Reorder approval</dt><dd>{diagnostic.reorderApproval}</dd></div>
-                  <div><dt>Capital availability</dt><dd>{diagnostic.capitalAvailability}</dd></div>
-                  <div><dt>Confidence</dt><dd>{diagnostic.confidence}</dd></div>
-                </dl>
-                <div className="purchase-intelligence-rejections"><span>Hard blockers</span>{diagnostic.hardBlockers.length > 0 ? <ul>{diagnostic.hardBlockers.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
-                <div className="purchase-intelligence-rejections"><span>Operator warnings</span>{diagnostic.operatorWarnings.length > 0 ? <ul>{diagnostic.operatorWarnings.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
-                <div className="purchase-intelligence-rejections"><span>All classifier rejection reasons</span>{diagnostic.classifierRejectionReasons.length > 0 ? <ul>{diagnostic.classifierRejectionReasons.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
-                <footer><strong>Final recommendation status: {diagnostic.finalRecommendationStatus}</strong><span>{diagnostic.decisionExplanation}</span></footer>
+                <section className="purchase-intelligence-stage">
+                  <p className="vault-eyebrow">DEMAND</p>
+                  <dl>
+                    <div><dt>Products evaluated</dt><dd>{diagnostic.evaluated}</dd></div>
+                    <div><dt>Products needing replenishment</dt><dd>{diagnostic.needsReplenishment}</dd></div>
+                    <div><dt>Genuine no-reorder</dt><dd>{diagnostic.genuineNoReorder}</dd></div>
+                    <div><dt>Evidence unavailable</dt><dd>{diagnostic.evidenceUnavailable}</dd></div>
+                    <div><dt>Excluded by strategy</dt><dd>{diagnostic.excludedByStrategy}</dd></div>
+                  </dl>
+                  <div className="purchase-intelligence-rejections"><span>Demand evidence unavailable</span>{diagnostic.demandMissingRequirements.length > 0 ? <ul>{diagnostic.demandMissingRequirements.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
+                  {diagnostic.demandItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Products needing replenishment</span>{diagnostic.demandItems.map((demand) => <div key={demand.styleId}><strong>{demand.productName} — {demand.styleId.split("::").at(-1)}</strong><small>On hand: {demand.currentStock} · Calculated: {demand.calculatedPacks} packs · Suggested: {demand.suggestedPacks} packs / {demand.suggestedUnits} units</small></div>)}</div> : null}
+                </section>
+                <section className="purchase-intelligence-stage">
+                  <p className="vault-eyebrow">PURCHASING QUALIFICATION</p>
+                  <dl>
+                    <div><dt>Purchasing eligible</dt><dd>{diagnostic.purchasingEligible}</dd></div>
+                    <div><dt>Purchasing blocked</dt><dd>{diagnostic.purchasingBlocked}</dd></div>
+                    <div><dt>Purchasing state</dt><dd>{diagnostic.purchasingState.replaceAll("_", " ")}</dd></div>
+                  </dl>
+                  <div className="purchase-intelligence-rejections"><span>Purchasing-policy blockers</span>{diagnostic.purchasingBlockers.length > 0 ? <ul>{diagnostic.purchasingBlockers.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
+                </section>
+                <footer><strong>Final recommendation status: {diagnostic.finalRecommendationStatus}</strong></footer>
               </article>
             ))}
           </div>
