@@ -9816,8 +9816,31 @@ grid-template-columns:1fr;
 .purchase-intelligence-supplier footer { color: #61d08a; font-size: .7rem; }
 .purchase-intelligence-empty { padding: 30px; text-align: center; }
 .purchase-intelligence-empty p { color: var(--vault-muted); }
+.purchase-intelligence-diagnostics { display: grid; gap: 14px; }
+.purchase-intelligence-diagnostics-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+.purchase-intelligence-diagnostics-heading h2 { margin: 5px 0; }
+.purchase-intelligence-diagnostics-heading p, .purchase-intelligence-diagnostics-heading > span { margin: 0; color: var(--vault-muted); font-size: .72rem; }
+.purchase-intelligence-diagnostic-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(330px,1fr)); gap: 14px; }
+.purchase-intelligence-diagnostic { padding: 18px; border: 1px solid var(--vault-border); border-left: 3px solid #d8ad43; border-radius: 13px; background: var(--vault-panel); }
+.purchase-intelligence-diagnostic.is-trusted { border-left-color: #61d08a; }
+.purchase-intelligence-diagnostic header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.purchase-intelligence-diagnostic header span, .purchase-intelligence-rejections > span { color: var(--vault-muted); font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; }
+.purchase-intelligence-diagnostic h3 { margin: 4px 0 0; }
+.purchase-intelligence-diagnostic header > strong { color: #d8ad43; font-size: .72rem; }
+.purchase-intelligence-diagnostic.is-trusted header > strong { color: #61d08a; }
+.purchase-intelligence-diagnostic dl { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 16px 0; background: var(--vault-border); }
+.purchase-intelligence-diagnostic dl div { padding: 10px; background: #0d0f0e; }
+.purchase-intelligence-diagnostic dt { color: var(--vault-muted); font-size: .62rem; }
+.purchase-intelligence-diagnostic dd { margin: 5px 0 0; font-size: .72rem; text-transform: capitalize; }
+.purchase-intelligence-rejections { padding: 12px; border: 1px solid var(--vault-border); border-radius: 9px; background: rgba(255,255,255,.015); }
+.purchase-intelligence-rejections ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0 0; padding: 0; list-style: none; }
+.purchase-intelligence-rejections li { padding: 5px 7px; border-radius: 5px; color: #d7b766; background: rgba(216,173,67,.08); font-size: .62rem; }
+.purchase-intelligence-rejections p { margin: 8px 0 0; color: #61d08a; font-size: .7rem; }
+.purchase-intelligence-diagnostic > footer { display: grid; gap: 4px; padding: 13px 0 0; }
+.purchase-intelligence-diagnostic > footer strong { color: #f4f1e9; font-size: .73rem; }
+.purchase-intelligence-diagnostic > footer span { color: var(--vault-muted); font-size: .68rem; }
 @media (max-width: 900px) { .purchase-intelligence-metrics { grid-template-columns: repeat(2,1fr); } }
-@media (max-width: 680px) { .purchase-intelligence-page { padding: 16px; } .purchase-intelligence-header, .purchase-intelligence-notice { flex-direction: column; } }
+@media (max-width: 680px) { .purchase-intelligence-page { padding: 16px; } .purchase-intelligence-header, .purchase-intelligence-notice, .purchase-intelligence-diagnostics-heading { align-items: flex-start; flex-direction: column; } .purchase-intelligence-diagnostic-grid { grid-template-columns: 1fr; } }
 
 /* ==========================================================
    SUPPLIER REVIEW — LIVE BUYING BASKET

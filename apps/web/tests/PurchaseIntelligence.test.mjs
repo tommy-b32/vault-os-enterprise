@@ -4,6 +4,7 @@ import test from "node:test";
 
 const engineUrl = new URL("../lib/brain/PurchaseIntelligenceEngine.ts", import.meta.url);
 const pageUrl = new URL("../app/purchase-intelligence/page.tsx", import.meta.url);
+const diagnosticsUrl = new URL("../lib/brain/PurchaseIntelligenceDiagnostics.ts", import.meta.url);
 
 test("purchase intelligence uses only canonical decision contracts", async () => {
   const source = await readFile(engineUrl, "utf8");
@@ -11,6 +12,23 @@ test("purchase intelligence uses only canonical decision contracts", async () =>
   assert.match(source, /CapitalEngine\.reviewPosition/);
   assert.match(source, /SupplierMinimumContract\.create/);
   assert.doesNotMatch(source, /Math\.random|Date\.now|fetch\(/);
+});
+
+test("diagnostics expose every requested supplier trust dimension without changing recommendations", async () => {
+  const [diagnostics, page, engine] = await Promise.all([
+    readFile(diagnosticsUrl, "utf8"),
+    readFile(pageUrl, "utf8"),
+    readFile(engineUrl, "utf8"),
+  ]);
+  for (const field of [
+    "productsEvaluated", "inventoryTrust", "catalogueTrust", "supplierConfiguration",
+    "minimumOrderValueStatus", "minimumPackStatus", "reorderApproval",
+    "capitalAvailability", "confidence", "classifierRejectionReasons", "finalDecision",
+  ]) assert.match(diagnostics, new RegExp(field));
+  assert.match(page, /TrustedBuyingCandidateClassifier\.classify/);
+  assert.match(page, /diagnostics\.map/);
+  assert.match(page, /recommendations\.map/);
+  assert.doesNotMatch(diagnostics + page + engine, /insert\(|update\(|delete\(/);
 });
 
 test("blocked catalogue and trust states cannot become recommendations", async () => {
