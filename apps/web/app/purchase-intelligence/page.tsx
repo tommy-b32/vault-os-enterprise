@@ -57,6 +57,26 @@ export default async function PurchaseIntelligencePage() {
         </header>
         <section className="purchase-intelligence-notice"><strong>Read-only intelligence</strong><span>No purchase orders are created and no purchases are approved from this page.</span></section>
         <section className="purchase-intelligence-diagnostics">
+          <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">SUPPLIER SUMMARY</p><h2>Basket intelligence</h2></div><span>Advisory only</span></div>
+          <div className="purchase-intelligence-diagnostic-grid">
+            {evaluation.baskets.map((basket) => (
+              <article className={`purchase-intelligence-diagnostic is-${basket.purchasing_state === "READY_TO_ORDER" ? "trusted" : "blocked"}`} key={basket.supplier.id}>
+                <header><div><span>Supplier</span><h3>{basket.supplier.name}</h3></div><strong>{basket.purchasing_state}</strong></header>
+                <dl>
+                  <div><dt>Demand products</dt><dd>{basket.products_recommended}</dd></div>
+                  <div><dt>Required packs</dt><dd>{basket.total_required_packs}</dd></div>
+                  <div><dt>Supplier minimum</dt><dd>{basket.supplier_minimum_packs ?? "Unavailable"} packs</dd></div>
+                  <div><dt>Additional packs required</dt><dd>{basket.packs_short ?? "Unavailable"}</dd></div>
+                  <div><dt>Estimated spend</dt><dd>{basket.estimated_order_value === null ? "Unavailable" : currency(basket.estimated_order_value)}</dd></div>
+                  <div><dt>Value short</dt><dd>{basket.value_short === null ? "Unavailable" : currency(basket.value_short)}</dd></div>
+                </dl>
+                {basket.top_products.length > 0 ? <div className="purchase-intelligence-rejections"><span>Top products already recommended</span><ul>{basket.top_products.map((product) => <li key={product.style_id}>{product.product_name}: {product.required_packs} packs</li>)}</ul></div> : null}
+                {basket.additional_qualifying_products.length > 0 ? <div className="purchase-intelligence-rejections"><span>Additional qualifying products</span><ul>{basket.additional_qualifying_products.map((product) => <li key={product.style_id}>{product.product_name}: advisory {product.required_packs} packs</li>)}</ul>{basket.minimum_reached_with_additions ? <p>If you add these products the supplier minimum will be reached.</p> : <p>These products reduce the remaining supplier shortfall.</p>}</div> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+        <section className="purchase-intelligence-diagnostics">
           <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">SUPPLIER DIAGNOSTICS</p><h2>Trust evaluation</h2><p>Every evaluated supplier is shown, including suppliers blocked from recommendation.</p></div><span>{diagnostics.length} suppliers evaluated</span></div>
           <div className="purchase-intelligence-diagnostic-grid">
             {diagnostics.map((diagnostic) => (

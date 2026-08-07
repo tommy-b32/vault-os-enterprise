@@ -9,6 +9,10 @@ import {
   TRUSTED_BUYING_RETURN_PERCENT,
 } from "@/lib/brain/TrustedBuyingCandidateClassifier";
 import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
+import {
+  SupplierBasketIntelligenceEngine,
+  type SupplierBasketIntelligence,
+} from "@/lib/brain/SupplierBasketIntelligenceEngine";
 import type { CatalogueProduct } from "@/types/catalogue";
 
 export type PurchaseIntelligenceSupplier = {
@@ -78,6 +82,7 @@ export type PurchaseIntelligenceEvaluation = {
   demands: DemandIntelligenceResult[];
   qualifications: SupplierPurchasingQualification[];
   recommendations: SupplierPurchaseRecommendation[];
+  baskets: SupplierBasketIntelligence[];
 };
 
 type Input = {
@@ -261,10 +266,17 @@ export function evaluatePurchaseIntelligence({
     });
   }
 
+  const baskets = suppliers.map((supplier) => SupplierBasketIntelligenceEngine.evaluate({
+    supplier,
+    demands,
+    products,
+  })).sort((left, right) => left.supplier.name.localeCompare(right.supplier.name));
+
   return {
     demands,
     qualifications: qualifications.sort((a, b) => a.supplier.name.localeCompare(b.supplier.name)),
     recommendations: recommendations.sort((a, b) => a.supplier.name.localeCompare(b.supplier.name)),
+    baskets,
   };
 }
 
