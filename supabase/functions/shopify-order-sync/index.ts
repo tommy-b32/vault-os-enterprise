@@ -1,10 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import {
+  fetchHistoricalShopifyOrders,
   fetchRecentShopifyOrders,
   upsertShopifyOrder,
 } from "../_shared/shopify/orders.ts";
 import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
+import { parseOrderSyncRequest } from "./request.ts";
 
 const DEFAULT_SYNC_DAYS = 7;
 const MAX_SYNC_DAYS = 90;
@@ -78,17 +80,40 @@ Deno.serve(async (request: Request) => {
       throw new Error("Required Supabase environment variables are unavailable");
     }
 
-    const syncDays = getSyncDays();
-    const updatedSince = new Date(
-      Date.now() - syncDays * 24 * 60 * 60 * 1000,
-    ).toISOString();
+    let requestInput: ReturnType<typeof parseOrderSyncRequest>;
+    try {
+      const requestText = await request.text();
+      requestInput = parseOrderSyncRequest(
+        requestText.trim() ? JSON.parse(requestText) : {},
+      );
+    } catch (error) {
+      return respond({
+        success: false,
+        error: error instanceof Error ? error.message : "Invalid request body",
+      }, 400);
+    }
+
+    const syncDays = requestInput.mode === "historical_backfill"
+      ? Math.ceil(
+          (Date.parse(requestInput.createdBefore) - Date.parse(requestInput.createdFrom)) /
+            (24 * 60 * 60 * 1000),
+        )
+      : getSyncDays();
+    const updatedSince = requestInput.mode === "reconciliation"
+      ? new Date(Date.now() - syncDays * 24 * 60 * 60 * 1000).toISOString()
+      : null;
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
       },
     });
-    const orders = await fetchRecentShopifyOrders(updatedSince);
+    const orders = requestInput.mode === "historical_backfill"
+      ? await fetchHistoricalShopifyOrders(
+          requestInput.createdFrom,
+          requestInput.createdBefore,
+        )
+      : await fetchRecentShopifyOrders(updatedSince as string);
     let linesSynced = 0;
 
     for (const order of orders) {
@@ -100,7 +125,9 @@ Deno.serve(async (request: Request) => {
     const { data: syncRun, error: syncRunError } = await supabase
       .from("vault_shopify_order_sync_runs")
       .insert({
-        sync_mode: "recent_orders_by_updated_at",
+        sync_mode: requestInput.mode === "historical_backfill"
+          ? "historical_orders_by_created_at"
+          : "recent_orders_by_updated_at",
         sync_days: syncDays,
         orders_synced: orders.length,
         order_lines_synced: linesSynced,
@@ -126,9 +153,17 @@ Deno.serve(async (request: Request) => {
 
     return respond({
       success: true,
-      sync_mode: "recent_orders_by_updated_at",
+      sync_mode: requestInput.mode === "historical_backfill"
+        ? "historical_orders_by_created_at"
+        : "recent_orders_by_updated_at",
       sync_days: syncDays,
       updated_since: updatedSince,
+      created_from: requestInput.mode === "historical_backfill"
+        ? requestInput.createdFrom
+        : null,
+      created_before: requestInput.mode === "historical_backfill"
+        ? requestInput.createdBefore
+        : null,
       orders_synced: orders.length,
       order_lines_synced: linesSynced,
       completed_at: completedAt,

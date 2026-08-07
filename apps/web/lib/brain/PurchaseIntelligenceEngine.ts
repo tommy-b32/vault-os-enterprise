@@ -34,6 +34,9 @@ export type PurchaseRecommendationProduct = {
   expectedSellingRevenueGbp: number;
   expectedGrossProfitGbp: number;
   confidence: number;
+  demand_score: number;
+  demand_level: NonNullable<DemandIntelligenceResult["demand_level"]>;
+  demand_reason: string;
 };
 
 export type PurchasingQualificationState =
@@ -114,7 +117,11 @@ export function evaluatePurchaseIntelligence({
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
   const grouped = new Map<string, DemandIntelligenceResult[]>();
   for (const demand of demands) {
-    if (demand.status !== "needs_replenishment" || !demand.supplierId) continue;
+    if (
+      demand.status !== "needs_replenishment" ||
+      (demand.demand_status !== "ACTIVE" && demand.demand_status !== "SLOW") ||
+      !demand.supplierId
+    ) continue;
     grouped.set(demand.supplierId, [...(grouped.get(demand.supplierId) ?? []), demand]);
   }
 
@@ -234,6 +241,9 @@ export function evaluatePurchaseIntelligence({
         expectedSellingRevenueGbp: money((product.commercial_cost.average_selling_price as number) * units),
         expectedGrossProfitGbp: money((product.commercial_cost.estimated_gross_profit_per_unit as number) * units),
         confidence: 100,
+        demand_score: demand.demand_score as number,
+        demand_level: demand.demand_level as NonNullable<DemandIntelligenceResult["demand_level"]>,
+        demand_reason: demand.demand_reason,
       };
     });
     recommendations.push({

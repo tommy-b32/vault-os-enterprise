@@ -7,7 +7,6 @@ import type { CatalogueProduct } from "@/types/catalogue";
 
 export const TRUSTED_BUYING_MARGIN_PERCENT = 45;
 export const TRUSTED_BUYING_RETURN_PERCENT = 100;
-export const TRUSTED_BUYING_LOW_STOCK_THRESHOLD = 10;
 
 export type TrustedBuyingCandidateStatus =
   | "eligible"
@@ -232,7 +231,6 @@ export function classifyTrustedBuyingCandidate({
   if ((commercial.estimated_return_on_pack_capital_percent ?? Number.NEGATIVE_INFINITY) < TRUSTED_BUYING_RETURN_PERCENT) {
     if (commercial.estimated_return_on_pack_capital_percent !== null) add(reasons, "return_below_threshold");
   }
-  if (product.stock_on_hand > TRUSTED_BUYING_LOW_STOCK_THRESHOLD) add(reasons, "stock_above_threshold");
 
   const missing = replenishment.missingRequirements;
   if (replenishment.stockOnHand === null) add(reasons, "inventory_unavailable");

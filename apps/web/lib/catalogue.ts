@@ -94,6 +94,12 @@ type ReplenishmentRow = {
   net_available_stock: number | null;
   average_daily_sales: number | null;
   average_weekly_sales: number | null;
+  sales_7_day_units: number | null;
+  sales_14_day_units: number | null;
+  sales_30_day_units: number | null;
+  last_sale_date: string | null;
+  days_since_last_sale: number | null;
+  sales_history_30_complete: boolean | null;
   sales_history_days: number | null;
   reorder_point: number | null;
   safety_stock: number | null;
@@ -516,6 +522,12 @@ export async function getCatalogueData():
         net_available_stock,
         average_daily_sales,
         average_weekly_sales,
+        sales_7_day_units,
+        sales_14_day_units,
+        sales_30_day_units,
+        last_sale_date,
+        days_since_last_sale,
+        sales_history_30_complete,
         sales_history_days,
         reorder_point,
         safety_stock,
@@ -850,7 +862,9 @@ export async function getCatalogueData():
                 ...EMPTY_SALES_INTELLIGENCE,
                 average_daily_sales: replenishment.average_daily_sales,
                 average_weekly_sales: replenishment.average_weekly_sales,
-                average_monthly_sales: null,
+                average_monthly_sales: replenishment.sales_30_day_units,
+                last_sale_date: replenishment.last_sale_date,
+                days_since_last_sale: replenishment.days_since_last_sale,
                 sales_velocity:
                   replenishment.average_daily_sales === null
                     ? "unknown"
@@ -873,6 +887,12 @@ export async function getCatalogueData():
             netAvailableStock: replenishment?.net_available_stock ?? null,
             averageDailySales: replenishment?.average_daily_sales ?? null,
             averageWeeklySales: replenishment?.average_weekly_sales ?? null,
+            sales7Days: replenishment?.sales_7_day_units ?? null,
+            sales14Days: replenishment?.sales_14_day_units ?? null,
+            sales30Days: replenishment?.sales_30_day_units ?? null,
+            lastSaleDate: replenishment?.last_sale_date ?? null,
+            daysSinceLastSale: replenishment?.days_since_last_sale ?? null,
+            salesHistory30Complete: replenishment?.sales_history_30_complete ?? false,
             salesHistoryDays: replenishment?.sales_history_days ?? null,
             reorderPoint: replenishment?.reorder_point ?? null,
             safetyStock: replenishment?.safety_stock ?? null,

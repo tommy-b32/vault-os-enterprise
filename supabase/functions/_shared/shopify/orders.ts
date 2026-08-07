@@ -193,6 +193,29 @@ function getRefundsByLine(order: ShopifyOrderNode) {
 export async function fetchRecentShopifyOrders(
   updatedSince: string,
 ): Promise<ShopifyOrderNode[]> {
+  return fetchShopifyOrders({
+    query: `updated_at:>=${updatedSince}`,
+    sortKey: "UPDATED_AT",
+  });
+}
+
+export async function fetchHistoricalShopifyOrders(
+  createdFrom: string,
+  createdBefore: string,
+): Promise<ShopifyOrderNode[]> {
+  return fetchShopifyOrders({
+    query: `created_at:>=${createdFrom} created_at:<${createdBefore}`,
+    sortKey: "CREATED_AT",
+  });
+}
+
+async function fetchShopifyOrders({
+  query,
+  sortKey,
+}: {
+  query: string;
+  sortKey: "UPDATED_AT" | "CREATED_AT";
+}): Promise<ShopifyOrderNode[]> {
   const orders: ShopifyOrderNode[] = [];
   let cursor: string | null = null;
   let page = 0;
@@ -200,12 +223,12 @@ export async function fetchRecentShopifyOrders(
   while (true) {
     const data: OrderConnection =
       await shopifyGraphQL<OrderConnection>(
-        `query VaultRecentOrders($first: Int!, $after: String, $query: String!) {
+        `query VaultOrders($first: Int!, $after: String, $query: String!, $sortKey: OrderSortKeys!) {
           orders(
             first: $first
             after: $after
             query: $query
-            sortKey: UPDATED_AT
+            sortKey: $sortKey
           ) {
             nodes { ${ORDER_FIELDS} }
             pageInfo { hasNextPage endCursor }
@@ -214,7 +237,8 @@ export async function fetchRecentShopifyOrders(
         {
           first: ORDER_PAGE_SIZE,
           after: cursor,
-          query: `updated_at:>=${updatedSince}`,
+          query,
+          sortKey,
         },
       );
 

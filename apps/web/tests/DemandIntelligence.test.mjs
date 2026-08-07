@@ -8,7 +8,9 @@ function product(overrides = {}) {
   const replenishment = {
     styleId: "parent::Black", parentProductId: "parent", stockOnHand: 0,
     committedStock: 0, incomingStock: 0, netAvailableStock: 0,
-    averageDailySales: 1, averageWeeklySales: 7, salesHistoryDays: 7,
+    averageDailySales: 1, averageWeeklySales: 7, sales7Days: 7, sales14Days: 9, sales30Days: 12,
+    lastSaleDate: "2026-08-07T00:00:00Z", daysSinceLastSale: 0,
+    salesHistory30Complete: true, salesHistoryDays: 7,
     reorderPoint: null, safetyStock: null, targetStockDays: 14,
     supplierLeadTimeDays: 7, unitsPerPack: 5, supplierMoqPacks: 1,
     freshness: "2026-08-07T00:00:00Z", supplierMinimumOrderState: "not_satisfied",
@@ -66,12 +68,19 @@ test("missing operational evidence remains unavailable", () => {
   for (const [field, value, reason] of [
     ["stockOnHand", null, "stock_unavailable"],
     ["targetStockDays", null, "target_stock_days_missing"],
+    ["sales14Days", null, "fourteen_day_sales_unavailable"],
   ]) {
     const result = DemandIntelligenceEngine.evaluate(product({
       replenishment_intelligence: { [field]: value, missingRequirements: [reason] },
     }));
     assert.equal(result.status, "evidence_unavailable");
     assert.equal(result.calculatedPacks, null);
+    assert.equal(result.demand_score, null);
+    assert.equal(result.demand_level, null);
+    if (field === "sales14Days") {
+      assert.equal(result.demand_status, "NO_EVIDENCE");
+      assert.match(result.demand_reason, /unavailable|incomplete/i);
+    }
     assert.ok(result.missingRequirements.includes(reason));
   }
 });
@@ -92,6 +101,32 @@ test("product MOQ behaviour remains unchanged", () => {
   }));
   assert.ok(result.calculatedPacks < 10);
   assert.equal(result.suggestedPacks, 10);
+});
+
+test("dormant demand never receives urgency from low stock", () => {
+  const result = DemandIntelligenceEngine.evaluate(product({
+    replenishment_intelligence: {
+      averageDailySales: 0,
+      averageWeeklySales: 0,
+      sales7Days: 0,
+      sales14Days: 0,
+      sales30Days: 0,
+      lastSaleDate: null,
+      daysSinceLastSale: null,
+    },
+    sales_intelligence: {
+      average_daily_sales: 0,
+      average_weekly_sales: 0,
+      average_monthly_sales: 0,
+      last_sale_date: null,
+      days_since_last_sale: null,
+      sales_velocity: "very_low",
+      reorder_point: null,
+      safety_stock: null,
+    },
+  }));
+  assert.equal(result.demand_status, "DORMANT");
+  assert.equal(result.urgency, null);
 });
 
 test("demand and purchasing policy remain structurally separated", async () => {

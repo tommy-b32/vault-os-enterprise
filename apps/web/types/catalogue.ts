@@ -117,6 +117,12 @@ export type ReplenishmentIntelligence = {
   netAvailableStock: number | null;
   averageDailySales: number | null;
   averageWeeklySales: number | null;
+  sales7Days: number | null;
+  sales14Days: number | null;
+  sales30Days: number | null;
+  lastSaleDate: string | null;
+  daysSinceLastSale: number | null;
+  salesHistory30Complete: boolean;
   salesHistoryDays: number | null;
   reorderPoint: number | null;
   safetyStock: number | null;
