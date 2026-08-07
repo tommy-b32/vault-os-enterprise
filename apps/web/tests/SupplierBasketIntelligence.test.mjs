@@ -62,6 +62,58 @@ test("additional products rank by urgency, recent sales, stock, then demand scor
   ]);
 });
 
+test("ACTIVE stock seven with pack five is excluded from additional qualification", () => {
+  const candidate = demand({
+    styleId: "candidate", status: "no_replenishment_required", suggestedPacks: 0,
+    suggestedUnits: 0, currentStock: 7, netAvailableStock: 7, unitsPerPack: 5,
+  });
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20 },
+    demands: [demand({ suggestedPacks: 1, suggestedUnits: 5 }), candidate],
+    products: [product(), product({ style_id: "candidate" })],
+  });
+  assert.deepEqual(result.additional_qualifying_products, []);
+});
+
+test("ACTIVE stock exactly one pack is included in additional qualification", () => {
+  const candidate = demand({
+    styleId: "candidate", status: "no_replenishment_required", suggestedPacks: 0,
+    suggestedUnits: 0, currentStock: 5, netAvailableStock: 5, unitsPerPack: 5,
+  });
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20 },
+    demands: [demand({ suggestedPacks: 1, suggestedUnits: 5 }), candidate],
+    products: [product(), product({ style_id: "candidate" })],
+  });
+  assert.deepEqual(result.additional_qualifying_products.map((entry) => entry.style_id), ["candidate"]);
+});
+
+test("ACTIVE stock below one pack is included in additional qualification", () => {
+  const candidate = demand({
+    styleId: "candidate", status: "no_replenishment_required", suggestedPacks: 0,
+    suggestedUnits: 0, currentStock: 3, netAvailableStock: 3, unitsPerPack: 5,
+  });
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20 },
+    demands: [demand({ suggestedPacks: 1, suggestedUnits: 5 }), candidate],
+    products: [product(), product({ style_id: "candidate" })],
+  });
+  assert.deepEqual(result.additional_qualifying_products.map((entry) => entry.style_id), ["candidate"]);
+});
+
+test("DORMANT stock zero is excluded from additional qualification", () => {
+  const candidate = demand({
+    styleId: "candidate", status: "no_replenishment_required", demand_status: "DORMANT",
+    suggestedPacks: 0, suggestedUnits: 0, currentStock: 0, netAvailableStock: 0, unitsPerPack: 5,
+  });
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20 },
+    demands: [demand({ suggestedPacks: 1, suggestedUnits: 5 }), candidate],
+    products: [product(), product({ style_id: "candidate" })],
+  });
+  assert.deepEqual(result.additional_qualifying_products, []);
+});
+
 test("basket additions are advisory and never create purchase orders", async () => {
   const [engine, page] = await Promise.all([
     readFile(new URL("../lib/brain/SupplierBasketIntelligenceEngine.ts", import.meta.url), "utf8"),

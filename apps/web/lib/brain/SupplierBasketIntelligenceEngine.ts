@@ -121,6 +121,7 @@ export function evaluateSupplierBasket({
   const recommendedIds = new Set(recommended.map((demand) => demand.styleId));
   const candidates = demands.filter((demand) => {
     const product = productByStyle.get(demand.styleId);
+    const unitsPerPack = demand.unitsPerPack ?? 0;
     return demand.supplierId === supplier.id &&
       !recommendedIds.has(demand.styleId) &&
       demand.trusted &&
@@ -128,8 +129,13 @@ export function evaluateSupplierBasket({
       (demand.productMoqPacks ?? 0) > 0 &&
       product?.configuration_trusted === true &&
       product.reorder_approval?.approval_state === "approved" &&
-      product.commercial_cost.commercial_cost_trusted &&
-      (product.commercial_cost.landed_cost_per_pack_gbp ?? 0) > 0;
+      product?.commercial_cost.commercial_cost_trusted === true &&
+      (product?.commercial_cost.landed_cost_per_pack_gbp ?? 0) > 0 &&
+      unitsPerPack > 0 &&
+      (
+        (demand.netAvailableStock ?? Number.POSITIVE_INFINITY) <= unitsPerPack ||
+        (demand.currentStock ?? Number.POSITIVE_INFINITY) <= unitsPerPack
+      );
   }).map((demand): SupplierBasketProduct => {
     const product = productByStyle.get(demand.styleId) as CatalogueProduct;
     const packs = demand.productMoqPacks as number;
