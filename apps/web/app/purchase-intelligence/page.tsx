@@ -6,6 +6,8 @@ import {
   type PurchaseIntelligenceSupplier,
 } from "@/lib/brain/PurchaseIntelligenceEngine";
 import { PurchaseIntelligenceDiagnostics } from "@/lib/brain/PurchaseIntelligenceDiagnostics";
+import type { DemandIntelligenceResult } from "@/lib/brain/DemandIntelligenceEngine";
+import { ReplenishmentDecisionExplanationEngine } from "@/lib/brain/ReplenishmentDecisionExplanation";
 import { getCatalogueData } from "@/lib/catalogue";
 import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -14,6 +16,18 @@ export const dynamic = "force-dynamic";
 
 function currency(value: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(value);
+}
+
+function DemandDecisionDetails({ demand }: { demand: DemandIntelligenceResult }) {
+  const explanation = ReplenishmentDecisionExplanationEngine.explain(demand);
+  return <div key={demand.styleId}>
+    <strong>{demand.productName} — {demand.styleId.split("::").at(-1)}</strong>
+    <small>Decision: {explanation.state.replaceAll("_", " ")} · Demand: {demand.demand_status} · Urgency: {demand.urgency ?? "Not applicable"}</small>
+    <small>Sales: {explanation.sales_evidence}</small>
+    <small>Stock: {explanation.stock_evidence}</small>
+    {explanation.recommended_quantity ? <small>Recommended: {explanation.recommended_quantity}</small> : null}
+    <small>{explanation.reason}</small>
+  </div>;
 }
 
 export default async function PurchaseIntelligencePage() {
@@ -96,8 +110,8 @@ export default async function PurchaseIntelligencePage() {
                     <div><dt>Excluded by strategy</dt><dd>{diagnostic.excludedByStrategy}</dd></div>
                   </dl>
                   <div className="purchase-intelligence-rejections"><span>Demand evidence unavailable</span>{diagnostic.demandMissingRequirements.length > 0 ? <ul>{diagnostic.demandMissingRequirements.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
-                  {diagnostic.demandItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Products needing replenishment</span>{diagnostic.demandItems.map((demand) => <div key={demand.styleId}><strong>{demand.productName} — {demand.styleId.split("::").at(-1)}</strong><small>Demand: {demand.demand_status} · Urgency: {demand.urgency ?? "Not evaluated"}</small><small>{demand.demand_reason}</small><small>{demand.urgency_reason}</small><small>On hand: {demand.currentStock} · Calculated: {demand.calculatedPacks} packs · Suggested: {demand.suggestedPacks} packs / {demand.suggestedUnits} units</small></div>)}</div> : null}
-                  {diagnostic.slowDemandWatchItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Slow demand — watch</span>{diagnostic.slowDemandWatchItems.map((demand) => <div key={demand.styleId}><strong>{demand.productName} — {demand.styleId.split("::").at(-1)}</strong><small>{demand.replenishment_gate_reason}</small></div>)}</div> : null}
+                  {diagnostic.demandItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Products needing replenishment</span>{diagnostic.demandItems.map((demand) => <DemandDecisionDetails demand={demand} key={demand.styleId} />)}</div> : null}
+                  {diagnostic.slowDemandWatchItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Slow demand — watch</span>{diagnostic.slowDemandWatchItems.map((demand) => <DemandDecisionDetails demand={demand} key={demand.styleId} />)}</div> : null}
                 </section>
                 <section className="purchase-intelligence-stage">
                   <p className="vault-eyebrow">PURCHASING QUALIFICATION</p>

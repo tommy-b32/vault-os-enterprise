@@ -4,6 +4,10 @@ import type {
   PurchasingQualificationState,
 } from "@/lib/brain/PurchaseIntelligenceEngine";
 import type { DemandIntelligenceResult } from "@/lib/brain/DemandIntelligenceEngine";
+import {
+  ReplenishmentDecisionExplanationEngine,
+  type ReplenishmentDecisionExplanation,
+} from "./ReplenishmentDecisionExplanation.ts";
 
 export type SupplierPurchaseDiagnostic = {
   supplier: { id: string; name: string };
@@ -16,6 +20,7 @@ export type SupplierPurchaseDiagnostic = {
   purchasingBlocked: number;
   demandItems: DemandIntelligenceResult[];
   slowDemandWatchItems: DemandIntelligenceResult[];
+  decisionExplanations: ReplenishmentDecisionExplanation[];
   demandMissingRequirements: string[];
   purchasingState: PurchasingQualificationState | "not_applicable";
   purchasingBlockers: string[];
@@ -68,6 +73,7 @@ export function buildPurchaseIntelligenceDiagnostics({
       slowDemandWatchItems: demands.filter((demand) =>
         demand.demand_status === "SLOW" && !demand.replenishment_qualified
       ),
+      decisionExplanations: demands.map(ReplenishmentDecisionExplanationEngine.explain),
       demandMissingRequirements: Array.from(new Set(
         demands.flatMap((demand) => demand.missingRequirements),
       )).sort(),
