@@ -17,7 +17,13 @@ export type ReplenishmentDecisionExplanation = {
 };
 
 function salesEvidence(demand: DemandIntelligenceResult): string {
-  return `${demand.sales7Days ?? "Unavailable"} sold in 7 days · ${demand.sales14Days ?? "Unavailable"} in 14 · ${demand.sales30Days ?? "Unavailable"} in 30 · Last sale ${demand.daysSinceLastSale === null ? "unavailable" : `${demand.daysSinceLastSale} days ago`}`;
+  const sales = (value: number | null) => value === null
+    ? "Unavailable"
+    : `${value} ${value === 1 ? "sale" : "sales"}`;
+  const recency = demand.daysSinceLastSale === null
+    ? "unavailable"
+    : `${demand.daysSinceLastSale} ${demand.daysSinceLastSale === 1 ? "day" : "days"} ago`;
+  return `${sales(demand.sales7Days)} in 7 days · ${sales(demand.sales14Days)} in 14 · ${sales(demand.sales30Days)} in 30 · Latest sale ${recency}`;
 }
 
 function stockEvidence(demand: DemandIntelligenceResult): string {
@@ -29,6 +35,17 @@ function explainMissing(requirements: string[]): string {
   return requirements.length === 0
     ? "Canonical evidence is unavailable, so no replenishment decision can be made."
     : `Decision unavailable: ${requirements.map((requirement) => requirement.replaceAll("_", " ")).join("; ")}.`;
+}
+
+function count(value: number, singular: string, plural = `${singular}s`): string {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function targetPackClarification(demand: DemandIntelligenceResult, quantity: string): string | null {
+  const targetUnits = demand.quantity_intelligence?.target_units;
+  const unitsPerPack = demand.quantity_intelligence?.units_per_pack;
+  if (targetUnits === undefined || unitsPerPack === undefined || targetUnits >= unitsPerPack) return null;
+  return `Calculated target stock is ${count(targetUnits, "unit")}, but this product can only be purchased in packs of ${unitsPerPack}. Recommended purchase: ${quantity}.`;
 }
 
 export function explainReplenishmentDecision(
@@ -54,10 +71,13 @@ export function explainReplenishmentDecision(
   }
 
   if (demand.demand_status === "SLOW" && !demand.replenishment_qualified) {
+    const recency = demand.daysSinceLastSale === null
+      ? "the latest sale date unavailable"
+      : `the latest sale ${count(demand.daysSinceLastSale, "day")} ago`;
     return {
       ...common,
       state: "WATCH",
-      reason: demand.replenishment_gate_reason,
+      reason: `Demand remains slow. The style recorded ${count(demand.sales30Days ?? 0, "sale")} in the last 30 days, with ${recency}, so recent evidence does not yet justify replenishment.`,
       recommended_quantity: null,
     };
   }
@@ -67,19 +87,23 @@ export function explainReplenishmentDecision(
     demand.replenishment_qualified &&
     (demand.suggestedPacks ?? 0) > 0
   ) {
+    const clarification = targetPackClarification(demand, quantity as string);
+    const reason = demand.demand_status === "SLOW"
+      ? `This style is still selling, with ${count(demand.sales30Days ?? 0, "sale")} in the last 30 days and the latest ${demand.daysSinceLastSale === null ? "sale date unavailable" : `${count(demand.daysSinceLastSale, "day")} ago`}. Current stock is below the calculated target, so replenishment is justified. Recommended: ${quantity}.`
+      : `This style sold within the last 7 days and current stock is below the calculated target. Based on recent demand and stock cover, ${quantity} is recommended.`;
     return {
       ...common,
       state: "REPLENISH_NOW",
-      reason: `${demand.demand_status} demand qualifies for replenishment. ${quantity} provides the existing canonical recommended quantity.`,
+      reason: clarification ?? reason,
       recommended_quantity: quantity,
     };
   }
 
   const reason = demand.quantity_intelligence?.stock_deficit_units === 0
-    ? `${demand.demand_status} demand detected, but available stock already covers calculated demand.`
+    ? "Demand is present, but current available stock already covers the calculated target."
     : demand.demand_status === "DORMANT"
-      ? "No qualifying recent demand."
-      : "Canonical demand does not currently justify replenishment.";
+      ? "No qualifying recent demand currently justifies replenishment."
+      : "No qualifying recent demand currently justifies replenishment.";
   return {
     ...common,
     state: "NO_REPLENISHMENT",

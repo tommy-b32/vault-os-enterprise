@@ -10,7 +10,7 @@ const demand = (overrides = {}) => ({
   currentStock: 1, netAvailableStock: 1, replenishment_qualified: true,
   replenishment_gate_reason: "ACTIVE demand proceeds through replenishment qualification.",
   status: "needs_replenishment", suggestedPacks: 1, suggestedUnits: 5,
-  quantity_intelligence: { target_units: 5, stock_deficit_units: 4 },
+  quantity_intelligence: { target_units: 5, stock_deficit_units: 4, units_per_pack: 5 },
   missingRequirements: [], ...overrides,
 });
 
@@ -18,17 +18,17 @@ test("ACTIVE with positive canonical quantity explains REPLENISH_NOW", () => {
   const explanation = ReplenishmentDecisionExplanationEngine.explain(demand());
   assert.equal(explanation.state, "REPLENISH_NOW");
   assert.equal(explanation.recommended_quantity, "1 pack / 5 units");
-  assert.match(explanation.reason, /existing canonical recommended quantity/);
+  assert.equal(explanation.reason, "This style sold within the last 7 days and current stock is below the calculated target. Based on recent demand and stock cover, 1 pack / 5 units is recommended.");
 });
 
 test("ACTIVE with sufficient stock explains NO_REPLENISHMENT", () => {
   const explanation = ReplenishmentDecisionExplanationEngine.explain(demand({
     status: "no_replenishment_required", suggestedPacks: 0, suggestedUnits: 0,
     currentStock: 20, netAvailableStock: 20,
-    quantity_intelligence: { target_units: 5, stock_deficit_units: 0 },
+    quantity_intelligence: { target_units: 5, stock_deficit_units: 0, units_per_pack: 5 },
   }));
   assert.equal(explanation.state, "NO_REPLENISHMENT");
-  assert.match(explanation.reason, /available stock already covers calculated demand/);
+  assert.equal(explanation.reason, "Demand is present, but current available stock already covers the calculated target.");
 });
 
 test("qualifying SLOW with positive quantity explains REPLENISH_NOW", () => {
@@ -38,6 +38,8 @@ test("qualifying SLOW with positive quantity explains REPLENISH_NOW", () => {
   }));
   assert.equal(explanation.state, "REPLENISH_NOW");
   assert.equal(explanation.recommended_quantity, "1 pack / 5 units");
+  assert.match(explanation.reason, /2 sales in the last 30 days/);
+  assert.match(explanation.reason, /latest 1 day ago/);
 });
 
 test("non-qualifying SLOW explains WATCH without implying no demand", () => {
@@ -49,8 +51,25 @@ test("non-qualifying SLOW explains WATCH without implying no demand", () => {
     suggestedPacks: 0, suggestedUnits: 0, quantity_intelligence: null,
   }));
   assert.equal(explanation.state, "WATCH");
-  assert.equal(explanation.reason, reason);
+  assert.match(explanation.reason, /Demand remains slow/);
+  assert.match(explanation.reason, /1 sale in the last 30 days/);
+  assert.match(explanation.reason, /latest sale 28 days ago/);
+  assert.doesNotMatch(explanation.reason, /unwanted|no demand/i);
   assert.equal(explanation.recommended_quantity, null);
+});
+
+test("target below pack size is clarified without changing canonical values", () => {
+  const input = demand({
+    suggestedPacks: 1,
+    suggestedUnits: 5,
+    quantity_intelligence: { target_units: 1, stock_deficit_units: 1, units_per_pack: 5 },
+  });
+  const explanation = ReplenishmentDecisionExplanationEngine.explain(input);
+  assert.equal(explanation.reason, "Calculated target stock is 1 unit, but this product can only be purchased in packs of 5. Recommended purchase: 1 pack / 5 units.");
+  assert.equal(input.quantity_intelligence.target_units, 1);
+  assert.equal(input.quantity_intelligence.units_per_pack, 5);
+  assert.equal(input.suggestedPacks, 1);
+  assert.equal(input.suggestedUnits, 5);
 });
 
 test("DORMANT explains NO_REPLENISHMENT", () => {
@@ -61,7 +80,7 @@ test("DORMANT explains NO_REPLENISHMENT", () => {
     quantity_intelligence: null,
   }));
   assert.equal(explanation.state, "NO_REPLENISHMENT");
-  assert.equal(explanation.reason, "No qualifying recent demand.");
+  assert.equal(explanation.reason, "No qualifying recent demand currently justifies replenishment.");
 });
 
 test("NO_EVIDENCE preserves every canonical missing requirement", () => {
