@@ -12,7 +12,8 @@ const demand = (overrides = {}) => ({
   styleId: "style-1", productName: "Product 1", supplierId: "supplier",
   status: "needs_replenishment", demand_status: "ACTIVE", urgency: "HIGH",
   suggestedPacks: 5, suggestedUnits: 25, productMoqPacks: 1, unitsPerPack: 5,
-  sales7Days: 2, currentStock: 1, demand_score: 75, trusted: true, ...overrides,
+  sales7Days: 2, sales14Days: 2, sales30Days: 2, daysSinceLastSale: 1,
+  currentStock: 1, demand_score: 75, trusted: true, ...overrides,
 });
 const product = (overrides = {}) => ({
   style_id: "style-1", supplier_id: "supplier", configuration_trusted: true,
@@ -113,6 +114,74 @@ test("returns no advisory candidates when required packs already satisfy the sup
   });
 
   assert.deepEqual(result.additional_qualifying_products, []);
+});
+
+test("sold in the last seven days qualifies for additional basket consideration", () => {
+  const candidate = demand({
+    styleId: "candidate", status: "no_replenishment_required", suggestedPacks: 0,
+    suggestedUnits: 0, sales7Days: 1, sales14Days: 1, daysSinceLastSale: 1,
+  });
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20 },
+    demands: [demand({ suggestedPacks: 1, suggestedUnits: 5 }), candidate],
+    products: [product(), product({ style_id: "candidate" })],
+  });
+
+  assert.deepEqual(result.additional_qualifying_products.map((entry) => entry.style_id), ["candidate"]);
+});
+
+test("two sales in fourteen days with a recent last sale qualifies", () => {
+  const candidate = demand({
+    styleId: "candidate", status: "no_replenishment_required", suggestedPacks: 0,
+    suggestedUnits: 0, sales7Days: 0, sales14Days: 2, daysSinceLastSale: 14,
+  });
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20 },
+    demands: [demand({ suggestedPacks: 1, suggestedUnits: 5 }), candidate],
+    products: [product(), product({ style_id: "candidate" })],
+  });
+
+  assert.deepEqual(result.additional_qualifying_products.map((entry) => entry.style_id), ["candidate"]);
+});
+
+test("isolated thirty-day sales do not satisfy basket demand quality", () => {
+  for (const [sales14Days, sales30Days, daysSinceLastSale] of [[1, 3, 10], [0, 1, 20]]) {
+    const candidate = demand({
+      styleId: "candidate", status: "no_replenishment_required", demand_status: "SLOW",
+      suggestedPacks: 0, suggestedUnits: 0, sales7Days: 0, sales14Days, sales30Days,
+      daysSinceLastSale, currentStock: 0, netAvailableStock: 0,
+    });
+    const result = evaluate({
+      supplierOverrides: { minimumOrderPacks: 20 },
+      demands: [demand({ suggestedPacks: 1, suggestedUnits: 5 }), candidate],
+      products: [product(), product({ style_id: "candidate" })],
+    });
+
+    assert.equal(candidate.demand_status, "SLOW");
+    assert.deepEqual(result.additional_qualifying_products, []);
+  }
+});
+
+test("stock pressure alone cannot qualify weak demand and the supplier shortfall remains unresolved", () => {
+  const strong = demand({
+    styleId: "strong", status: "no_replenishment_required", suggestedPacks: 0,
+    suggestedUnits: 0, productMoqPacks: 2, sales7Days: 1,
+  });
+  const weak = demand({
+    styleId: "weak", status: "no_replenishment_required", demand_status: "SLOW",
+    suggestedPacks: 0, suggestedUnits: 0, productMoqPacks: 10,
+    sales7Days: 0, sales14Days: 0, sales30Days: 1, daysSinceLastSale: 20,
+    currentStock: 0, netAvailableStock: 0,
+  });
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 10 },
+    demands: [demand({ suggestedPacks: 5, suggestedUnits: 25 }), strong, weak],
+    products: [product(), product({ style_id: "strong" }), product({ style_id: "weak" })],
+  });
+
+  assert.deepEqual(result.additional_qualifying_products.map((entry) => entry.style_id), ["strong"]);
+  assert.equal(result.total_required_packs + result.additional_qualifying_products[0].required_packs, 7);
+  assert.equal(result.minimum_reached_with_additions, false);
 });
 
 test("ACTIVE stock seven with pack five is excluded from additional qualification", () => {

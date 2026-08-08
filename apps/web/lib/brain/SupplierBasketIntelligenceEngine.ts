@@ -57,6 +57,11 @@ function isWithinTwentyFivePercent(shortfall: number | null, minimum: number | n
   return (shortfall ?? minimum) / minimum <= 0.25;
 }
 
+function hasBasketDemandQuality(demand: DemandIntelligenceResult): boolean {
+  return (demand.sales7Days ?? 0) > 0 ||
+    ((demand.sales14Days ?? 0) >= 2 && (demand.daysSinceLastSale ?? Number.POSITIVE_INFINITY) <= 14);
+}
+
 export function evaluateSupplierBasket({
   supplier,
   demands,
@@ -132,6 +137,7 @@ export function evaluateSupplierBasket({
       product?.commercial_cost.commercial_cost_trusted === true &&
       (product?.commercial_cost.landed_cost_per_pack_gbp ?? 0) > 0 &&
       unitsPerPack > 0 &&
+      hasBasketDemandQuality(demand) &&
       (
         (demand.netAvailableStock ?? Number.POSITIVE_INFINITY) <= unitsPerPack ||
         (demand.currentStock ?? Number.POSITIVE_INFINITY) <= unitsPerPack
