@@ -15,6 +15,7 @@ export type SupplierPurchaseDiagnostic = {
   purchasingEligible: number;
   purchasingBlocked: number;
   demandItems: DemandIntelligenceResult[];
+  slowDemandWatchItems: DemandIntelligenceResult[];
   demandMissingRequirements: string[];
   purchasingState: PurchasingQualificationState | "not_applicable";
   purchasingBlockers: string[];
@@ -64,6 +65,9 @@ export function buildPurchaseIntelligenceDiagnostics({
       purchasingEligible,
       purchasingBlocked,
       demandItems: demands.filter((demand) => demand.status === "needs_replenishment"),
+      slowDemandWatchItems: demands.filter((demand) =>
+        demand.demand_status === "SLOW" && !demand.replenishment_qualified
+      ),
       demandMissingRequirements: Array.from(new Set(
         demands.flatMap((demand) => demand.missingRequirements),
       )).sort(),

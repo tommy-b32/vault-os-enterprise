@@ -46,6 +46,8 @@ export type DemandIntelligenceResult = {
   suggestedUnits: number | null;
   quantity_intelligence: PurchaseQuantityIntelligence | null;
   status: DemandIntelligenceStatus;
+  replenishment_qualified: boolean;
+  replenishment_gate_reason: string;
   demand_status: DemandStatus;
   urgency: DemandUrgency | null;
   demand_reason: string;
@@ -115,6 +117,8 @@ export function evaluateDemand(product: CatalogueProduct): DemandIntelligenceRes
     productMoqPacks: replenishment.supplierMoqPacks,
     evidence,
     quantity_intelligence: null,
+    replenishment_qualified: false,
+    replenishment_gate_reason: "Demand has not passed the replenishment gate.",
     ...detection,
   };
 
@@ -195,12 +199,24 @@ export function evaluateDemand(product: CatalogueProduct): DemandIntelligenceRes
       })
     : { urgency: null, urgency_reason: null };
 
-  if (detection.demand_status !== "ACTIVE" && detection.demand_status !== "SLOW") {
+  const slowReplenishmentQualified = detection.demand_status === "SLOW" &&
+    (replenishment.sales14Days as number) >= 1 &&
+    (replenishment.daysSinceLastSale ?? Number.POSITIVE_INFINITY) <= 14;
+  const replenishmentQualified = detection.demand_status === "ACTIVE" || slowReplenishmentQualified;
+
+  if (!replenishmentQualified) {
+    const sales30Days = replenishment.sales30Days as number;
+    const saleLabel = sales30Days === 1 ? "sale" : "sales";
+    const gateReason = detection.demand_status === "SLOW"
+      ? `${sales30Days} ${saleLabel} in 30 days; last sale ${replenishment.daysSinceLastSale} days ago. Demand remains SLOW but recent evidence does not yet justify replenishment.`
+      : "Canonical demand does not currently justify replenishment.";
     return {
       ...base,
       calculatedPacks: 0,
       suggestedPacks: 0,
       suggestedUnits: 0,
+      replenishment_qualified: false,
+      replenishment_gate_reason: gateReason,
       ...score,
       ...urgency,
       status: "no_replenishment_required",
@@ -232,6 +248,10 @@ export function evaluateDemand(product: CatalogueProduct): DemandIntelligenceRes
     suggestedPacks: quantity.recommended_packs,
     suggestedUnits: quantity.recommended_units,
     quantity_intelligence: quantity,
+    replenishment_qualified: true,
+    replenishment_gate_reason: detection.demand_status === "ACTIVE"
+      ? "ACTIVE demand proceeds through replenishment qualification."
+      : "SLOW demand has at least 1 sale in 14 days and a last sale within 14 days.",
     ...score,
     ...urgency,
     status: quantity.raw_required_packs > 0

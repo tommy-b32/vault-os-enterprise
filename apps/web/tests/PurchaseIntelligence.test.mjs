@@ -73,3 +73,14 @@ test("Purchase Intelligence is read-only and checks live inventory freshness", a
   assert.match(source, /No purchase orders are created and no purchases are approved/);
   assert.doesNotMatch(source, /insert\(|update\(|delete\(|PurchaseOrderDraftWorkspace/);
 });
+
+test("Supplier Diagnostics separates failed SLOW demand into watch", async () => {
+  const [page, diagnostics] = await Promise.all([
+    readFile(pageUrl, "utf8"),
+    readFile(diagnosticsUrl, "utf8"),
+  ]);
+  assert.match(page, /Slow demand — watch/);
+  assert.match(page, /diagnostic\.slowDemandWatchItems\.map/);
+  assert.match(diagnostics, /demand\.demand_status === "SLOW" && !demand\.replenishment_qualified/);
+  assert.match(diagnostics, /demandItems: demands\.filter\(\(demand\) => demand\.status === "needs_replenishment"\)/);
+});

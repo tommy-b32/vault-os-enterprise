@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { DemandIntelligenceEngine } from "../lib/brain/DemandIntelligenceEngine.ts";
+import { PurchaseIntelligenceDiagnostics } from "../lib/brain/PurchaseIntelligenceDiagnostics.ts";
+import { SupplierBasketIntelligenceEngine } from "../lib/brain/SupplierBasketIntelligenceEngine.ts";
 
 function product(overrides = {}) {
   const replenishment = {
@@ -140,6 +142,80 @@ test("NO_EVIDENCE never receives a positive quantity", () => {
   assert.equal(result.suggestedPacks, null);
   assert.equal(result.suggestedUnits, null);
   assert.equal(result.quantity_intelligence, null);
+});
+
+test("ACTIVE demand continues through the replenishment gate unchanged", () => {
+  const result = DemandIntelligenceEngine.evaluate(product());
+  assert.equal(result.demand_status, "ACTIVE");
+  assert.equal(result.replenishment_qualified, true);
+  assert.equal(result.status, "needs_replenishment");
+  assert.ok(result.suggestedPacks > 0);
+});
+
+test("recent SLOW demand may proceed to quantity intelligence", () => {
+  const result = DemandIntelligenceEngine.evaluate(product({
+    replenishment_intelligence: {
+      sales7Days: 0, sales14Days: 1, sales30Days: 1, daysSinceLastSale: 8,
+    },
+  }));
+  assert.equal(result.demand_status, "SLOW");
+  assert.equal(result.replenishment_qualified, true);
+  assert.equal(result.status, "needs_replenishment");
+  assert.ok(result.suggestedPacks > 0);
+});
+
+test("weak SLOW demand is watched independently of stock and receives no positive quantity", () => {
+  const evaluateWeak = (stock) => DemandIntelligenceEngine.evaluate(product({
+    stock_on_hand: stock,
+    replenishment_intelligence: {
+      stockOnHand: stock, netAvailableStock: stock, sales7Days: 0, sales14Days: 0,
+      sales30Days: 1, daysSinceLastSale: 28,
+    },
+  }));
+  const empty = evaluateWeak(0);
+  const stocked = evaluateWeak(5);
+
+  for (const result of [empty, stocked]) {
+    assert.equal(result.demand_status, "SLOW");
+    assert.equal(result.replenishment_qualified, false);
+    assert.equal(result.status, "no_replenishment_required");
+    assert.equal(result.suggestedPacks, 0);
+    assert.equal(result.suggestedUnits, 0);
+    assert.equal(result.quantity_intelligence, null);
+    assert.match(result.replenishment_gate_reason, /Demand remains SLOW/);
+  }
+  assert.equal(empty.urgency, "CRITICAL");
+});
+
+test("failed SLOW gate is a watch item, not genuine replenishment or a top basket product", () => {
+  const catalogueProduct = product({
+    stock_on_hand: 0,
+    supplier_id: "supplier",
+    reorder_approval: { approval_state: "approved" },
+    commercial_cost: {
+      units_per_pack: 5, pack_cost: 10, currency: "GBP", commercial_cost_trusted: true,
+      landed_cost_per_pack_gbp: 10,
+    },
+    replenishment_intelligence: {
+      stockOnHand: 0, netAvailableStock: 0, sales7Days: 0, sales14Days: 0,
+      sales30Days: 1, daysSinceLastSale: 28,
+    },
+  });
+  const weak = DemandIntelligenceEngine.evaluate(catalogueProduct);
+  const evaluation = { demands: [weak], qualifications: [], recommendations: [], baskets: [] };
+  const [diagnostic] = PurchaseIntelligenceDiagnostics.build({
+    suppliers: [{ id: "supplier", name: "Supplier", active: true, currency: "GBP", minimumOrderValue: 0, minimumOrderPacks: 5 }],
+    evaluation,
+  });
+  const basket = SupplierBasketIntelligenceEngine.evaluate({
+    supplier: { id: "supplier", name: "Supplier", active: true, currency: "GBP", minimumOrderValue: 0, minimumOrderPacks: 5 },
+    demands: [weak],
+    products: [catalogueProduct],
+  });
+
+  assert.deepEqual(diagnostic.demandItems, []);
+  assert.deepEqual(diagnostic.slowDemandWatchItems.map((entry) => entry.styleId), [weak.styleId]);
+  assert.deepEqual(basket.top_products, []);
 });
 
 test("demand and purchasing policy remain structurally separated", async () => {

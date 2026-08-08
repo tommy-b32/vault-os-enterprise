@@ -70,7 +70,8 @@ test("quantity remains downstream of demand and cannot create purchasing eligibi
     readFile(new URL("../lib/brain/PurchaseIntelligenceEngine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/purchase-intelligence/page.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(demand, /detection\.demand_status !== "ACTIVE" && detection\.demand_status !== "SLOW"/);
+  assert.match(demand, /const replenishmentQualified = detection\.demand_status === "ACTIVE" \|\| slowReplenishmentQualified/);
+  assert.match(demand, /if \(!replenishmentQualified\)/);
   assert.match(purchase, /state !== "ready_to_purchase"/);
   assert.match(purchase, /reorder_approval_missing/);
   assert.match(page, /Recommended:/);

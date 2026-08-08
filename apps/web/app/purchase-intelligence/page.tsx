@@ -97,6 +97,7 @@ export default async function PurchaseIntelligencePage() {
                   </dl>
                   <div className="purchase-intelligence-rejections"><span>Demand evidence unavailable</span>{diagnostic.demandMissingRequirements.length > 0 ? <ul>{diagnostic.demandMissingRequirements.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
                   {diagnostic.demandItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Products needing replenishment</span>{diagnostic.demandItems.map((demand) => <div key={demand.styleId}><strong>{demand.productName} — {demand.styleId.split("::").at(-1)}</strong><small>Demand: {demand.demand_status} · Urgency: {demand.urgency ?? "Not evaluated"}</small><small>{demand.demand_reason}</small><small>{demand.urgency_reason}</small><small>On hand: {demand.currentStock} · Calculated: {demand.calculatedPacks} packs · Suggested: {demand.suggestedPacks} packs / {demand.suggestedUnits} units</small></div>)}</div> : null}
+                  {diagnostic.slowDemandWatchItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Slow demand — watch</span>{diagnostic.slowDemandWatchItems.map((demand) => <div key={demand.styleId}><strong>{demand.productName} — {demand.styleId.split("::").at(-1)}</strong><small>{demand.replenishment_gate_reason}</small></div>)}</div> : null}
                 </section>
                 <section className="purchase-intelligence-stage">
                   <p className="vault-eyebrow">PURCHASING QUALIFICATION</p>
