@@ -64,12 +64,16 @@ export default async function PurchaseIntelligencePage() {
                 <header><div><span>Supplier</span><h3>{basket.supplier.name}</h3></div><strong>{basket.purchasing_state}</strong></header>
                 <dl>
                   <div><dt>Demand products</dt><dd>{basket.products_recommended}</dd></div>
-                  <div><dt>Required packs</dt><dd>{basket.total_required_packs}</dd></div>
+                  <div><dt>Required packs</dt><dd>{basket.required_packs}</dd></div>
+                  <div><dt>Strong advisory packs</dt><dd>{basket.advisory_supported_packs}</dd></div>
+                  <div><dt>Intelligent basket</dt><dd>{basket.intelligent_basket_packs} packs</dd></div>
                   <div><dt>Supplier minimum</dt><dd>{basket.supplier_minimum_packs ?? "Unavailable"} packs</dd></div>
-                  <div><dt>Additional packs required</dt><dd>{basket.packs_short ?? "Unavailable"}</dd></div>
+                  <div><dt>Remaining shortfall</dt><dd>{basket.remaining_shortfall_packs ?? "Unavailable"} packs</dd></div>
                   <div><dt>Estimated spend</dt><dd>{basket.estimated_order_value === null ? "Unavailable" : currency(basket.estimated_order_value)}</dd></div>
+                  <div><dt>Projected intelligent-basket spend</dt><dd>{basket.projected_intelligent_basket_spend === null ? "Unavailable" : currency(basket.projected_intelligent_basket_spend)}</dd></div>
                   <div><dt>Value short</dt><dd>{basket.value_short === null ? "Unavailable" : currency(basket.value_short)}</dd></div>
                 </dl>
+                {basket.purchasing_state === "MINIMUM_NOT_JUSTIFIED" && basket.supplier_minimum_packs !== null && basket.remaining_shortfall_packs !== null ? <p>Current demand supports {basket.intelligent_basket_packs} packs. Supplier minimum is {basket.supplier_minimum_packs} packs. A further {basket.remaining_shortfall_packs} packs are required, but no additional products currently meet the demand-quality threshold.</p> : null}
                 {basket.top_products.length > 0 ? <div className="purchase-intelligence-rejections"><span>Top products already recommended</span><ul>{basket.top_products.map((product) => <li key={product.style_id}>{product.product_name}: {product.required_packs} packs</li>)}</ul></div> : null}
                 {basket.additional_qualifying_products.length > 0 ? <div className="purchase-intelligence-rejections"><span>Additional qualifying products</span><ul>{basket.additional_qualifying_products.map((product) => <li key={product.style_id}>{product.product_name}: advisory {product.required_packs} packs</li>)}</ul>{basket.minimum_reached_with_additions ? <p>If you add these products the supplier minimum will be reached.</p> : <p>These products reduce the remaining supplier shortfall.</p>}</div> : null}
               </article>

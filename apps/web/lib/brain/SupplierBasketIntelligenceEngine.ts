@@ -4,7 +4,7 @@ import type { CatalogueProduct } from "@/types/catalogue";
 
 export type SupplierPurchasingState =
   | "READY_TO_ORDER"
-  | "NEAR_MINIMUM"
+  | "MINIMUM_NOT_JUSTIFIED"
   | "BUILD_BASKET"
   | "NO_DEMAND";
 
@@ -23,17 +23,23 @@ export type SupplierBasketProduct = {
 export type SupplierBasketIntelligence = {
   supplier: { id: string; name: string; currency: string | null };
   products_recommended: number;
+  required_packs: number;
+  advisory_supported_packs: number;
+  intelligent_basket_packs: number;
   total_required_packs: number;
   total_required_units: number;
   estimated_order_value: number | null;
   supplier_minimum_packs: number | null;
   supplier_minimum_value: number | null;
+  remaining_shortfall_packs: number | null;
+  minimum_supported_by_demand: boolean;
   packs_short: number | null;
   value_short: number | null;
   purchasing_state: SupplierPurchasingState;
   top_products: SupplierBasketProduct[];
   additional_qualifying_products: SupplierBasketProduct[];
   minimum_reached_with_additions: boolean;
+  projected_intelligent_basket_spend: number | null;
 };
 
 const URGENCY_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 } as const;
@@ -49,12 +55,6 @@ function rankProducts(left: SupplierBasketProduct, right: SupplierBasketProduct)
   if (left.current_stock !== right.current_stock) return left.current_stock - right.current_stock;
   if (right.demand_score !== left.demand_score) return right.demand_score - left.demand_score;
   return left.style_id.localeCompare(right.style_id);
-}
-
-function isWithinTwentyFivePercent(shortfall: number | null, minimum: number | null): boolean {
-  if (minimum === null) return false;
-  if (minimum <= 0) return true;
-  return (shortfall ?? minimum) / minimum <= 0.25;
 }
 
 function hasBasketDemandQuality(demand: DemandIntelligenceResult): boolean {
@@ -111,18 +111,6 @@ export function evaluateSupplierBasket({
   const valueShort = minimumValue === null || !valueComparable
     ? null
     : money(Math.max(0, minimumValue - estimatedOrderValue));
-  const packsSatisfied = minimumPacks !== null && packsShort === 0;
-  const valueSatisfied = minimumValue !== null && valueComparable && valueShort === 0;
-
-  let purchasingState: SupplierPurchasingState;
-  if (recommended.length === 0) purchasingState = "NO_DEMAND";
-  else if (packsSatisfied && valueSatisfied) purchasingState = "READY_TO_ORDER";
-  else if (
-    isWithinTwentyFivePercent(packsShort, minimumPacks) &&
-    isWithinTwentyFivePercent(valueShort, minimumValue)
-  ) purchasingState = "NEAR_MINIMUM";
-  else purchasingState = "BUILD_BASKET";
-
   const recommendedIds = new Set(recommended.map((demand) => demand.styleId));
   const candidates = demands.filter((demand) => {
     const product = productByStyle.get(demand.styleId);
@@ -161,34 +149,48 @@ export function evaluateSupplierBasket({
 
   const selected: SupplierBasketProduct[] = [];
   let remainingPacks = minimumPacks === null ? 0 : Math.max(0, minimumPacks - totalRequiredPacks);
-  let projectedPacks = totalRequiredPacks;
   let projectedValue = estimatedOrderValue;
   for (const candidate of candidates) {
     if (remainingPacks === 0) break;
     selected.push(candidate);
-    projectedPacks += candidate.required_packs;
     projectedValue = projectedValue === null ? null : money(projectedValue + candidate.estimated_value);
     remainingPacks = Math.max(0, remainingPacks - candidate.required_packs);
   }
-  const minimumReachedWithAdditions = selected.length > 0 &&
-    minimumPacks !== null && projectedPacks >= minimumPacks &&
-    minimumValue !== null && supplier.currency === "GBP" &&
-    projectedValue !== null && projectedValue >= minimumValue;
+  const advisorySupportedPacks = selected.reduce((total, candidate) => total + candidate.required_packs, 0);
+  const intelligentBasketPacks = totalRequiredPacks + advisorySupportedPacks;
+  const remainingShortfallPacks = minimumPacks === null
+    ? null
+    : Math.max(0, minimumPacks - intelligentBasketPacks);
+  const minimumSupportedByDemand = minimumPacks !== null && intelligentBasketPacks >= minimumPacks;
+  const minimumReachedWithAdditions = selected.length > 0 && minimumSupportedByDemand;
+
+  let purchasingState: SupplierPurchasingState;
+  if (recommended.length === 0) purchasingState = "NO_DEMAND";
+  else if (minimumSupportedByDemand) purchasingState = "READY_TO_ORDER";
+  else if (remainingShortfallPacks !== null && candidates.length === selected.length) {
+    purchasingState = "MINIMUM_NOT_JUSTIFIED";
+  } else purchasingState = "BUILD_BASKET";
 
   return {
     supplier: { id: supplier.id, name: supplier.name, currency: supplier.currency },
     products_recommended: recommended.length,
+    required_packs: totalRequiredPacks,
+    advisory_supported_packs: advisorySupportedPacks,
+    intelligent_basket_packs: intelligentBasketPacks,
     total_required_packs: totalRequiredPacks,
     total_required_units: totalRequiredUnits,
     estimated_order_value: estimatedOrderValue,
     supplier_minimum_packs: minimumPacks,
     supplier_minimum_value: minimumValue,
+    remaining_shortfall_packs: remainingShortfallPacks,
+    minimum_supported_by_demand: minimumSupportedByDemand,
     packs_short: packsShort,
     value_short: valueShort,
     purchasing_state: purchasingState,
     top_products: topProducts.slice(0, 5),
     additional_qualifying_products: selected,
     minimum_reached_with_additions: minimumReachedWithAdditions,
+    projected_intelligent_basket_spend: projectedValue,
   };
 }
 

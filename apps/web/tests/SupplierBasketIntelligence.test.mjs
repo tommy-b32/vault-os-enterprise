@@ -31,15 +31,15 @@ test("supplier already meeting both minima is READY_TO_ORDER", () => {
   assert.equal(result.value_short, 0);
 });
 
-test("supplier one pack short is NEAR_MINIMUM", () => {
+test("supplier one pack short without strong candidates is MINIMUM_NOT_JUSTIFIED", () => {
   const result = evaluate({ demands: [demand({ suggestedPacks: 4, suggestedUnits: 20 })] });
-  assert.equal(result.purchasing_state, "NEAR_MINIMUM");
+  assert.equal(result.purchasing_state, "MINIMUM_NOT_JUSTIFIED");
   assert.equal(result.packs_short, 1);
 });
 
-test("supplier ten packs short is BUILD_BASKET", () => {
+test("supplier ten packs short without strong candidates is MINIMUM_NOT_JUSTIFIED", () => {
   const result = evaluate({ supplierOverrides: { minimumOrderPacks: 20 }, demands: [demand({ suggestedPacks: 10, suggestedUnits: 50 })] });
-  assert.equal(result.purchasing_state, "BUILD_BASKET");
+  assert.equal(result.purchasing_state, "MINIMUM_NOT_JUSTIFIED");
   assert.equal(result.packs_short, 10);
 });
 
@@ -184,6 +184,53 @@ test("stock pressure alone cannot qualify weak demand and the supplier shortfall
   assert.equal(result.minimum_reached_with_additions, false);
 });
 
+test("five required plus four supported advisory packs leaves eleven packs unjustified", () => {
+  const demands = [
+    demand({ suggestedPacks: 5, suggestedUnits: 25 }),
+    demand({ styleId: "advisory-a", status: "no_replenishment_required", suggestedPacks: 0, suggestedUnits: 0, productMoqPacks: 3, urgency: "CRITICAL" }),
+    demand({ styleId: "advisory-b", status: "no_replenishment_required", suggestedPacks: 0, suggestedUnits: 0, productMoqPacks: 1, urgency: "HIGH" }),
+  ];
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20 },
+    demands,
+    products: demands.map((entry) => product({ style_id: entry.styleId })),
+  });
+
+  assert.equal(result.required_packs, 5);
+  assert.equal(result.total_required_packs, 5);
+  assert.equal(result.advisory_supported_packs, 4);
+  assert.equal(result.intelligent_basket_packs, 9);
+  assert.equal(result.remaining_shortfall_packs, 11);
+  assert.equal(result.minimum_supported_by_demand, false);
+  assert.equal(result.purchasing_state, "MINIMUM_NOT_JUSTIFIED");
+  assert.equal(result.estimated_order_value, 50);
+  assert.equal(result.projected_intelligent_basket_spend, 90);
+});
+
+test("five required plus fifteen ranked advisory packs supports the supplier minimum", () => {
+  const candidates = Array.from({ length: 15 }, (_, index) => demand({
+    styleId: `advisory-${String(index + 1).padStart(2, "0")}`,
+    status: "no_replenishment_required",
+    suggestedPacks: 0,
+    suggestedUnits: 0,
+    sales7Days: 15 - index,
+  }));
+  const demands = [demand({ suggestedPacks: 5, suggestedUnits: 25 }), ...candidates];
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20 },
+    demands,
+    products: demands.map((entry) => product({ style_id: entry.styleId })),
+  });
+
+  assert.equal(result.required_packs, 5);
+  assert.equal(result.advisory_supported_packs, 15);
+  assert.equal(result.intelligent_basket_packs, 20);
+  assert.equal(result.remaining_shortfall_packs, 0);
+  assert.equal(result.minimum_supported_by_demand, true);
+  assert.equal(result.purchasing_state, "READY_TO_ORDER");
+  assert.deepEqual(result.additional_qualifying_products.map((entry) => entry.style_id), candidates.map((entry) => entry.styleId));
+});
+
 test("ACTIVE stock seven with pack five is excluded from additional qualification", () => {
   const candidate = demand({
     styleId: "candidate", status: "no_replenishment_required", suggestedPacks: 0,
@@ -242,5 +289,8 @@ test("basket additions are advisory and never create purchase orders", async () 
     readFile(new URL("../app/purchase-intelligence/page.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(page, /Advisory only/);
+  assert.match(page, /Strong advisory packs/);
+  assert.match(page, /Remaining shortfall/);
+  assert.match(page, /no additional products currently meet the demand-quality threshold/);
   assert.doesNotMatch(engine + page, /insert\(|update\(|delete\(|createPurchaseOrder/);
 });
