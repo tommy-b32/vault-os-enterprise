@@ -291,6 +291,13 @@ test("basket additions are advisory and never create purchase orders", async () 
   assert.match(page, /Advisory only/);
   assert.match(page, /Strong advisory packs/);
   assert.match(page, /Remaining shortfall/);
+  assert.match(page, /Demand-supported bring-forward options/);
+  assert.match(page, /bring forward \{product\.required_packs\}/);
+  assert.match(page, /product\.required_packs === 1 \? "pack" : "packs"/);
+  assert.match(page, /Demand supports bringing these products forward, but they are not currently required for replenishment\./);
+  assert.doesNotMatch(page, /Additional qualifying products/);
+  assert.doesNotMatch(page, /advisory \{product\.required_packs\} packs/);
+  assert.match(page, /Top products already recommended/);
   assert.match(page, /no additional products currently meet the demand-quality threshold/);
   assert.doesNotMatch(engine + page, /insert\(|update\(|delete\(|createPurchaseOrder/);
 });
