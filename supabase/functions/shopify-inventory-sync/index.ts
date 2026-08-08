@@ -23,6 +23,7 @@ const corsHeaders = {
 type VaultVariant = {
   id: string;
   source_inventory_item_id: string;
+  available_for_sale: boolean | null;
 };
 
 type PendingInventoryLevel = {
@@ -32,6 +33,8 @@ type PendingInventoryLevel = {
   committed_quantity: number;
   incoming_quantity: number;
   on_hand_quantity: number;
+  available_for_sale: boolean | null;
+  inventory_tracked: boolean;
 };
 
 function respond(
@@ -98,7 +101,7 @@ Deno.serve(async (request: Request) => {
   }
 
   let runContext: {
-    supabase: SupabaseClient<any, "public", "public", any, any>;
+    supabase: SupabaseClient;
     id: string;
     startedAtMs: number;
   } | null = null;
@@ -184,7 +187,7 @@ Deno.serve(async (request: Request) => {
       } = await supabase
         .from("vault_variants")
         .select(
-          "id, source_inventory_item_id",
+          "id, source_inventory_item_id, available_for_sale",
         )
         .eq("source", "shopify")
         .not(
@@ -306,6 +309,10 @@ Deno.serve(async (request: Request) => {
                 level.quantities,
                 "on_hand",
               ),
+            available_for_sale:
+              variant.available_for_sale,
+            inventory_tracked:
+              inventoryItem.tracked,
           });
         }
       }
@@ -409,6 +416,26 @@ Deno.serve(async (request: Request) => {
         };
       });
 
+    const snapshotRows = inventoryRows.map((row) => {
+      const observation = pendingLevels.find((level) =>
+        level.variant_id === row.variant_id &&
+        locationIdMap.get(level.source_location_id) === row.location_id
+      );
+      if (!observation) throw new Error(`Inventory observation unavailable for ${row.variant_id}`);
+      return {
+        inventory_sync_run_id: run.id,
+        variant_id: row.variant_id,
+        location_id: row.location_id,
+        observed_at: syncedAt,
+        available: row.available_quantity,
+        committed: row.committed_quantity,
+        incoming: row.incoming_quantity,
+        on_hand: row.on_hand_quantity,
+        available_for_sale: observation.available_for_sale,
+        inventory_tracked: observation.inventory_tracked,
+      };
+    });
+
     /*
      * Save inventory in bulk rather than one
      * database request per variant.
@@ -432,6 +459,22 @@ Deno.serve(async (request: Request) => {
       if (inventoryError) {
         throw inventoryError;
       }
+    }
+
+    /*
+     * Append the exact observations used above. The run/variant/location
+     * uniqueness contract makes an exact-run retry idempotent. A run is not
+     * marked current until every snapshot batch has succeeded.
+     */
+    for (const snapshotBatch of chunk(snapshotRows, DATABASE_WRITE_SIZE)) {
+      const { error: snapshotError } = await supabase
+        .from("vault_inventory_level_snapshots")
+        .upsert(snapshotBatch, {
+          onConflict: "inventory_sync_run_id,variant_id,location_id",
+          ignoreDuplicates: true,
+        });
+
+      if (snapshotError) throw snapshotError;
     }
 
     /*

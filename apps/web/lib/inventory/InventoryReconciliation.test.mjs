@@ -67,7 +67,8 @@ test("successful mapped processing refreshes provenance even when quantities are
   assert.match(sync, /const syncedAt\s*=\s*new Date\(\)\.toISOString\(\)/);
   assert.match(sync, /synced_at:\s*syncedAt/);
   assert.match(sync, /\.upsert\(rowBatch,[\s\S]*onConflict:\s*"variant_id,location_id"/);
-  assert.doesNotMatch(sync, /ignoreDuplicates\s*:\s*true/);
+  const currentInventoryWrite = sync.match(/\.from\(\s*"vault_inventory_levels"[\s\S]*?if \(inventoryError\)/)?.[0] ?? "";
+  assert.doesNotMatch(currentInventoryWrite, /ignoreDuplicates\s*:\s*true/);
 });
 
 test("orphaned mappings lose stale rows without receiving fabricated freshness", async () => {

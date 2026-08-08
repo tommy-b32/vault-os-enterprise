@@ -15,6 +15,7 @@ export type ShopifyInventoryLevelNode = {
 
 export type ShopifyInventoryItemNode = {
   id: string;
+  tracked: boolean;
   inventoryLevels: {
     nodes: ShopifyInventoryLevelNode[];
   };
@@ -29,6 +30,7 @@ const INVENTORY_QUERY = `
     nodes(ids: $ids) {
       ... on InventoryItem {
         id
+        tracked
 
         inventoryLevels(first: 10) {
           nodes {
