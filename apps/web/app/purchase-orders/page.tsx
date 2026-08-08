@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import VaultAppShell from "@/components/layout/VaultAppShell";
 import {
@@ -11,6 +13,7 @@ import {
 } from "@/lib/brain/PurchaseIntelligenceEngine";
 import { getCatalogueData } from "@/lib/catalogue";
 import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
+import { getPurchaseOrderDrafts } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
 
@@ -30,8 +33,32 @@ type SupplierRuleRow = {
   minimum_order_packs: number | null;
 };
 
+function formatCurrency(
+  value: number,
+  currency = "GBP",
+): string {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export default async function PurchaseOrdersPage() {
   await requireAuthenticatedOperator();
+
+  const savedDraftsPromise =
+    getPurchaseOrderDrafts();
 
   const [
     catalogue,
@@ -121,15 +148,6 @@ export default async function PurchaseOrdersPage() {
         ) ?? null,
     }));
 
-  /*
-   * IMPORTANT:
-   *
-   * Purchase Orders consumes the exact same canonical
-   * Purchase Intelligence evaluation as
-   * /purchase-intelligence.
-   *
-   * There is no separate Advisor buying calculation here.
-   */
   const evaluation =
     PurchaseIntelligenceEngine.evaluate({
       products: catalogue.products,
@@ -230,16 +248,20 @@ export default async function PurchaseOrdersPage() {
                   demand?.urgency ?? null,
 
                 demandScore:
-                  demand?.demand_score ?? null,
+                  demand?.demand_score ??
+                  null,
 
                 sales7Days:
-                  demand?.sales7Days ?? null,
+                  demand?.sales7Days ??
+                  null,
 
                 sales14Days:
-                  demand?.sales14Days ?? null,
+                  demand?.sales14Days ??
+                  null,
 
                 sales30Days:
-                  demand?.sales30Days ?? null,
+                  demand?.sales30Days ??
+                  null,
 
                 explanation:
                   "Currently required for replenishment by canonical Purchase Intelligence.",
@@ -301,16 +323,20 @@ export default async function PurchaseOrdersPage() {
                   demand?.urgency ?? null,
 
                 demandScore:
-                  demand?.demand_score ?? null,
+                  demand?.demand_score ??
+                  null,
 
                 sales7Days:
-                  demand?.sales7Days ?? null,
+                  demand?.sales7Days ??
+                  null,
 
                 sales14Days:
-                  demand?.sales14Days ?? null,
+                  demand?.sales14Days ??
+                  null,
 
                 sales30Days:
-                  demand?.sales30Days ?? null,
+                  demand?.sales30Days ??
+                  null,
 
                 explanation:
                   "Demand-supported bring-forward option selected by Supplier Basket Intelligence.",
@@ -344,7 +370,8 @@ export default async function PurchaseOrdersPage() {
             basket.supplier_minimum_packs,
 
           minimumOrderCurrency:
-            basket.supplier.currency ?? "GBP",
+            basket.supplier.currency ??
+            "GBP",
 
           supplierMinimum,
 
@@ -375,6 +402,9 @@ export default async function PurchaseOrdersPage() {
         };
       });
 
+  const savedDrafts =
+    await savedDraftsPromise;
+
   return (
     <VaultAppShell>
       <main className="purchase-order-page">
@@ -384,7 +414,9 @@ export default async function PurchaseOrdersPage() {
               PURCHASE ORDERS
             </p>
 
-            <h1>Purchase Order Builder</h1>
+            <h1>
+              Purchase Order Builder
+            </h1>
 
             <p>
               Build durable supplier drafts from
@@ -417,21 +449,179 @@ export default async function PurchaseOrdersPage() {
             </p>
 
             <h2>
-              No supplier buying basket is currently
-              available
+              No supplier buying basket is
+              currently available
             </h2>
 
             <p>
-              No canonical Supplier Basket currently
-              contains replenishment or
-              demand-supported bring-forward products.
+              No canonical Supplier Basket
+              currently contains replenishment
+              or demand-supported bring-forward
+              products.
             </p>
 
-            <a href="/purchase-intelligence">
-              Review Purchase Intelligence &rarr;
-            </a>
+            <Link href="/purchase-intelligence">
+              Review Purchase Intelligence →
+            </Link>
           </section>
         )}
+
+        <section className="purchase-order-saved-section">
+          <div className="purchase-order-section-heading">
+            <div>
+              <p className="vault-eyebrow">
+                SAVED PURCHASE ORDERS
+              </p>
+
+              <h2>Saved drafts</h2>
+
+              <p>
+                Durable snapshots of buying baskets
+                that have already been saved.
+              </p>
+            </div>
+
+            <span>
+              {savedDrafts.length}{" "}
+              {savedDrafts.length === 1
+                ? "draft"
+                : "drafts"}
+            </span>
+          </div>
+
+          {savedDrafts.length === 0 ? (
+            <section className="purchase-order-empty">
+              <h3>
+                No saved purchase-order drafts yet
+              </h3>
+
+              <p>
+                Use Save Draft on a buying basket
+                to create the first durable
+                purchase order.
+              </p>
+            </section>
+          ) : (
+            <div className="purchase-order-saved-grid">
+              {savedDrafts.map((draft) => {
+                const supplierName =
+                  draft.vault_suppliers?.[0]?.supplier_name ??
+                  "Unknown supplier";
+
+                const lines =
+                  draft.vault_purchase_order_lines ??
+                  [];
+
+                const totalUnits =
+                  lines.reduce(
+                    (total, line) =>
+                      total +
+                      (line.recommended_units ??
+                        0),
+                    0,
+                  );
+
+                const requiredLines =
+                  lines.filter(
+                    (line) =>
+                      line.source_recommendation_type ===
+                      "purchase_intelligence_required",
+                  ).length;
+
+                const bringForwardLines =
+                  lines.filter(
+                    (line) =>
+                      line.source_recommendation_type ===
+                      "purchase_intelligence_bring_forward",
+                  ).length;
+
+                return (
+                  <Link
+                    className="purchase-order-saved-card"
+                    href={`/purchase-orders/${draft.id}`}
+                    key={draft.id}
+                  >
+                    <div className="purchase-order-section-heading">
+                      <div>
+                        <p className="vault-eyebrow">
+                          {draft.status.toUpperCase()}
+                        </p>
+
+                        <h3>
+                          {supplierName}
+                        </h3>
+                      </div>
+
+                      <span>
+                        {formatDate(
+                          draft.created_at,
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="purchase-order-supplier-totals">
+                      <div>
+                        <span>
+                          Total cost
+                        </span>
+
+                        <strong>
+                          {draft.estimated_total_gbp ===
+                          null
+                            ? "Unavailable"
+                            : formatCurrency(
+                                draft.estimated_total_gbp,
+                                draft.currency ??
+                                  "GBP",
+                              )}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Packs / units
+                        </span>
+
+                        <strong>
+                          {draft.total_packs ??
+                            0}{" "}
+                          packs
+                          {totalUnits > 0
+                            ? ` / ${totalUnits} units`
+                            : ""}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>Lines</span>
+
+                        <strong>
+                          {lines.length}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Required /
+                          bring-forward
+                        </span>
+
+                        <strong>
+                          {requiredLines} /{" "}
+                          {bringForwardLines}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <p>
+                      Open saved purchase order →
+                    </p>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </main>
     </VaultAppShell>
   );
