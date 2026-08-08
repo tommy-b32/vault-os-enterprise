@@ -127,6 +127,19 @@ test("dormant demand never receives urgency from low stock", () => {
   }));
   assert.equal(result.demand_status, "DORMANT");
   assert.equal(result.urgency, null);
+  assert.equal(result.suggestedPacks, 0);
+  assert.equal(result.suggestedUnits, 0);
+  assert.equal(result.quantity_intelligence, null);
+});
+
+test("NO_EVIDENCE never receives a positive quantity", () => {
+  const result = DemandIntelligenceEngine.evaluate(product({
+    replenishment_intelligence: { salesHistory30Complete: false },
+  }));
+  assert.equal(result.demand_status, "NO_EVIDENCE");
+  assert.equal(result.suggestedPacks, null);
+  assert.equal(result.suggestedUnits, null);
+  assert.equal(result.quantity_intelligence, null);
 });
 
 test("demand and purchasing policy remain structurally separated", async () => {

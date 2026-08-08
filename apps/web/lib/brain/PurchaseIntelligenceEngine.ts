@@ -41,6 +41,7 @@ export type PurchaseRecommendationProduct = {
   demand_score: number;
   demand_level: NonNullable<DemandIntelligenceResult["demand_level"]>;
   demand_reason: string;
+  quantityIntelligence: NonNullable<DemandIntelligenceResult["quantity_intelligence"]>;
 };
 
 export type PurchasingQualificationState =
@@ -249,6 +250,7 @@ export function evaluatePurchaseIntelligence({
         demand_score: demand.demand_score as number,
         demand_level: demand.demand_level as NonNullable<DemandIntelligenceResult["demand_level"]>,
         demand_reason: demand.demand_reason,
+        quantityIntelligence: demand.quantity_intelligence as NonNullable<DemandIntelligenceResult["quantity_intelligence"]>,
       };
     });
     recommendations.push({

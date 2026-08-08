@@ -1,4 +1,7 @@
-import { BuyingRecommendationEngine } from "./BuyingRecommendationEngine.ts";
+import {
+  PurchaseQuantityIntelligenceEngine,
+  type PurchaseQuantityIntelligence,
+} from "./PurchaseQuantityIntelligenceEngine.ts";
 import { DemandScoreEngine, type DemandLevel } from "./DemandScoreEngine.ts";
 import {
   DemandLifecycleEngine,
@@ -41,6 +44,7 @@ export type DemandIntelligenceResult = {
   calculatedPacks: number | null;
   suggestedPacks: number | null;
   suggestedUnits: number | null;
+  quantity_intelligence: PurchaseQuantityIntelligence | null;
   status: DemandIntelligenceStatus;
   demand_status: DemandStatus;
   urgency: DemandUrgency | null;
@@ -110,6 +114,7 @@ export function evaluateDemand(product: CatalogueProduct): DemandIntelligenceRes
     unitsPerPack: replenishment.unitsPerPack,
     productMoqPacks: replenishment.supplierMoqPacks,
     evidence,
+    quantity_intelligence: null,
     ...detection,
   };
 
@@ -190,45 +195,46 @@ export function evaluateDemand(product: CatalogueProduct): DemandIntelligenceRes
       })
     : { urgency: null, urgency_reason: null };
 
-  const buying = BuyingRecommendationEngine.buildRecommendation({
-    product: {
-      ...product,
-      replenishment_intelligence: {
-        ...replenishment,
-        trusted: true,
-        missingRequirements: [],
-      },
-    },
-  });
-  evidence.push(
-    { field: "calculated_packs", source: "quantity_engine", value: buying.calculatedQuantity },
-    { field: "suggested_packs", source: "quantity_engine", value: buying.suggestedPacks },
-    { field: "suggested_units", source: "quantity_engine", value: buying.suggestedUnits },
-  );
-  if (buying.calculatedQuantity === null || buying.suggestedPacks === null || buying.suggestedUnits === null) {
+  if (detection.demand_status !== "ACTIVE" && detection.demand_status !== "SLOW") {
     return {
       ...base,
-      evidence,
-      calculatedPacks: null,
-      suggestedPacks: null,
-      suggestedUnits: null,
+      calculatedPacks: 0,
+      suggestedPacks: 0,
+      suggestedUnits: 0,
       ...score,
       ...urgency,
-      status: "evidence_unavailable",
-      trusted: false,
-      missingRequirements: unique([...buying.missingData, "quantity_unavailable"]),
+      status: "no_replenishment_required",
+      trusted: true,
+      missingRequirements: [],
     };
   }
+
+  const quantity = PurchaseQuantityIntelligenceEngine.calculate({
+    sales7Days: replenishment.sales7Days as number,
+    sales14Days: replenishment.sales14Days as number,
+    sales30Days: replenishment.sales30Days as number,
+    netAvailableStock: replenishment.netAvailableStock as number,
+    supplierLeadTimeDays: replenishment.supplierLeadTimeDays as number,
+    targetStockDays: replenishment.targetStockDays as number,
+    unitsPerPack: replenishment.unitsPerPack as number,
+    supplierMoqPacks: replenishment.supplierMoqPacks as number,
+  });
+  evidence.push(
+    { field: "calculated_packs", source: "quantity_engine", value: quantity.raw_required_packs },
+    { field: "suggested_packs", source: "quantity_engine", value: quantity.recommended_packs },
+    { field: "suggested_units", source: "quantity_engine", value: quantity.recommended_units },
+  );
 
   return {
     ...base,
     evidence,
-    calculatedPacks: buying.calculatedQuantity,
-    suggestedPacks: buying.suggestedPacks,
-    suggestedUnits: buying.suggestedUnits,
+    calculatedPacks: quantity.raw_required_packs,
+    suggestedPacks: quantity.recommended_packs,
+    suggestedUnits: quantity.recommended_units,
+    quantity_intelligence: quantity,
     ...score,
     ...urgency,
-    status: buying.calculatedQuantity > 0
+    status: quantity.raw_required_packs > 0
       ? "needs_replenishment"
       : "no_replenishment_required",
     trusted: true,
