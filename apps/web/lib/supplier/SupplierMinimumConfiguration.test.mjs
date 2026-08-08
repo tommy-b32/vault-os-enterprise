@@ -108,7 +108,7 @@ test("persistence uses canonical supplier ID, rereads state, and emits only afte
   assert.match(action, /if \(!existing\.is_active\)/);
 });
 
-test("supplier archive action targets an existing route and no duplicate table is introduced", async () => {
+test("supplier minimum action remains independent from durable archive routing", async () => {
   const [page, action, parser, migration] = await Promise.all([
     readFile(new URL("apps/web/app/supplier-catalogue/page.tsx", repositoryRoot), "utf8"),
     readFile(new URL("apps/web/app/commercial/actions.ts", repositoryRoot), "utf8"),
@@ -116,8 +116,8 @@ test("supplier archive action targets an existing route and no duplicate table i
     readFile(new URL("supabase/migrations/20260810000000_supplier_minimum_policy_write.sql", repositoryRoot), "utf8"),
   ]);
 
-  assert.match(page, /href="\/supplier-catalogue\/review"/);
-  assert.doesNotMatch(page, /href=\{`\/supplier-catalogue\/\$\{catalogue\.id\}`\}/);
+  assert.match(page, /href=\{`\/supplier-catalogue\/\$\{archive\.id\}`\}/);
+  assert.doesNotMatch(page, /href="\/supplier-catalogue\/review"/);
   assert.doesNotMatch(`${action}\n${parser}\n${migration}`, /create\s+table/i);
   assert.doesNotMatch(migration, /add\s+column/i);
   assert.match(migration, /vault_supplier_purchasing_rules[\s\S]*minimum_order_packs/i);

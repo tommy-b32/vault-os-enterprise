@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useRef,
   useState,
 } from "react";
 
@@ -21,10 +22,6 @@ import {
   type CatalogueReviewQueueDetails,
   type CatalogueReviewQueueItem,
 } from "@/lib/supplier/CatalogueReviewQueueEngine";
-
-import {
-  CatalogueReviewQueueRepository,
-} from "@/lib/supplier/CatalogueReviewQueueRepository";
 
 import {
   VaultMemoryRepository,
@@ -49,6 +46,8 @@ type Props = {
 export function SupplierCatalogueImportWorkspace({
   products = [],
 }: Props) {
+  const archiveIdRef = useRef<string | null>(null);
+  const archiveRequestRef = useRef<Promise<string> | null>(null);
   const [
     selectedFile,
     setSelectedFile,
@@ -108,6 +107,32 @@ export function SupplierCatalogueImportWorkspace({
   ] =
     useState(false);
 
+  async function ensureArchive(details: CatalogueReviewQueueDetails): Promise<string> {
+    if (archiveIdRef.current) return archiveIdRef.current;
+    if (archiveRequestRef.current) return archiveRequestRef.current;
+    if (!selectedFile || !extractionResult) throw new Error("Extract the catalogue before creating its archive.");
+
+    const request = fetch("/api/supplier-catalogue/archives", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        idempotencyKey: extractionResult.document.id,
+        originalFilename: selectedFile.name,
+        sourceDocumentId: extractionResult.document.id,
+        pageCount: extractionResult.pages.length,
+        details,
+      }),
+    }).then(async (response) => {
+      const payload = await response.json();
+      if (!response.ok || !payload.archiveId) throw new Error(payload.error ?? "Catalogue archive could not be created.");
+      archiveIdRef.current = payload.archiveId;
+      return payload.archiveId as string;
+    }).finally(() => { archiveRequestRef.current = null; });
+
+    archiveRequestRef.current = request;
+    return request;
+  }
+
   function resetImport() {
     setSelectedFile(null);
     setExtractionResult(null);
@@ -118,7 +143,8 @@ export function SupplierCatalogueImportWorkspace({
     setIsPreparingIntelligence(false);
     setIsOpeningReview(false);
 
-    void CatalogueReviewQueueRepository.clear();
+    archiveIdRef.current = null;
+    archiveRequestRef.current = null;
   }
 
   async function prepareCatalogueIntelligence(
@@ -154,6 +180,15 @@ export function SupplierCatalogueImportWorkspace({
           memories,
         });
 
+      const archiveId = await ensureArchive(details);
+      const archiveResponse = await fetch(`/api/supplier-catalogue/archives/${archiveId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ session, items: queue }),
+      });
+      const archivePayload = await archiveResponse.json();
+      if (!archiveResponse.ok) throw new Error(archivePayload.error ?? "Catalogue analysis could not be archived.");
+
       setAnalysisSession(
         session,
       );
@@ -166,13 +201,6 @@ export function SupplierCatalogueImportWorkspace({
         queue,
       );
 
-      /*
-       * Do not redirect yet.
-       * The Catalogue Intelligence Dashboard now decides
-       * whether to open only required review items or the
-       * complete queue.
-       */
-      await CatalogueReviewQueueRepository.clear();
     } catch (error) {
       const message =
         error instanceof Error
@@ -182,6 +210,17 @@ export function SupplierCatalogueImportWorkspace({
       setQueueSaveError(
         message,
       );
+      if (archiveIdRef.current) {
+        try {
+          await fetch(`/api/supplier-catalogue/archives/${archiveIdRef.current}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ failed: true, reason: message }),
+          });
+        } catch {
+          // Preserve the original processing error when failure-state persistence is unavailable.
+        }
+      }
     } finally {
       setIsPreparingIntelligence(
         false,
@@ -210,28 +249,8 @@ export function SupplierCatalogueImportWorkspace({
     );
 
     try {
-      const saved =
-        await CatalogueReviewQueueRepository.save({
-          items:
-            itemsToReview,
-
-          details:
-            catalogueDetails,
-
-          savedAt:
-            new Date().toISOString(),
-        });
-
-      if (!saved) {
-        setQueueSaveError(
-          "Vault OS could not save this review queue. Please try again.",
-        );
-
-        return;
-      }
-
-      window.location.href =
-        "/supplier-catalogue/review";
+      const archiveId = await ensureArchive(catalogueDetails);
+      window.location.href = `/supplier-catalogue/${archiveId}/review`;
     } catch (error) {
       const message =
         error instanceof Error
@@ -284,7 +303,8 @@ export function SupplierCatalogueImportWorkspace({
             false,
           );
 
-          void CatalogueReviewQueueRepository.clear();
+          archiveIdRef.current = null;
+          archiveRequestRef.current = null;
         }}
         onExtractionComplete={(
           result,
@@ -315,9 +335,12 @@ export function SupplierCatalogueImportWorkspace({
           onCancel={
             resetImport
           }
-          onContinue={
-            setCatalogueDetails
-          }
+          onContinue={(details) => {
+            setCatalogueDetails(details);
+            void ensureArchive(details).catch((error) => {
+              setQueueSaveError(error instanceof Error ? error.message : "Catalogue archive could not be created.");
+            });
+          }}
           onOpenReviewQueue={(
             session,
             details,

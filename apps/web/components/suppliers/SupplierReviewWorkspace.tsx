@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import {
   useEffect,
   useMemo,
@@ -95,6 +97,7 @@ type ReviewItem = {
 
 type Props = {
   items: ReviewItem[];
+  archiveId: string;
 };
 
 type CatalogueProductsResponse = {
@@ -267,6 +270,7 @@ function buildSupplierMemoryInput(
 
 export function SupplierReviewWorkspace({
   items,
+  archiveId,
 }: Props) {
   const [currentIndex, setCurrentIndex] =
     useState(0);
@@ -334,6 +338,21 @@ export function SupplierReviewWorkspace({
 
   const currentItem =
     items[currentIndex] ?? null;
+
+  async function persistDecision(input: {
+    reviewItemId: string;
+    status: "matched" | "skipped" | "create_product";
+    linkedProductId?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    const response = await fetch(`/api/supplier-catalogue/archives/${archiveId}/review-items/${encodeURIComponent(input.reviewItemId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error ?? "The review decision could not be saved.");
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -836,6 +855,13 @@ export function SupplierReviewWorkspace({
           supplierMemory,
         });
 
+      await persistDecision({
+        reviewItemId: currentItem.card.id,
+        status: "matched",
+        linkedProductId: selectedMatch.product.parent_product_id,
+        metadata: { confidence: selectedMatch.confidence, style_id: selectedMatch.product.style_id },
+      });
+
       const learningReason:
         BrainDecisionReason =
         selectedMatch.confidence >= 92
@@ -988,8 +1014,15 @@ export function SupplierReviewWorkspace({
     }
   }
 
-  function skipCurrentItem() {
+  async function skipCurrentItem() {
     if (!currentItem) {
+      return;
+    }
+
+    try {
+      await persistDecision({ reviewItemId: currentItem.card.id, status: "skipped" });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "The review decision could not be saved.");
       return;
     }
 
@@ -1023,10 +1056,17 @@ export function SupplierReviewWorkspace({
     );
   }
 
-  function saveCreatedProduct(
+  async function saveCreatedProduct(
     draft: SupplierProductDraft,
   ) {
     if (!currentItem) {
+      return;
+    }
+
+    try {
+      await persistDecision({ reviewItemId: currentItem.card.id, status: "create_product", metadata: { draft } });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "The review decision could not be saved.");
       return;
     }
 
@@ -1165,9 +1205,9 @@ export function SupplierReviewWorkspace({
           here.
         </p>
 
-        <a href="/supplier-catalogue">
+        <Link href="/supplier-catalogue">
           ← Return to Supplier Catalogue
-        </a>
+        </Link>
       </section>
     );
   }
@@ -1299,9 +1339,9 @@ export function SupplierReviewWorkspace({
           </p>
         </div>
 
-        <a href="/supplier-catalogue">
+        <Link href="/supplier-catalogue">
           Exit Review
-        </a>
+        </Link>
       </header>
 
       <section className="supplier-review-status">
