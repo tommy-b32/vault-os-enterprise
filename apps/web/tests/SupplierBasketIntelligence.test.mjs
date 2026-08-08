@@ -62,6 +62,59 @@ test("additional products rank by urgency, recent sales, stock, then demand scor
   ]);
 });
 
+test("returns only the top fifteen one-pack candidates needed to cover a twenty-pack minimum", () => {
+  const required = demand({ suggestedPacks: 5, suggestedUnits: 25 });
+  const candidates = Array.from({ length: 20 }, (_, index) => demand({
+    styleId: `candidate-${String(index + 1).padStart(2, "0")}`,
+    productName: `Candidate ${index + 1}`,
+    status: "no_replenishment_required",
+    suggestedPacks: 0,
+    suggestedUnits: 0,
+    sales7Days: 20 - index,
+  }));
+  const demands = [required, ...candidates];
+  const products = demands.map((entry) => product({ style_id: entry.styleId }));
+  const result = evaluate({ supplierOverrides: { minimumOrderPacks: 20 }, demands, products });
+
+  assert.deepEqual(
+    result.additional_qualifying_products.map((entry) => entry.style_id),
+    candidates.slice(0, 15).map((entry) => entry.styleId),
+  );
+  assert.equal(
+    result.total_required_packs + result.additional_qualifying_products.reduce((total, entry) => total + entry.required_packs, 0),
+    20,
+  );
+});
+
+test("variable canonical MOQ contributions reduce shortfall and selection stops once covered", () => {
+  const demands = [
+    demand({ suggestedPacks: 17, suggestedUnits: 85 }),
+    demand({ styleId: "candidate-a", status: "no_replenishment_required", suggestedPacks: 0, suggestedUnits: 0, productMoqPacks: 2, urgency: "CRITICAL" }),
+    demand({ styleId: "candidate-b", status: "no_replenishment_required", suggestedPacks: 0, suggestedUnits: 0, productMoqPacks: 2, urgency: "HIGH" }),
+    demand({ styleId: "candidate-c", status: "no_replenishment_required", suggestedPacks: 0, suggestedUnits: 0, productMoqPacks: 4, urgency: "MEDIUM" }),
+  ];
+  const products = demands.map((entry) => product({ style_id: entry.styleId }));
+  const result = evaluate({ supplierOverrides: { minimumOrderPacks: 20 }, demands, products });
+
+  assert.deepEqual(result.additional_qualifying_products.map((entry) => entry.style_id), ["candidate-a", "candidate-b"]);
+  assert.deepEqual(result.additional_qualifying_products.map((entry) => entry.required_packs), [2, 2]);
+  assert.equal(result.total_required_packs + 4, 21);
+});
+
+test("returns no advisory candidates when required packs already satisfy the supplier minimum", () => {
+  const candidate = demand({
+    styleId: "candidate", status: "no_replenishment_required", suggestedPacks: 0,
+    suggestedUnits: 0, productMoqPacks: 2,
+  });
+  const result = evaluate({
+    supplierOverrides: { minimumOrderPacks: 20, minimumOrderValue: 1_000 },
+    demands: [demand({ suggestedPacks: 20, suggestedUnits: 100 }), candidate],
+    products: [product(), product({ style_id: "candidate" })],
+  });
+
+  assert.deepEqual(result.additional_qualifying_products, []);
+});
+
 test("ACTIVE stock seven with pack five is excluded from additional qualification", () => {
   const candidate = demand({
     styleId: "candidate", status: "no_replenishment_required", suggestedPacks: 0,

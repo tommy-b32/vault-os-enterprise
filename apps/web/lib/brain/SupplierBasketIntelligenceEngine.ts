@@ -154,18 +154,15 @@ export function evaluateSupplierBasket({
   }).sort(rankProducts);
 
   const selected: SupplierBasketProduct[] = [];
+  let remainingPacks = minimumPacks === null ? 0 : Math.max(0, minimumPacks - totalRequiredPacks);
   let projectedPacks = totalRequiredPacks;
   let projectedValue = estimatedOrderValue;
-  if (purchasingState === "BUILD_BASKET" || purchasingState === "NEAR_MINIMUM") {
-    for (const candidate of candidates) {
-      selected.push(candidate);
-      projectedPacks += candidate.required_packs;
-      projectedValue = projectedValue === null ? null : money(projectedValue + candidate.estimated_value);
-      const projectedPacksSatisfied = minimumPacks !== null && projectedPacks >= minimumPacks;
-      const projectedValueSatisfied = minimumValue !== null && supplier.currency === "GBP" &&
-        projectedValue !== null && projectedValue >= minimumValue;
-      if (projectedPacksSatisfied && projectedValueSatisfied) break;
-    }
+  for (const candidate of candidates) {
+    if (remainingPacks === 0) break;
+    selected.push(candidate);
+    projectedPacks += candidate.required_packs;
+    projectedValue = projectedValue === null ? null : money(projectedValue + candidate.estimated_value);
+    remainingPacks = Math.max(0, remainingPacks - candidate.required_packs);
   }
   const minimumReachedWithAdditions = selected.length > 0 &&
     minimumPacks !== null && projectedPacks >= minimumPacks &&
