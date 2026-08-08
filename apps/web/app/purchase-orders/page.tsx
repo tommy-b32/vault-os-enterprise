@@ -19,9 +19,14 @@ type LoadResult<T> = {
   error: string | null;
 };
 
-async function capture<T>(promise: PromiseLike<T>): Promise<LoadResult<T>> {
+async function capture<T>(
+  promise: PromiseLike<T>,
+): Promise<LoadResult<T>> {
   try {
-    return { data: await promise, error: null };
+    return {
+      data: await promise,
+      error: null,
+    };
   } catch (error) {
     return {
       data: null,
@@ -36,56 +41,64 @@ async function capture<T>(promise: PromiseLike<T>): Promise<LoadResult<T>> {
 export default async function PurchaseOrdersPage() {
   await requireAuthenticatedOperator();
 
-  const [catalogueResult, walletResult, supplierResult, supplierRuleResult] = await Promise.all([
-      capture(getCatalogueData()),
-      capture(
-        supabaseAdmin
-          .from("vault_purchasing_wallet")
-          .select(`
-            ledger_balance_gbp,
-            protected_reserve_gbp,
-            committed_orders_gbp,
-            calculated_purchasing_power_gbp,
-            available_purchasing_power_gbp,
-            manual_spending_limit_gbp,
-            reserve_override_allowed,
-            wallet_last_updated,
-            purchasing_power_state
-          `)
-          .single()
-          .then(({ data, error }) => {
-            if (error) throw error;
-            return data as PurchasingWalletData;
-          }),
-      ),
-      capture(
-        supabaseAdmin
-          .from("vault_suppliers")
-          .select(`
-            id,
-            supplier_name,
-            is_active,
-            default_lead_time_days,
-            minimum_order_value,
-            currency_code,
-            notes
-          `)
-          .order("supplier_name", { ascending: true })
-          .then(({ data, error }) => {
-            if (error) throw error;
-            return (data ?? []) as SupplierPurchasingData[];
-          }),
-      ),
-      capture(
-        supabaseAdmin
-          .from("vault_supplier_purchasing_rules")
-          .select("supplier_id, minimum_order_packs")
-          .then(({ data, error }) => {
-            if (error) throw error;
-            return data ?? [];
-          }),
-      ),
-    ]);
+  const [
+    catalogueResult,
+    walletResult,
+    supplierResult,
+    supplierRuleResult,
+  ] = await Promise.all([
+    capture(getCatalogueData()),
+
+    capture(
+      supabaseAdmin
+        .from("vault_purchasing_wallet")
+        .select(`
+          ledger_balance_gbp,
+          protected_reserve_gbp,
+          committed_orders_gbp,
+          calculated_purchasing_power_gbp,
+          available_purchasing_power_gbp,
+          manual_spending_limit_gbp,
+          reserve_override_allowed,
+          wallet_last_updated,
+          purchasing_power_state
+        `)
+        .single()
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data as PurchasingWalletData;
+        }),
+    ),
+
+    capture(
+      supabaseAdmin
+        .from("vault_suppliers")
+        .select(`
+          id,
+          supplier_name,
+          is_active,
+          default_lead_time_days,
+          minimum_order_value,
+          currency_code,
+          notes
+        `)
+        .order("supplier_name", { ascending: true })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return (data ?? []) as SupplierPurchasingData[];
+        }),
+    ),
+
+    capture(
+      supabaseAdmin
+        .from("vault_supplier_purchasing_rules")
+        .select("supplier_id, minimum_order_packs")
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data ?? [];
+        }),
+    ),
+  ]);
 
   const packMinimumBySupplierId = new Map(
     (supplierRuleResult.data ?? []).map((rule) => [
@@ -99,6 +112,7 @@ export default async function PurchaseOrdersPage() {
         const supplier = supplierResult.data?.find(
           (entry) => entry.id === product.supplier_id,
         );
+
         return TrustedBuyingCandidateClassifier.classify({
           product,
           supplier: supplier
@@ -108,7 +122,8 @@ export default async function PurchaseOrdersPage() {
                 active: supplier.is_active,
                 currency: supplier.currency_code,
                 minimumOrderValue: supplier.minimum_order_value,
-                minimumOrderPacks: packMinimumBySupplierId.get(supplier.id) ?? null,
+                minimumOrderPacks:
+                  packMinimumBySupplierId.get(supplier.id) ?? null,
               }
             : null,
           wallet: walletResult.data
@@ -120,12 +135,14 @@ export default async function PurchaseOrdersPage() {
         });
       })
     : [];
+
   const advisor = catalogueResult.data
     ? AdvisorEngine.analyse({
         products: catalogueResult.data.products,
         candidates,
       })
     : null;
+
   const orderMap = new Map<string, SupplierDraftOrder>();
 
   if (advisor && catalogueResult.data) {
@@ -133,6 +150,7 @@ export default async function PurchaseOrdersPage() {
       const commercialInput = advisor.commercialInputs.find(
         (input) => input.productId === recommendation.id,
       );
+
       const product = catalogueResult.data.products.find(
         (candidate) => candidate.style_id === recommendation.id,
       );
@@ -142,7 +160,11 @@ export default async function PurchaseOrdersPage() {
       const supplier = supplierResult.data?.find(
         (candidate) => candidate.id === commercialInput.supplierId,
       );
-      const existing = orderMap.get(commercialInput.supplierId);
+
+      const existing = orderMap.get(
+        commercialInput.supplierId,
+      );
+
       const supplierMinimum = SupplierMinimumContract.create({
         value: supplier?.minimum_order_value ?? null,
         currency: supplier?.currency_code ?? null,
@@ -150,27 +172,36 @@ export default async function PurchaseOrdersPage() {
           ? packMinimumBySupplierId.get(supplier.id) ?? null
           : null,
       });
-      const order: SupplierDraftOrder = existing ?? {
-        supplierId: commercialInput.supplierId,
-        supplierName: commercialInput.supplierName,
-        leadTimeDays: supplier?.default_lead_time_days ?? null,
-        minimumOrderValue: supplier?.minimum_order_value ?? null,
-        minimumOrderPacks: supplier
-          ? packMinimumBySupplierId.get(supplier.id) ?? null
-          : null,
-        minimumOrderCurrency: supplier?.currency_code ?? "GBP",
-        supplierMinimum,
-        currency: "GBP",
-        lines: [],
-      };
+
+      const order: SupplierDraftOrder =
+        existing ?? {
+          supplierId: commercialInput.supplierId,
+          supplierName: commercialInput.supplierName,
+          leadTimeDays:
+            supplier?.default_lead_time_days ?? null,
+          minimumOrderValue:
+            supplier?.minimum_order_value ?? null,
+          minimumOrderPacks: supplier
+            ? packMinimumBySupplierId.get(supplier.id) ?? null
+            : null,
+          minimumOrderCurrency:
+            supplier?.currency_code ?? "GBP",
+          supplierMinimum,
+          currency: "GBP",
+          lines: [],
+        };
 
       order.lines.push({
         id: recommendation.id,
         supplierId: commercialInput.supplierId,
         productName: product.product_name,
         supplierName: commercialInput.supplierName,
-        suggestedQuantity: commercialInput.recommendedOrderQuantity,
-        packCost: product.commercial_cost.landed_cost_per_pack_gbp,
+        suggestedQuantity:
+          commercialInput.recommendedOrderQuantity,
+        unitsPerPack:
+          product.commercial_cost.units_per_pack,
+        packCost:
+          product.commercial_cost.landed_cost_per_pack_gbp,
         currency: "GBP",
         expectedProfit: recommendation.estimatedProfit,
         confidence: recommendation.confidence,
@@ -179,49 +210,70 @@ export default async function PurchaseOrdersPage() {
         supplierMoqPacks: product.supplier_moq_packs,
       });
 
-      orderMap.set(commercialInput.supplierId, order);
+      orderMap.set(
+        commercialInput.supplierId,
+        order,
+      );
     }
   }
 
   const orders = Array.from(orderMap.values());
 
   return (
-    <VaultAppShell
-      searchPlaceholder="Search purchase orders..."
-      systemStatusLabel="Purchase order builder ready"
-    >
-      <main className="purchase-orders-page">
-        <header className="purchase-orders-header">
+    <VaultAppShell>
+      <main className="purchase-order-page">
+        <header className="purchase-order-header">
           <div>
-            <p className="vault-eyebrow">PURCHASE ORDERS</p>
+            <p className="vault-eyebrow">
+              PURCHASE ORDERS
+            </p>
+
             <h1>Purchase Order Builder</h1>
+
             <p>
-              Execute trusted Advisor recommendations as supplier-grouped
-              draft orders without changing their commercial logic.
+              Execute trusted Advisor recommendations as
+              supplier-grouped draft orders without changing
+              their commercial logic.
             </p>
           </div>
 
           <span className="purchase-order-state">
-            {orders.length > 0 ? "Advisor draft ready" : "Not ready"}
+            {orders.length > 0
+              ? "Advisor draft ready"
+              : "Not ready"}
           </span>
         </header>
 
         {orders.length > 0 ? (
           <PurchaseOrderDraftWorkspace
-            advisorConfidence={advisor?.analysis.averageConfidence ?? null}
+            advisorConfidence={
+              advisor?.analysis.averageConfidence ?? null
+            }
             orders={orders}
             wallet={walletResult.data}
-            walletUnavailable={walletResult.error !== null}
+            walletUnavailable={
+              walletResult.error !== null
+            }
           />
         ) : (
           <section className="purchase-order-empty purchase-order-readiness-empty">
-            <p className="vault-eyebrow">ADVISOR READINESS</p>
-            <h2>No commercial action is ready yet</h2>
-            <p>
-              Vault OS needs stronger catalogue, supplier or cost data
-              before it can generate a trusted draft purchase basket.
+            <p className="vault-eyebrow">
+              ADVISOR READINESS
             </p>
-            <a href="/advisor">Review Advisor readiness &rarr;</a>
+
+            <h2>
+              No commercial action is ready yet
+            </h2>
+
+            <p>
+              Vault OS needs stronger catalogue, supplier or
+              cost data before it can generate a trusted draft
+              purchase basket.
+            </p>
+
+            <a href="/advisor">
+              Review Advisor readiness &rarr;
+            </a>
           </section>
         )}
       </main>
