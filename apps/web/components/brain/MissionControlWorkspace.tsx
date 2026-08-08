@@ -11,8 +11,9 @@ import PredictionInsights from "@/components/brain/workspace/PredictionInsights"
 import TodaysAnalysis from "@/components/brain/workspace/TodaysAnalysis";
 import VaultBrainStartup from "@/components/brain/workspace/VaultBrainStartup";
 import VaultIcon, {
-  type VaultIconName,
 } from "@/components/brain/workspace/VaultIcon";
+import { isVaultNavigationItemActive, VAULT_NAVIGATION } from "@/lib/navigation";
+import { usePathname } from "next/navigation";
 
 import MissionControlStyles from "@/components/brain/MissionControlStyles";
 
@@ -50,75 +51,6 @@ type MissionControlWorkspaceProps = {
   description?: string;
 };
 
-const navigation = [
-  {
-    label: "Command Centre",
-    icon: "home",
-    href: "/",
-  },
-  {
-    label: "Vault Brain",
-    icon: "missions",
-    href: "/missions",
-    active: true,
-  },
-  {
-    label: "Inventory",
-    icon: "inventory",
-    href: "/inventory",
-  },
-  {
-    label: "Catalogue",
-    icon: "catalogue",
-    href: "/catalogue",
-  },
-  {
-    label: "Supplier Catalogue",
-    icon: "catalogue",
-    href: "/supplier-catalogue",
-  },
-  {
-    label: "Partners",
-    icon: "partners",
-    href: "/partners",
-  },
-  {
-    label: "Orders",
-    icon: "orders",
-    href: "/orders",
-  },
-  {
-    label: "Purchase Orders",
-    icon: "orders",
-    href: "/purchase-orders",
-  },
-  {
-    label: "Analytics",
-    icon: "analytics",
-    href: "/analytics",
-  },
-  {
-    label: "Commercial Intelligence",
-    icon: "analytics",
-    href: "/commercial",
-  },
-  {
-    label: "Advisor",
-    icon: "advisor",
-    href: "/advisor",
-  },
-  {
-    label: "Settings",
-    icon: "settings",
-    href: "/settings",
-  },
-] satisfies Array<{
-  label: string;
-  icon: VaultIconName;
-  href: string;
-  active?: boolean;
-}>;
-
 export default function MissionControlWorkspace({
   missions,
   snapshot,
@@ -127,6 +59,7 @@ export default function MissionControlWorkspace({
   description =
     "...",
 }: MissionControlWorkspaceProps) {
+  const pathname = usePathname();
   const highestPriorityMission =
     getHighestPriorityMission(
       missions,
@@ -154,11 +87,13 @@ export default function MissionControlWorkspace({
           aria-label="Primary navigation"
           className="vault-nav"
         >
-          {navigation.map(
-            (item) => (
+          {VAULT_NAVIGATION.map(
+            (item) => {
+              const active = isVaultNavigationItemActive(pathname, item.href);
+              return (
               <Link
                 className={`vault-nav-item ${
-                  item.active
+                  active
                     ? "is-active"
                     : ""
                 }`}
@@ -166,7 +101,7 @@ export default function MissionControlWorkspace({
                   item.href
                 }
                 aria-current={
-                  item.active
+                  active
                     ? "page"
                     : undefined
                 }
@@ -186,7 +121,8 @@ export default function MissionControlWorkspace({
                   }
                 </span>
               </Link>
-            ),
+              );
+            },
           )}
         </nav>
 

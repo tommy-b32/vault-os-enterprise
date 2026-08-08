@@ -6,9 +6,9 @@ import {
 } from "next/navigation";
 
 import VaultIcon, {
-  type VaultIconName,
 } from "@/components/brain/workspace/VaultIcon";
 import { OperatorMenu } from "@/components/auth/OperatorMenu";
+import { isVaultNavigationItemActive, VAULT_NAVIGATION } from "@/lib/navigation";
 
 type VaultAppShellProps = {
   children: React.ReactNode;
@@ -19,110 +19,6 @@ type VaultAppShellProps = {
   systemStatusLabel?: string;
   userName?: string;
 };
-
-const navigation = [
-  {
-    label: "Command Centre",
-    icon: "home",
-    href: "/",
-  },
-  {
-    label: "Vault Brain",
-    icon: "advisor",
-    href: "/missions",
-  },
-  {
-    label: "Inventory",
-    icon: "inventory",
-    href: "/inventory",
-  },
-  {
-    label: "Catalogue",
-    icon: "catalogue",
-    href: "/catalogue",
-  },
-  {
-    label: "Supplier Catalogue",
-    icon: "catalogue",
-    href: "/supplier-catalogue",
-  },
-  {
-    label: "Match Review",
-    icon: "missions",
-    href: "/supplier-catalogue/review",
-  },
-  {
-    label: "Partners",
-    icon: "partners",
-    href: "/partners",
-  },
-  {
-    label: "Orders",
-    icon: "orders",
-    href: "/orders",
-  },
-  {
-    label: "Purchase Orders",
-    icon: "orders",
-    href: "/purchase-orders",
-  },
-  {
-    label: "Purchase Intelligence",
-    icon: "advisor",
-    href: "/purchase-intelligence",
-  },
-  {
-    label: "Analytics",
-    icon: "analytics",
-    href: "/analytics",
-  },
-  {
-    label: "Commercial Intelligence",
-    icon: "analytics",
-    href: "/commercial",
-  },
-  {
-    label: "Advisor",
-    icon: "advisor",
-    href: "/advisor",
-  },
-  {
-    label: "Settings",
-    icon: "settings",
-    href: "/settings",
-  },
-] satisfies Array<{
-  label: string;
-  icon: VaultIconName;
-  href: string;
-}>;
-
-function isNavigationItemActive({
-  pathname,
-  href,
-}: {
-  pathname: string;
-  href: string;
-}): boolean {
-  if (href === "/") {
-    return pathname === "/";
-  }
-
-  /*
-   * Supplier Catalogue is a parent route with a dedicated
-   * Match Review child route. Keep only the exact parent tab
-   * active on /supplier-catalogue so the review page can
-   * highlight its own navigation item.
-   */
-  if (href === "/supplier-catalogue") {
-    return pathname === "/supplier-catalogue";
-  }
-
-  return (
-    pathname === href ||
-    pathname.startsWith(`${href}/`)
-  );
-}
 
 function VaultAppShellStyles() {
   return (
@@ -556,12 +452,9 @@ export default function VaultAppShell({
           aria-label="Primary navigation"
           className="vault-app-nav"
         >
-          {navigation.map((item) => {
+          {VAULT_NAVIGATION.map((item) => {
             const isActive =
-              isNavigationItemActive({
-                pathname,
-                href: item.href,
-              });
+              isVaultNavigationItemActive(pathname, item.href);
 
             return (
               <Link
