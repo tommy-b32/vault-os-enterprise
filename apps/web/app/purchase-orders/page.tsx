@@ -1,223 +1,379 @@
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
-import type { SupplierPurchasingData } from "@/components/commercial/SupplierPurchasing";
 import VaultAppShell from "@/components/layout/VaultAppShell";
 import {
   PurchaseOrderDraftWorkspace,
   type SupplierDraftOrder,
 } from "@/components/purchase-orders/PurchaseOrderDraftWorkspace";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
-import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
-import { TrustedBuyingCandidateClassifier } from "@/lib/brain/TrustedBuyingCandidateClassifier";
+import {
+  PurchaseIntelligenceEngine,
+  type PurchaseIntelligenceSupplier,
+} from "@/lib/brain/PurchaseIntelligenceEngine";
 import { getCatalogueData } from "@/lib/catalogue";
+import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
 
 export const dynamic = "force-dynamic";
 
-type LoadResult<T> = {
-  data: T | null;
-  error: string | null;
+type SupplierRow = {
+  id: string;
+  supplier_name: string;
+  is_active: boolean;
+  default_lead_time_days: number | null;
+  minimum_order_value: number | null;
+  currency_code: string | null;
 };
 
-async function capture<T>(
-  promise: PromiseLike<T>,
-): Promise<LoadResult<T>> {
-  try {
-    return {
-      data: await promise,
-      error: null,
-    };
-  } catch (error) {
-    return {
-      data: null,
-      error:
-        error instanceof Error
-          ? error.message
-          : "This source is currently unavailable.",
-    };
-  }
-}
+type SupplierRuleRow = {
+  supplier_id: string;
+  minimum_order_packs: number | null;
+};
 
 export default async function PurchaseOrdersPage() {
   await requireAuthenticatedOperator();
 
   const [
-    catalogueResult,
+    catalogue,
+    freshness,
     walletResult,
-    supplierResult,
-    supplierRuleResult,
+    suppliersResult,
+    rulesResult,
   ] = await Promise.all([
-    capture(getCatalogueData()),
+    getCatalogueData(),
+    InventorySyncRepository.getFreshness(),
 
-    capture(
-      supabaseAdmin
-        .from("vault_purchasing_wallet")
-        .select(`
-          ledger_balance_gbp,
-          protected_reserve_gbp,
-          committed_orders_gbp,
-          calculated_purchasing_power_gbp,
-          available_purchasing_power_gbp,
-          manual_spending_limit_gbp,
-          reserve_override_allowed,
-          wallet_last_updated,
-          purchasing_power_state
-        `)
-        .single()
-        .then(({ data, error }) => {
-          if (error) throw error;
-          return data as PurchasingWalletData;
-        }),
-    ),
+    supabaseAdmin
+      .from("vault_purchasing_wallet")
+      .select(`
+        ledger_balance_gbp,
+        protected_reserve_gbp,
+        committed_orders_gbp,
+        calculated_purchasing_power_gbp,
+        available_purchasing_power_gbp,
+        manual_spending_limit_gbp,
+        reserve_override_allowed,
+        wallet_last_updated,
+        purchasing_power_state
+      `)
+      .single(),
 
-    capture(
-      supabaseAdmin
-        .from("vault_suppliers")
-        .select(`
-          id,
-          supplier_name,
-          is_active,
-          default_lead_time_days,
-          minimum_order_value,
-          currency_code,
-          notes
-        `)
-        .order("supplier_name", { ascending: true })
-        .then(({ data, error }) => {
-          if (error) throw error;
-          return (data ?? []) as SupplierPurchasingData[];
-        }),
-    ),
+    supabaseAdmin
+      .from("vault_suppliers")
+      .select(`
+        id,
+        supplier_name,
+        is_active,
+        default_lead_time_days,
+        minimum_order_value,
+        currency_code
+      `)
+      .order("supplier_name", {
+        ascending: true,
+      }),
 
-    capture(
-      supabaseAdmin
-        .from("vault_supplier_purchasing_rules")
-        .select("supplier_id, minimum_order_packs")
-        .then(({ data, error }) => {
-          if (error) throw error;
-          return data ?? [];
-        }),
-    ),
+    supabaseAdmin
+      .from("vault_supplier_purchasing_rules")
+      .select(`
+        supplier_id,
+        minimum_order_packs
+      `),
   ]);
 
-  const packMinimumBySupplierId = new Map(
-    (supplierRuleResult.data ?? []).map((rule) => [
+  const sourceError =
+    walletResult.error ??
+    suppliersResult.error ??
+    rulesResult.error;
+
+  if (sourceError) {
+    throw new Error(
+      `Unable to load purchase-order intelligence: ${sourceError.message}`,
+    );
+  }
+
+  const wallet =
+    walletResult.data as PurchasingWalletData;
+
+  const supplierRows =
+    (suppliersResult.data ?? []) as SupplierRow[];
+
+  const supplierRules =
+    (rulesResult.data ?? []) as SupplierRuleRow[];
+
+  const minimumPacksBySupplier = new Map(
+    supplierRules.map((rule) => [
       rule.supplier_id,
       rule.minimum_order_packs,
     ]),
   );
 
-  const candidates = catalogueResult.data
-    ? catalogueResult.data.products.map((product) => {
-        const supplier = supplierResult.data?.find(
-          (entry) => entry.id === product.supplier_id,
-        );
+  const suppliers: PurchaseIntelligenceSupplier[] =
+    supplierRows.map((supplier) => ({
+      id: supplier.id,
+      name: supplier.supplier_name,
+      active: supplier.is_active,
+      currency: supplier.currency_code,
+      minimumOrderValue:
+        supplier.minimum_order_value,
+      minimumOrderPacks:
+        minimumPacksBySupplier.get(
+          supplier.id,
+        ) ?? null,
+    }));
 
-        return TrustedBuyingCandidateClassifier.classify({
-          product,
-          supplier: supplier
-            ? {
-                id: supplier.id,
-                name: supplier.supplier_name,
-                active: supplier.is_active,
-                currency: supplier.currency_code,
-                minimumOrderValue: supplier.minimum_order_value,
-                minimumOrderPacks:
-                  packMinimumBySupplierId.get(supplier.id) ?? null,
-              }
-            : null,
-          wallet: walletResult.data
-            ? {
-                available: true,
-                lastUpdated: walletResult.data.wallet_last_updated,
-              }
-            : null,
-        });
-      })
-    : [];
+  /*
+   * IMPORTANT:
+   *
+   * Purchase Orders consumes the exact same canonical
+   * Purchase Intelligence evaluation as
+   * /purchase-intelligence.
+   *
+   * There is no separate Advisor buying calculation here.
+   */
+  const evaluation =
+    PurchaseIntelligenceEngine.evaluate({
+      products: catalogue.products,
+      suppliers,
+      wallet,
+      inventoryTrusted:
+        freshness.syncStatus === "current",
+    });
 
-  const advisor = catalogueResult.data
-    ? AdvisorEngine.analyse({
-        products: catalogueResult.data.products,
-        candidates,
-      })
-    : null;
+  const demandByStyle = new Map(
+    evaluation.demands.map((demand) => [
+      demand.styleId,
+      demand,
+    ]),
+  );
 
-  const orderMap = new Map<string, SupplierDraftOrder>();
+  const productByStyle = new Map(
+    catalogue.products.map((product) => [
+      product.style_id,
+      product,
+    ]),
+  );
 
-  if (advisor && catalogueResult.data) {
-    for (const recommendation of advisor.analysis.ranked) {
-      const commercialInput = advisor.commercialInputs.find(
-        (input) => input.productId === recommendation.id,
-      );
+  const supplierRowById = new Map(
+    supplierRows.map((supplier) => [
+      supplier.id,
+      supplier,
+    ]),
+  );
 
-      const product = catalogueResult.data.products.find(
-        (candidate) => candidate.style_id === recommendation.id,
-      );
+  const orders: SupplierDraftOrder[] =
+    evaluation.baskets
+      .filter(
+        (basket) =>
+          basket.top_products.length > 0 ||
+          basket.additional_qualifying_products
+            .length > 0,
+      )
+      .map((basket) => {
+        const supplier =
+          supplierRowById.get(
+            basket.supplier.id,
+          );
 
-      if (!commercialInput || !product) continue;
+        const supplierMinimum =
+          SupplierMinimumContract.create({
+            value:
+              basket.supplier_minimum_value,
+            currency:
+              basket.supplier.currency,
+            minimumOrderPacks:
+              basket.supplier_minimum_packs,
+          });
 
-      const supplier = supplierResult.data?.find(
-        (candidate) => candidate.id === commercialInput.supplierId,
-      );
+        const requiredLines =
+          basket.top_products.map(
+            (basketProduct) => {
+              const product =
+                productByStyle.get(
+                  basketProduct.style_id,
+                );
 
-      const existing = orderMap.get(
-        commercialInput.supplierId,
-      );
+              const demand =
+                demandByStyle.get(
+                  basketProduct.style_id,
+                );
 
-      const supplierMinimum = SupplierMinimumContract.create({
-        value: supplier?.minimum_order_value ?? null,
-        currency: supplier?.currency_code ?? null,
-        minimumOrderPacks: supplier
-          ? packMinimumBySupplierId.get(supplier.id) ?? null
-          : null,
-      });
+              return {
+                id: basketProduct.style_id,
+                supplierId:
+                  basket.supplier.id,
+                productName:
+                  basketProduct.product_name,
+                supplierName:
+                  basket.supplier.name,
 
-      const order: SupplierDraftOrder =
-        existing ?? {
-          supplierId: commercialInput.supplierId,
-          supplierName: commercialInput.supplierName,
+                suggestedQuantity:
+                  basketProduct.required_packs,
+
+                unitsPerPack:
+                  demand?.unitsPerPack ??
+                  product?.commercial_cost
+                    .units_per_pack ??
+                  null,
+
+                packCost:
+                  product?.commercial_cost
+                    .landed_cost_per_pack_gbp ??
+                  null,
+
+                currency: "GBP",
+
+                demandStatus:
+                  demand?.demand_status ??
+                  null,
+
+                urgency:
+                  demand?.urgency ?? null,
+
+                demandScore:
+                  demand?.demand_score ?? null,
+
+                sales7Days:
+                  demand?.sales7Days ?? null,
+
+                sales14Days:
+                  demand?.sales14Days ?? null,
+
+                sales30Days:
+                  demand?.sales30Days ?? null,
+
+                explanation:
+                  "Currently required for replenishment by canonical Purchase Intelligence.",
+
+                supplierMoqPacks:
+                  demand?.productMoqPacks ??
+                  product?.supplier_moq_packs ??
+                  null,
+
+                sourceType:
+                  "required" as const,
+              };
+            },
+          );
+
+        const bringForwardLines =
+          basket.additional_qualifying_products.map(
+            (basketProduct) => {
+              const product =
+                productByStyle.get(
+                  basketProduct.style_id,
+                );
+
+              const demand =
+                demandByStyle.get(
+                  basketProduct.style_id,
+                );
+
+              return {
+                id: basketProduct.style_id,
+                supplierId:
+                  basket.supplier.id,
+                productName:
+                  basketProduct.product_name,
+                supplierName:
+                  basket.supplier.name,
+
+                suggestedQuantity:
+                  basketProduct.required_packs,
+
+                unitsPerPack:
+                  demand?.unitsPerPack ??
+                  product?.commercial_cost
+                    .units_per_pack ??
+                  null,
+
+                packCost:
+                  product?.commercial_cost
+                    .landed_cost_per_pack_gbp ??
+                  null,
+
+                currency: "GBP",
+
+                demandStatus:
+                  demand?.demand_status ??
+                  null,
+
+                urgency:
+                  demand?.urgency ?? null,
+
+                demandScore:
+                  demand?.demand_score ?? null,
+
+                sales7Days:
+                  demand?.sales7Days ?? null,
+
+                sales14Days:
+                  demand?.sales14Days ?? null,
+
+                sales30Days:
+                  demand?.sales30Days ?? null,
+
+                explanation:
+                  "Demand-supported bring-forward option selected by Supplier Basket Intelligence.",
+
+                supplierMoqPacks:
+                  demand?.productMoqPacks ??
+                  product?.supplier_moq_packs ??
+                  null,
+
+                sourceType:
+                  "bring_forward" as const,
+              };
+            },
+          );
+
+        return {
+          supplierId:
+            basket.supplier.id,
+
+          supplierName:
+            basket.supplier.name,
+
           leadTimeDays:
-            supplier?.default_lead_time_days ?? null,
+            supplier?.default_lead_time_days ??
+            null,
+
           minimumOrderValue:
-            supplier?.minimum_order_value ?? null,
-          minimumOrderPacks: supplier
-            ? packMinimumBySupplierId.get(supplier.id) ?? null
-            : null,
+            basket.supplier_minimum_value,
+
+          minimumOrderPacks:
+            basket.supplier_minimum_packs,
+
           minimumOrderCurrency:
-            supplier?.currency_code ?? "GBP",
+            basket.supplier.currency ?? "GBP",
+
           supplierMinimum,
+
           currency: "GBP",
-          lines: [],
+
+          purchasingState:
+            basket.purchasing_state,
+
+          requiredPacks:
+            basket.required_packs,
+
+          advisoryPacks:
+            basket.advisory_supported_packs,
+
+          intelligentBasketPacks:
+            basket.intelligent_basket_packs,
+
+          remainingShortfallPacks:
+            basket.remaining_shortfall_packs,
+
+          minimumSupportedByDemand:
+            basket.minimum_supported_by_demand,
+
+          lines: [
+            ...requiredLines,
+            ...bringForwardLines,
+          ],
         };
-
-      order.lines.push({
-        id: recommendation.id,
-        supplierId: commercialInput.supplierId,
-        productName: product.product_name,
-        supplierName: commercialInput.supplierName,
-        suggestedQuantity:
-          commercialInput.recommendedOrderQuantity,
-        unitsPerPack:
-          product.commercial_cost.units_per_pack,
-        packCost:
-          product.commercial_cost.landed_cost_per_pack_gbp,
-        currency: "GBP",
-        expectedProfit: recommendation.estimatedProfit,
-        confidence: recommendation.confidence,
-        explanation: recommendation.description,
-        priority: recommendation.priority,
-        supplierMoqPacks: product.supplier_moq_packs,
       });
-
-      orderMap.set(
-        commercialInput.supplierId,
-        order,
-      );
-    }
-  }
-
-  const orders = Array.from(orderMap.values());
 
   return (
     <VaultAppShell>
@@ -231,48 +387,48 @@ export default async function PurchaseOrdersPage() {
             <h1>Purchase Order Builder</h1>
 
             <p>
-              Execute trusted Advisor recommendations as
-              supplier-grouped draft orders without changing
-              their commercial logic.
+              Build durable supplier drafts from
+              canonical Purchase Intelligence and
+              Supplier Basket recommendations.
             </p>
           </div>
 
           <span className="purchase-order-state">
             {orders.length > 0
-              ? "Advisor draft ready"
-              : "Not ready"}
+              ? `${orders.length} supplier ${
+                  orders.length === 1
+                    ? "basket"
+                    : "baskets"
+                } available`
+              : "No buying basket"}
           </span>
         </header>
 
         {orders.length > 0 ? (
           <PurchaseOrderDraftWorkspace
-            advisorConfidence={
-              advisor?.analysis.averageConfidence ?? null
-            }
             orders={orders}
-            wallet={walletResult.data}
-            walletUnavailable={
-              walletResult.error !== null
-            }
+            wallet={wallet}
+            walletUnavailable={false}
           />
         ) : (
           <section className="purchase-order-empty purchase-order-readiness-empty">
             <p className="vault-eyebrow">
-              ADVISOR READINESS
+              PURCHASE INTELLIGENCE
             </p>
 
             <h2>
-              No commercial action is ready yet
+              No supplier buying basket is currently
+              available
             </h2>
 
             <p>
-              Vault OS needs stronger catalogue, supplier or
-              cost data before it can generate a trusted draft
-              purchase basket.
+              No canonical Supplier Basket currently
+              contains replenishment or
+              demand-supported bring-forward products.
             </p>
 
-            <a href="/advisor">
-              Review Advisor readiness &rarr;
+            <a href="/purchase-intelligence">
+              Review Purchase Intelligence &rarr;
             </a>
           </section>
         )}

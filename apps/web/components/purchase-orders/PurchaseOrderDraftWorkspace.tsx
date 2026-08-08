@@ -21,35 +21,78 @@ export type PurchaseOrderDraftLine = {
   supplierName: string;
 
   /**
-   * Quantity is expressed in supplier packs.
+   * Quantity is supplier packs.
    */
   suggestedQuantity: number;
 
   unitsPerPack: number | null;
   packCost: number | null;
   currency: string;
-  expectedProfit: number | null;
-  confidence: number;
+
+  demandStatus:
+    | "ACTIVE"
+    | "SLOW"
+    | "DORMANT"
+    | "NO_EVIDENCE"
+    | null;
+
+  urgency:
+    | "CRITICAL"
+    | "HIGH"
+    | "MEDIUM"
+    | "LOW"
+    | null;
+
+  demandScore: number | null;
+
+  sales7Days: number | null;
+  sales14Days: number | null;
+  sales30Days: number | null;
+
   explanation: string;
-  priority: string;
+
   supplierMoqPacks: number | null;
+
+  sourceType:
+    | "required"
+    | "bring_forward";
 };
 
 export type SupplierDraftOrder = {
   supplierId: string;
   supplierName: string;
+
   leadTimeDays: number | null;
+
   minimumOrderValue: number | null;
   minimumOrderPacks: number | null;
   minimumOrderCurrency: string;
+
   supplierMinimum: SupplierMinimum;
+
   currency: string;
+
+  purchasingState:
+    | "READY_TO_ORDER"
+    | "MINIMUM_NOT_JUSTIFIED"
+    | "BUILD_BASKET"
+    | "NO_DEMAND";
+
+  requiredPacks: number;
+  advisoryPacks: number;
+  intelligentBasketPacks: number;
+
+  remainingShortfallPacks:
+    | number
+    | null;
+
+  minimumSupportedByDemand: boolean;
+
   lines: PurchaseOrderDraftLine[];
 };
 
 type PurchaseOrderDraftWorkspaceProps = {
   orders: SupplierDraftOrder[];
-  advisorConfidence: number | null;
   wallet: PurchasingWalletData | null;
   walletUnavailable: boolean;
 };
@@ -78,7 +121,9 @@ function formatCurrency(
   }).format(value);
 }
 
-function formatState(value: string): string {
+function formatState(
+  value: string,
+): string {
   return value.replaceAll("_", " ");
 }
 
@@ -97,7 +142,6 @@ function createIdempotencyKey(): string {
 
 export function PurchaseOrderDraftWorkspace({
   orders,
-  advisorConfidence,
   wallet,
   walletUnavailable,
 }: PurchaseOrderDraftWorkspaceProps) {
@@ -107,7 +151,7 @@ export function PurchaseOrderDraftWorkspace({
     Object.fromEntries(
       orders.flatMap((order) =>
         order.lines.map((line) => [
-          line.id,
+          `${order.supplierId}:${line.id}`,
           line.suggestedQuantity,
         ]),
       ),
@@ -122,84 +166,119 @@ export function PurchaseOrderDraftWorkspace({
   const [isSaving, startSaving] =
     useTransition();
 
-  /*
-   * One stable idempotency key per supplier for the current
-   * basket state. If a save request is retried, the same key
-   * is reused so we cannot create a duplicate draft.
-   *
-   * When a quantity changes for a supplier, its key is
-   * cleared and the next save represents a new snapshot.
-   */
   const idempotencyKeys = useRef<
     Record<string, string>
   >({});
 
   const summary = useMemo(() => {
-    const orderSummaries = orders.map((order) => {
-      const lines = order.lines.map((line) => {
-        const quantity =
-          quantities[line.id] ??
-          line.suggestedQuantity;
+    const orderSummaries = orders.map(
+      (order) => {
+        const lines = order.lines.map(
+          (line) => {
+            const quantityKey =
+              `${order.supplierId}:${line.id}`;
 
-        const buying =
-          BuyingIntelligenceEngine.analyse({
-            id: line.id,
-            productName: line.productName,
-            supplierName: line.supplierName,
-            packs: quantity,
-            packCost: line.packCost,
-            currency: line.currency,
-          });
+            const quantity =
+              quantities[quantityKey] ??
+              line.suggestedQuantity;
 
-        return {
-          line,
-          quantity,
-          estimatedCost: buying.estimatedCost,
-          quantityChanged:
-            quantity !== line.suggestedQuantity,
-          moqSatisfied:
-            line.supplierMoqPacks === null ||
-            quantity >= line.supplierMoqPacks,
-        };
-      });
+            const buying =
+              BuyingIntelligenceEngine.analyse({
+                id: line.id,
+                productName:
+                  line.productName,
+                supplierName:
+                  line.supplierName,
+                packs: quantity,
+                packCost: line.packCost,
+                currency: line.currency,
+              });
 
-      const hasMissingCosts = lines.some(
-        (entry) =>
-          entry.estimatedCost === null,
-      );
+            return {
+              line,
+              quantity,
+              estimatedCost:
+                buying.estimatedCost,
 
-      const totalCost = hasMissingCosts
-        ? null
-        : lines.reduce(
+              quantityChanged:
+                quantity !==
+                line.suggestedQuantity,
+
+              moqSatisfied:
+                line.supplierMoqPacks ===
+                  null ||
+                quantity >=
+                  line.supplierMoqPacks,
+            };
+          },
+        );
+
+        const hasMissingCosts =
+          lines.some(
+            (entry) =>
+              entry.estimatedCost ===
+              null,
+          );
+
+        const totalCost =
+          hasMissingCosts
+            ? null
+            : lines.reduce(
+                (total, entry) =>
+                  total +
+                  (entry.estimatedCost ??
+                    0),
+                0,
+              );
+
+        const totalPacks =
+          lines.reduce(
             (total, entry) =>
-              total +
-              (entry.estimatedCost ?? 0),
+              total + entry.quantity,
             0,
           );
 
-      const totalPacks = lines.reduce(
-        (total, entry) =>
-          total + entry.quantity,
-        0,
-      );
+        const totalUnits =
+          lines.reduce(
+            (total, entry) =>
+              total +
+              (entry.line.unitsPerPack ===
+              null
+                ? 0
+                : entry.quantity *
+                  entry.line
+                    .unitsPerPack),
+            0,
+          );
 
-      const minimumOrderSatisfied =
-        order.minimumOrderValue === null ||
-        order.minimumOrderCurrency !==
-          order.currency ||
-        totalCost === null
-          ? null
-          : totalCost >=
-            order.minimumOrderValue;
+        const valueMinimumSatisfied =
+          order.minimumOrderValue ===
+            null ||
+          order.minimumOrderCurrency !==
+            order.currency ||
+          totalCost === null
+            ? null
+            : totalCost >=
+              order.minimumOrderValue;
 
-      return {
-        order,
-        lines,
-        totalCost,
-        totalPacks,
-        minimumOrderSatisfied,
-      };
-    });
+        const packMinimumSatisfied =
+          order.minimumOrderPacks ===
+          null
+            ? null
+            : totalPacks >=
+              order.minimumOrderPacks;
+
+        return {
+          order,
+          lines,
+          totalCost,
+          totalPacks,
+          totalUnits,
+          valueMinimumSatisfied,
+          packMinimumSatisfied,
+        };
+      },
+    );
 
     const hasMissingOrderTotals =
       orderSummaries.some(
@@ -222,16 +301,22 @@ export function PurchaseOrderDraftWorkspace({
         ? CapitalEngine.reviewPosition({
             ledgerBalanceGbp:
               wallet.ledger_balance_gbp,
+
             protectedReserveGbp:
               wallet.protected_reserve_gbp,
+
             committedOrdersGbp:
               wallet.committed_orders_gbp,
+
             manualSpendingLimitGbp:
               wallet.manual_spending_limit_gbp,
+
             proposedPurchaseGbp:
               basketCost,
+
             walletAvailable:
               !walletUnavailable,
+
             walletLastUpdated:
               wallet.wallet_last_updated,
           })
@@ -255,6 +340,21 @@ export function PurchaseOrderDraftWorkspace({
     0,
   );
 
+  const requiredLineCount =
+    orders.reduce(
+      (total, order) =>
+        total +
+        order.lines.filter(
+          (line) =>
+            line.sourceType ===
+            "required",
+        ).length,
+      0,
+    );
+
+  const bringForwardLineCount =
+    lineCount - requiredLineCount;
+
   const hasMoqFailure =
     summary.orders.some((order) =>
       order.lines.some(
@@ -275,6 +375,7 @@ export function PurchaseOrderDraftWorkspace({
         lines,
         totalCost,
         totalPacks,
+        totalUnits,
       } = supplierSummary;
 
       if (
@@ -316,30 +417,61 @@ export function PurchaseOrderDraftWorkspace({
 
           totalPacks,
 
+          /*
+           * Purchase Intelligence does not expose
+           * Advisor confidence. Do not manufacture one.
+           */
           recommendationConfidence:
-            advisorConfidence,
+            null,
 
           reasoning:
-            `Draft saved from the current trusted Advisor basket for ${order.supplierName}.`,
+            `Draft saved from canonical Purchase Intelligence supplier basket for ${order.supplierName}.`,
 
           sourceSnapshot: {
             source:
-              "purchase_order_builder",
+              "purchase_intelligence",
+
             supplierId:
               order.supplierId,
+
             supplierName:
               order.supplierName,
-            advisorConfidence,
-            minimumOrderValue:
-              order.minimumOrderValue,
-            minimumOrderPacks:
-              order.minimumOrderPacks,
-            minimumOrderCurrency:
-              order.minimumOrderCurrency,
+
+            purchasingState:
+              order.purchasingState,
+
+            requiredPacks:
+              order.requiredPacks,
+
+            advisoryPacks:
+              order.advisoryPacks,
+
+            intelligentBasketPacks:
+              order.intelligentBasketPacks,
+
             selectedTotalPacks:
               totalPacks,
+
+            selectedTotalUnits:
+              totalUnits,
+
             selectedEstimatedTotalGbp:
               totalCost,
+
+            minimumOrderValue:
+              order.minimumOrderValue,
+
+            minimumOrderPacks:
+              order.minimumOrderPacks,
+
+            minimumOrderCurrency:
+              order.minimumOrderCurrency,
+
+            remainingShortfallPacks:
+              order.remainingShortfallPacks,
+
+            minimumSupportedByDemand:
+              order.minimumSupportedByDemand,
           },
 
           lines: lines.map(
@@ -348,7 +480,8 @@ export function PurchaseOrderDraftWorkspace({
               quantity,
               estimatedCost,
             }) => ({
-              styleId: line.id,
+              styleId:
+                line.id,
 
               productName:
                 line.productName,
@@ -360,7 +493,8 @@ export function PurchaseOrderDraftWorkspace({
                 quantity,
 
               recommendedUnits:
-                line.unitsPerPack === null
+                line.unitsPerPack ===
+                null
                   ? null
                   : quantity *
                     line.unitsPerPack,
@@ -378,33 +512,67 @@ export function PurchaseOrderDraftWorkspace({
                 estimatedCost,
 
               expectedProfitGbp:
-                line.expectedProfit,
+                null,
 
               recommendationConfidence:
-                line.confidence,
+                null,
 
               recommendationPriority:
-                line.priority,
+                line.urgency,
 
               sourceRecommendationType:
-                "advisor",
+                line.sourceType ===
+                "required"
+                  ? "purchase_intelligence_required"
+                  : "purchase_intelligence_bring_forward",
 
               sourceSnapshot: {
+                source:
+                  "purchase_intelligence",
+
                 styleId:
                   line.id,
+
                 productName:
                   line.productName,
+
                 supplierName:
                   line.supplierName,
+
+                sourceType:
+                  line.sourceType,
+
+                demandStatus:
+                  line.demandStatus,
+
+                urgency:
+                  line.urgency,
+
+                demandScore:
+                  line.demandScore,
+
+                sales7Days:
+                  line.sales7Days,
+
+                sales14Days:
+                  line.sales14Days,
+
+                sales30Days:
+                  line.sales30Days,
+
                 originalSuggestedPacks:
                   line.suggestedQuantity,
+
                 selectedPacks:
                   quantity,
+
                 quantityChanged:
                   quantity !==
                   line.suggestedQuantity,
+
                 unitsPerPack:
                   line.unitsPerPack,
+
                 explanation:
                   line.explanation,
               },
@@ -452,44 +620,46 @@ export function PurchaseOrderDraftWorkspace({
       <section className="purchase-order-context">
         <article>
           <span>
-            Draft supplier orders
-          </span>
-
-          <strong>{orders.length}</strong>
-
-          <p>
-            Advisor recommendations grouped by
-            canonical supplier.
-          </p>
-        </article>
-
-        <article>
-          <span>
-            Recommended products
-          </span>
-
-          <strong>{lineCount}</strong>
-
-          <p>
-            Existing qualifying Advisor
-            recommendations.
-          </p>
-        </article>
-
-        <article>
-          <span>
-            Advisor confidence
+            Supplier baskets
           </span>
 
           <strong>
-            {advisorConfidence !== null
-              ? `${advisorConfidence}%`
-              : "Not ready"}
+            {orders.length}
           </strong>
 
           <p>
-            Average confidence from the staged
-            recommendations.
+            Canonical Supplier Basket
+            Intelligence results.
+          </p>
+        </article>
+
+        <article>
+          <span>
+            Required products
+          </span>
+
+          <strong>
+            {requiredLineCount}
+          </strong>
+
+          <p>
+            Products currently required for
+            replenishment.
+          </p>
+        </article>
+
+        <article>
+          <span>
+            Bring-forward options
+          </span>
+
+          <strong>
+            {bringForwardLineCount}
+          </strong>
+
+          <p>
+            Demand-supported additions selected
+            toward supplier minimums.
           </p>
         </article>
       </section>
@@ -500,7 +670,9 @@ export function PurchaseOrderDraftWorkspace({
           lines,
           totalCost,
           totalPacks,
-          minimumOrderSatisfied,
+          totalUnits,
+          valueMinimumSatisfied,
+          packMinimumSatisfied,
         }) => (
           <section
             className="purchase-order-supplier-draft"
@@ -509,7 +681,7 @@ export function PurchaseOrderDraftWorkspace({
             <div className="purchase-order-section-heading">
               <div>
                 <p className="vault-eyebrow">
-                  Draft Purchase Order
+                  BUYING BASKET
                 </p>
 
                 <h2>
@@ -522,28 +694,67 @@ export function PurchaseOrderDraftWorkspace({
                     ? "Lead time unavailable"
                     : `${order.leadTimeDays} day lead time`}
 
-                  {order.minimumOrderValue ===
-                  null
-                    ? " · Minimum order unavailable"
-                    : ` · Minimum order ${formatCurrency(
-                        order.minimumOrderValue,
-                        order.minimumOrderCurrency,
-                      )}`}
+                  {" · "}
 
-                  {order.minimumOrderPacks ===
-                  null
-                    ? " · Pack minimum unavailable"
-                    : order.minimumOrderPacks ===
-                        0
-                      ? " · No supplier pack minimum"
-                      : ` · ${order.minimumOrderPacks} mixed-pack minimum (not evaluated)`}
+                  {formatState(
+                    order.purchasingState,
+                  )}
                 </p>
               </div>
 
               <span>
-                {lines.length} lines
+                {lines.length}{" "}
+                {lines.length === 1
+                  ? "line"
+                  : "lines"}
               </span>
             </div>
+
+            <div className="purchase-order-supplier-totals">
+              <div>
+                <span>
+                  Required packs
+                </span>
+
+                <strong>
+                  {order.requiredPacks}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Bring-forward packs
+                </span>
+
+                <strong>
+                  {order.advisoryPacks}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Intelligent basket
+                </span>
+
+                <strong>
+                  {
+                    order.intelligentBasketPacks
+                  }{" "}
+                  packs
+                </strong>
+              </div>
+            </div>
+
+            {order.purchasingState ===
+              "MINIMUM_NOT_JUSTIFIED" ? (
+              <p className="purchase-order-source-warning">
+                Current demand does not justify
+                enough additional products to
+                reach the supplier minimum.
+                Saving remains a draft only and
+                does not place an order.
+              </p>
+            ) : null}
 
             <div className="purchase-order-lines-table">
               <div
@@ -551,16 +762,12 @@ export function PurchaseOrderDraftWorkspace({
                 aria-hidden="true"
               >
                 <span>Product</span>
-                <span>Quantity</span>
-                <span>
-                  Supplier cost
-                </span>
+                <span>Packs</span>
+                <span>Units</span>
+                <span>Pack cost</span>
                 <span>Line cost</span>
-                <span>
-                  Expected profit
-                </span>
-                <span>Confidence</span>
-                <span>Status</span>
+                <span>Demand</span>
+                <span>Urgency</span>
               </div>
 
               {lines.map(
@@ -568,185 +775,199 @@ export function PurchaseOrderDraftWorkspace({
                   line,
                   quantity,
                   estimatedCost,
-                  quantityChanged,
                   moqSatisfied,
-                }) => (
-                  <article
-                    className="purchase-order-editable-line"
-                    key={line.id}
-                  >
-                    <div className="purchase-order-product-cell">
-                      <strong>
-                        {line.productName}
-                      </strong>
+                }) => {
+                  const quantityKey =
+                    `${order.supplierId}:${line.id}`;
 
-                      <span>
-                        {line.supplierName}
-                      </span>
+                  return (
+                    <article
+                      className="purchase-order-editable-line"
+                      key={quantityKey}
+                    >
+                      <div className="purchase-order-product-cell">
+                        <strong>
+                          {line.productName}
+                        </strong>
 
-                      <p>
-                        {line.explanation}
-                      </p>
-                    </div>
+                        <span>
+                          {line.sourceType ===
+                          "required"
+                            ? "Required replenishment"
+                            : "Demand-supported bring-forward"}
+                        </span>
 
-                    <div>
-                      <span className="purchase-order-mobile-label">
-                        Quantity
-                      </span>
+                        <p>
+                          {line.explanation}
+                        </p>
+                      </div>
 
-                      <small>
-                        Suggested{" "}
-                        {
-                          line.suggestedQuantity
-                        }{" "}
-                        packs
-                      </small>
+                      <div>
+                        <span className="purchase-order-mobile-label">
+                          Packs
+                        </span>
 
-                      <input
-                        aria-label={`Quantity for ${line.productName}`}
-                        min={1}
-                        onChange={(
-                          event,
-                        ) => {
-                          const next =
-                            Math.max(
-                              1,
-                              Number(
-                                event
-                                  .target
-                                  .value,
-                              ) || 1,
+                        <small>
+                          Suggested{" "}
+                          {
+                            line.suggestedQuantity
+                          }
+                        </small>
+
+                        <input
+                          aria-label={`Pack quantity for ${line.productName}`}
+                          min={1}
+                          onChange={(
+                            event,
+                          ) => {
+                            const next =
+                              Math.max(
+                                1,
+                                Number(
+                                  event
+                                    .target
+                                    .value,
+                                ) || 1,
+                              );
+
+                            delete idempotencyKeys
+                              .current[
+                              line.supplierId
+                            ];
+
+                            setSaveState({
+                              state:
+                                "idle",
+                            });
+
+                            setQuantities(
+                              (
+                                current,
+                              ) => ({
+                                ...current,
+                                [quantityKey]:
+                                  next,
+                              }),
                             );
+                          }}
+                          step={1}
+                          type="number"
+                          value={quantity}
+                        />
 
-                          delete idempotencyKeys
-                            .current[
-                            line.supplierId
-                          ];
+                        {!moqSatisfied ? (
+                          <small className="is-warning">
+                            Below product MOQ
+                          </small>
+                        ) : null}
+                      </div>
 
-                          setSaveState({
-                            state:
-                              "idle",
-                          });
+                      <div>
+                        <span className="purchase-order-mobile-label">
+                          Units
+                        </span>
 
-                          setQuantities(
-                            (
-                              current,
-                            ) => ({
-                              ...current,
-                              [line.id]:
-                                next,
-                            }),
-                          );
-                        }}
-                        step={1}
-                        type="number"
-                        value={quantity}
-                      />
+                        <strong>
+                          {line.unitsPerPack ===
+                          null
+                            ? "Unavailable"
+                            : quantity *
+                              line.unitsPerPack}
+                        </strong>
 
-                      {line.unitsPerPack !==
-                      null ? (
-                        <small>
-                          {quantity *
-                            line.unitsPerPack}{" "}
-                          units
-                        </small>
-                      ) : null}
-                    </div>
-
-                    <div>
-                      <span className="purchase-order-mobile-label">
-                        Supplier cost
-                      </span>
-
-                      <strong>
-                        {line.packCost ===
-                        null
-                          ? "Unavailable"
-                          : formatCurrency(
-                              line.packCost,
-                              line.currency,
-                            )}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span className="purchase-order-mobile-label">
-                        Line cost
-                      </span>
-
-                      <strong>
-                        {estimatedCost ===
-                        null
-                          ? "Unavailable"
-                          : formatCurrency(
-                              estimatedCost,
-                              line.currency,
-                            )}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span className="purchase-order-mobile-label">
-                        Expected profit
-                      </span>
-
-                      <strong>
-                        {line.expectedProfit ===
-                        null
-                          ? "Unavailable"
-                          : formatCurrency(
-                              line.expectedProfit,
-                            )}
-                      </strong>
-
-                      {quantityChanged &&
-                      line.expectedProfit !==
+                        {line.unitsPerPack !==
                         null ? (
-                        <small>
-                          At suggested
-                          quantity
-                        </small>
-                      ) : null}
-                    </div>
+                          <small>
+                            {
+                              line.unitsPerPack
+                            }{" "}
+                            per pack
+                          </small>
+                        ) : null}
+                      </div>
 
-                    <div>
-                      <span className="purchase-order-mobile-label">
-                        Confidence
-                      </span>
+                      <div>
+                        <span className="purchase-order-mobile-label">
+                          Pack cost
+                        </span>
 
-                      <strong>
-                        {line.confidence}%
-                      </strong>
-                    </div>
+                        <strong>
+                          {line.packCost ===
+                          null
+                            ? "Unavailable"
+                            : formatCurrency(
+                                line.packCost,
+                                line.currency,
+                              )}
+                        </strong>
+                      </div>
 
-                    <div>
-                      <span className="purchase-order-mobile-label">
-                        Status
-                      </span>
+                      <div>
+                        <span className="purchase-order-mobile-label">
+                          Line cost
+                        </span>
 
-                      <strong
-                        className={
-                          moqSatisfied
-                            ? "is-ready"
-                            : "is-warning"
-                        }
-                      >
-                        {moqSatisfied
-                          ? formatState(
-                              line.priority,
-                            )
-                          : "Below MOQ"}
-                      </strong>
-                    </div>
-                  </article>
-                ),
+                        <strong>
+                          {estimatedCost ===
+                          null
+                            ? "Unavailable"
+                            : formatCurrency(
+                                estimatedCost,
+                                line.currency,
+                              )}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span className="purchase-order-mobile-label">
+                          Demand
+                        </span>
+
+                        <strong>
+                          {line.demandStatus ??
+                            "Unavailable"}
+                        </strong>
+
+                        {line.demandScore !==
+                        null ? (
+                          <small>
+                            Score{" "}
+                            {
+                              line.demandScore
+                            }
+                          </small>
+                        ) : null}
+                      </div>
+
+                      <div>
+                        <span className="purchase-order-mobile-label">
+                          Urgency
+                        </span>
+
+                        <strong
+                          className={
+                            line.urgency ===
+                              "CRITICAL" ||
+                            line.urgency ===
+                              "HIGH"
+                              ? "is-warning"
+                              : "is-ready"
+                          }
+                        >
+                          {line.urgency ??
+                            "Not applicable"}
+                        </strong>
+                      </div>
+                    </article>
+                  );
+                },
               )}
             </div>
 
             <div className="purchase-order-supplier-totals">
               <div>
                 <span>
-                  Supplier order total
+                  Supplier basket cost
                 </span>
 
                 <strong>
@@ -761,12 +982,50 @@ export function PurchaseOrderDraftWorkspace({
 
               <div>
                 <span>
-                  Supplier minimum order
+                  Total packs / units
+                </span>
+
+                <strong>
+                  {totalPacks} packs
+                  {totalUnits > 0
+                    ? ` / ${totalUnits} units`
+                    : ""}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Supplier pack minimum
                 </span>
 
                 <strong
                   className={
-                    minimumOrderSatisfied ===
+                    packMinimumSatisfied ===
+                    false
+                      ? "is-warning"
+                      : "is-ready"
+                  }
+                >
+                  {order.minimumOrderPacks ===
+                  null
+                    ? "Unavailable"
+                    : order.minimumOrderPacks ===
+                        0
+                      ? "Not applicable"
+                      : packMinimumSatisfied
+                        ? "Satisfied"
+                        : `${order.minimumOrderPacks} packs required`}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Supplier value minimum
+                </span>
+
+                <strong
+                  className={
+                    valueMinimumSatisfied ===
                     false
                       ? "is-warning"
                       : "is-ready"
@@ -775,36 +1034,18 @@ export function PurchaseOrderDraftWorkspace({
                   {order.minimumOrderValue ===
                   null
                     ? "Unavailable"
-                    : minimumOrderSatisfied ===
+                    : valueMinimumSatisfied ===
                         null
-                      ? "Currency comparison unavailable"
-                      : minimumOrderSatisfied
+                      ? "Comparison unavailable"
+                      : valueMinimumSatisfied
                         ? "Satisfied"
-                        : "Attention required"}
-                </strong>
-              </div>
-
-              <div>
-                <span>
-                  Total packs across supplier
-                  basket
-                </span>
-
-                <strong>
-                  {totalPacks}
+                        : formatCurrency(
+                            order.minimumOrderValue,
+                            order.minimumOrderCurrency,
+                          )}
                 </strong>
               </div>
             </div>
-
-            {lines.some(
-              (entry) =>
-                !entry.moqSatisfied,
-            ) ? (
-              <p className="purchase-order-source-warning">
-                One or more quantities are
-                below the existing product MOQ.
-              </p>
-            ) : null}
           </section>
         ),
       )}
@@ -813,7 +1054,7 @@ export function PurchaseOrderDraftWorkspace({
         <div className="purchase-order-section-heading">
           <div>
             <p className="vault-eyebrow">
-              Order Summary
+              ORDER SUMMARY
             </p>
 
             <h2>
@@ -940,7 +1181,7 @@ export function PurchaseOrderDraftWorkspace({
           title={
             hasMoqFailure
               ? "Resolve quantities below product MOQ before saving."
-              : "Save the current supplier baskets as durable purchase-order drafts."
+              : "Save the current canonical supplier baskets as durable purchase-order drafts."
           }
         >
           {isSaving
