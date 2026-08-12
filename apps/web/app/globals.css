@@ -3001,6 +3001,22 @@ input:focus-visible {
   background: var(--vault-panel);
 }
 
+.purchase-order-actions form {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.purchase-order-actions form p {
+  margin: 0;
+  color: var(--vault-muted);
+  font-size: 11px;
+}
+
+.purchase-order-actions form p[role="alert"] {
+  color: var(--vault-warning);
+}
+
 .purchase-order-actions a,
 .purchase-order-actions button {
   min-height: 42px;
@@ -3102,6 +3118,11 @@ input:focus-visible {
   .purchase-order-actions a,
   .purchase-order-actions button {
     width: 100%;
+  }
+
+  .purchase-order-actions form {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

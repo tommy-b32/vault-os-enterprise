@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import VaultAppShell from "@/components/layout/VaultAppShell";
+import { PurchaseOrderApprovalButton } from "@/components/purchase-orders/PurchaseOrderApprovalButton";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
-import { getPurchaseOrderDraft } from "@/lib/purchase-orders/PurchaseOrderRepository";
+import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
 
 export const dynamic = "force-dynamic";
 
@@ -64,8 +65,7 @@ export default async function PurchaseOrderDetailPage({
 
   const { id } = await params;
 
-  const draft =
-    await getPurchaseOrderDraft(id);
+  const draft = await getPurchaseOrder(id);
 
   if (!draft) {
     notFound();
@@ -149,6 +149,25 @@ export default async function PurchaseOrderDetailPage({
               {totalUnits}
             </strong>
           </article>
+
+          {draft.status === "approved" && draft.approved_at ? (
+            <article>
+              <span>Approved</span>
+              <strong>
+                {new Intl.DateTimeFormat("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }).format(new Date(draft.approved_at))}
+                {" by "}
+                {draft.approving_operator?.display_name ??
+                  draft.approving_operator?.email ??
+                  "Vault operator"}
+              </strong>
+            </article>
+          ) : null}
         </section>
 
         <section className="purchase-order-supplier-draft">
@@ -297,13 +316,9 @@ export default async function PurchaseOrderDetailPage({
             ← Back to Purchase Orders
           </Link>
 
-          <button
-            disabled
-            type="button"
-            title="Approval workflow will be added in a later sprint."
-          >
-            Approve Draft
-          </button>
+          {draft.status === "draft" ? (
+            <PurchaseOrderApprovalButton purchaseOrderId={draft.id} />
+          ) : null}
 
           <button
             disabled

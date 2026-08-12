@@ -13,7 +13,7 @@ import {
 } from "@/lib/brain/PurchaseIntelligenceEngine";
 import { getCatalogueData } from "@/lib/catalogue";
 import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
-import { getPurchaseOrderDrafts } from "@/lib/purchase-orders/PurchaseOrderRepository";
+import { getPurchaseOrders } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
 
@@ -57,8 +57,7 @@ function formatDate(value: string): string {
 export default async function PurchaseOrdersPage() {
   await requireAuthenticatedOperator();
 
-  const savedDraftsPromise =
-    getPurchaseOrderDrafts();
+  const savedDraftsPromise = getPurchaseOrders();
 
   const [
     catalogue,
@@ -473,19 +472,18 @@ export default async function PurchaseOrdersPage() {
                 SAVED PURCHASE ORDERS
               </p>
 
-              <h2>Saved drafts</h2>
+              <h2>Saved purchase orders</h2>
 
               <p>
-                Durable snapshots of buying baskets
-                that have already been saved.
+                Durable draft and approved snapshots of buying baskets.
               </p>
             </div>
 
             <span>
               {savedDrafts.length}{" "}
               {savedDrafts.length === 1
-                ? "draft"
-                : "drafts"}
+                ? "order"
+                : "orders"}
             </span>
           </div>
 

@@ -41,6 +41,14 @@ export type SavedPurchaseOrderDraft = {
   createdAt: string;
 };
 
+export type PurchaseOrderApprovalResult = {
+  purchaseOrderId: string;
+  status: "approved";
+  approvedByOperatorId: string;
+  approvedAt: string;
+  transitioned: boolean;
+};
+
 type SupplierNameRow = {
   id: string;
   supplier_name: string;
@@ -249,7 +257,7 @@ export async function createPurchaseOrderDraft(
   };
 }
 
-export async function getPurchaseOrderDrafts() {
+export async function getPurchaseOrders() {
   const { data, error } =
     await supabaseAdmin
       .from("vault_purchase_orders")
@@ -262,6 +270,8 @@ export async function getPurchaseOrderDrafts() {
         total_packs,
         recommendation_confidence,
         created_by_operator_id,
+        approved_by_operator_id,
+        approved_at,
         reasoning,
         source_snapshot,
         created_at,
@@ -278,7 +288,7 @@ export async function getPurchaseOrderDrafts() {
           source_recommendation_type
         )
       `)
-      .eq("status", "draft")
+      .in("status", ["draft", "approved"])
       .order("created_at", {
         ascending: false,
       });
@@ -306,7 +316,7 @@ export async function getPurchaseOrderDrafts() {
   }));
 }
 
-export async function getPurchaseOrderDraft(
+export async function getPurchaseOrder(
   id: string,
 ) {
   const { data, error } =
@@ -319,7 +329,7 @@ export async function getPurchaseOrderDraft(
         )
       `)
       .eq("id", id)
-      .eq("status", "draft")
+      .in("status", ["draft", "approved"])
       .maybeSingle();
 
   if (error) {
@@ -330,10 +340,20 @@ export async function getPurchaseOrderDraft(
     return null;
   }
 
-  const supplierNames =
-    await getSupplierNames([
-      data.supplier_id,
-    ]);
+  const [supplierNames, approvingOperator] = await Promise.all([
+    getSupplierNames([data.supplier_id]),
+    data.approved_by_operator_id
+      ? supabaseAdmin
+          .from("vault_operators")
+          .select("display_name, email")
+          .eq("id", data.approved_by_operator_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (approvingOperator.error) {
+    throw approvingOperator.error;
+  }
 
   return {
     ...data,
@@ -344,5 +364,72 @@ export async function getPurchaseOrderDraft(
           "Unknown supplier",
       },
     ],
+    approving_operator: approvingOperator.data,
   };
+}
+
+export async function approvePurchaseOrderDraft(input: {
+  purchaseOrderId: string;
+  operatorId: string;
+  approvedAt?: string;
+}): Promise<PurchaseOrderApprovalResult> {
+  const approvedAt = input.approvedAt ?? new Date().toISOString();
+
+  const transition = await supabaseAdmin
+    .from("vault_purchase_orders")
+    .update({
+      status: "approved",
+      approved_by_operator_id: input.operatorId,
+      approved_at: approvedAt,
+    })
+    .eq("id", input.purchaseOrderId)
+    .eq("status", "draft")
+    .select("id, status, approved_by_operator_id, approved_at")
+    .maybeSingle();
+
+  if (transition.error) {
+    throw transition.error;
+  }
+
+  if (transition.data) {
+    return {
+      purchaseOrderId: transition.data.id,
+      status: "approved",
+      approvedByOperatorId: transition.data.approved_by_operator_id,
+      approvedAt: transition.data.approved_at,
+      transitioned: true,
+    };
+  }
+
+  const current = await supabaseAdmin
+    .from("vault_purchase_orders")
+    .select("id, status, approved_by_operator_id, approved_at")
+    .eq("id", input.purchaseOrderId)
+    .maybeSingle();
+
+  if (current.error) {
+    throw current.error;
+  }
+
+  if (!current.data) {
+    throw new Error("Purchase order was not found.");
+  }
+
+  if (
+    current.data.status === "approved" &&
+    current.data.approved_by_operator_id &&
+    current.data.approved_at
+  ) {
+    return {
+      purchaseOrderId: current.data.id,
+      status: "approved",
+      approvedByOperatorId: current.data.approved_by_operator_id,
+      approvedAt: current.data.approved_at,
+      transitioned: false,
+    };
+  }
+
+  throw new Error(
+    `Purchase order cannot be approved from status '${current.data.status}'.`,
+  );
 }
