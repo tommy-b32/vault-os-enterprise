@@ -1,8 +1,19 @@
 export type SupplierOrderPreparationLine = {
+  styleId?: string;
   productName: string;
   recommendedPacks: number;
   recommendedUnits: number | null;
   unitsPerPack: number | null;
+  productImageUrl?: string | null;
+  productImageSource?: string | null;
+  productImageCapturedAt?: string | null;
+};
+
+export type PreparedSupplierOrderLine = SupplierOrderPreparationLine & {
+  styleId: string;
+  productImageUrl: string | null;
+  productImageSource: string | null;
+  productImageCapturedAt: string | null;
 };
 
 export type PreparedSupplierOrder = {
@@ -10,7 +21,57 @@ export type PreparedSupplierOrder = {
   orderText: string;
   totalPacks: number;
   totalUnits: number | null;
+  lines: PreparedSupplierOrderLine[];
 };
+
+export function readProductImageSnapshot(
+  sourceSnapshot: unknown,
+): Pick<
+  PreparedSupplierOrderLine,
+  "productImageUrl" | "productImageSource" | "productImageCapturedAt"
+> {
+  if (
+    !sourceSnapshot ||
+    typeof sourceSnapshot !== "object" ||
+    Array.isArray(sourceSnapshot)
+  ) {
+    return {
+      productImageUrl: null,
+      productImageSource: null,
+      productImageCapturedAt: null,
+    };
+  }
+
+  const snapshot = sourceSnapshot as Record<string, unknown>;
+  const imageUrl =
+    typeof snapshot.productImageUrl === "string"
+      ? snapshot.productImageUrl
+      : null;
+  const trustedUrl = imageUrl
+    ? (() => {
+        try {
+          const url = new URL(imageUrl);
+          return url.protocol === "https:" || url.protocol === "http:"
+            ? url.toString()
+            : null;
+        } catch {
+          return null;
+        }
+      })()
+    : null;
+
+  return {
+    productImageUrl: trustedUrl,
+    productImageSource:
+      trustedUrl && typeof snapshot.productImageSource === "string"
+        ? snapshot.productImageSource
+        : null,
+    productImageCapturedAt:
+      trustedUrl && typeof snapshot.productImageCapturedAt === "string"
+        ? snapshot.productImageCapturedAt
+        : null,
+  };
+}
 
 export function createSupplierOrderText(input: {
   supplierName: string;
@@ -62,6 +123,13 @@ export function createSupplierOrderText(input: {
     supplierName: input.supplierName,
     totalPacks,
     totalUnits,
+    lines: input.lines.map((line) => ({
+      ...line,
+      styleId: line.styleId ?? "",
+      productImageUrl: line.productImageUrl ?? null,
+      productImageSource: line.productImageSource ?? null,
+      productImageCapturedAt: line.productImageCapturedAt ?? null,
+    })),
     orderText: [
       "Purchase Order",
       `Supplier: ${input.supplierName}`,

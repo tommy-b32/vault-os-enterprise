@@ -3,6 +3,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
   createSupplierOrderText,
+  readProductImageSnapshot,
   type PreparedSupplierOrder,
 } from "@/lib/purchase-orders/SupplierOrderPreparation";
 
@@ -57,6 +58,68 @@ type SupplierNameRow = {
   id: string;
   supplier_name: string;
 };
+
+type StyleProductRow = {
+  style_id: string;
+  parent_product_id: string;
+};
+
+type CanonicalProductImageRow = {
+  id: string;
+  featured_image_url: string | null;
+};
+
+async function getCanonicalProductImageSnapshots(
+  styleIds: string[],
+  capturedAt: string,
+): Promise<Map<string, Record<string, string | null>>> {
+  const styles = await supabaseAdmin
+    .from("vault_style_catalogue_intelligence")
+    .select("style_id, parent_product_id")
+    .in("style_id", Array.from(new Set(styleIds)));
+
+  if (styles.error) {
+    throw styles.error;
+  }
+
+  const styleRows = (styles.data ?? []) as StyleProductRow[];
+  const productIds = Array.from(
+    new Set(styleRows.map((style) => style.parent_product_id)),
+  );
+  if (productIds.length === 0) {
+    return new Map();
+  }
+
+  const products = await supabaseAdmin
+    .from("vault_products")
+    .select("id, featured_image_url")
+    .in(
+      "id",
+      productIds,
+    );
+
+  if (products.error) {
+    throw products.error;
+  }
+
+  const imageByProductId = new Map(
+    ((products.data ?? []) as CanonicalProductImageRow[]).map((product) => [
+      product.id,
+      product.featured_image_url,
+    ]),
+  );
+
+  return new Map(
+    styleRows.map((style) => [
+      style.style_id,
+      {
+        productImageUrl: imageByProductId.get(style.parent_product_id) ?? null,
+        productImageSource: "vault_products.featured_image_url",
+        productImageCapturedAt: capturedAt,
+      },
+    ]),
+  );
+}
 
 function assertDraftInput(
   input: CreatePurchaseOrderDraftInput,
@@ -186,6 +249,11 @@ export async function createPurchaseOrderDraft(
     };
   }
 
+  const imageSnapshots = await getCanonicalProductImageSnapshots(
+    input.lines.map((line) => line.styleId),
+    new Date().toISOString(),
+  );
+
   const header = await supabaseAdmin
     .from("vault_purchase_orders")
     .insert({
@@ -235,7 +303,14 @@ export async function createPurchaseOrderDraft(
     recommendation_confidence: line.recommendationConfidence,
     recommendation_priority: line.recommendationPriority,
     source_recommendation_type: line.sourceRecommendationType,
-    source_snapshot: line.sourceSnapshot,
+    source_snapshot: {
+      ...line.sourceSnapshot,
+      ...(imageSnapshots.get(line.styleId) ?? {
+        productImageUrl: null,
+        productImageSource: null,
+        productImageCapturedAt: null,
+      }),
+    },
   }));
 
   const lines = await supabaseAdmin
@@ -449,11 +524,13 @@ export async function prepareApprovedPurchaseOrder(
       status,
       vault_purchase_order_lines (
         id,
+        style_id,
         product_name,
         recommended_packs,
         recommended_units,
         units_per_pack,
-        created_at
+        created_at,
+        source_snapshot
       )
     `)
     .eq("id", purchaseOrderId)
@@ -496,10 +573,12 @@ export async function prepareApprovedPurchaseOrder(
           left.id.localeCompare(right.id),
       )
       .map((line) => ({
+        styleId: line.style_id,
         productName: line.product_name,
         recommendedPacks: line.recommended_packs,
         recommendedUnits: line.recommended_units,
         unitsPerPack: line.units_per_pack,
+        ...readProductImageSnapshot(line.source_snapshot),
       })),
   });
 }

@@ -64,6 +64,40 @@ export function SupplierOrderPreparation({
 
           <pre>{state.preparedOrder.orderText}</pre>
 
+          <div className="purchase-order-preparation-lines">
+            {state.preparedOrder.lines.map((line) => (
+              <article key={line.styleId}>
+                <div className="purchase-order-preparation-image">
+                  {line.productImageUrl ? (
+                    // Canonical URLs are captured server-side from vault_products.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      alt={line.productName}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      src={line.productImageUrl}
+                    />
+                  ) : (
+                    <span>Image unavailable for this saved snapshot.</span>
+                  )}
+                </div>
+                <div>
+                  <strong>{line.productName}</strong>
+                  <span>
+                    {line.recommendedPacks}{" "}
+                    {line.recommendedPacks === 1 ? "pack" : "packs"}
+                    {" / "}
+                    {line.recommendedUnits === null
+                      ? "Units unavailable"
+                      : `${line.recommendedUnits} ${
+                          line.recommendedUnits === 1 ? "unit" : "units"
+                        }`}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+
           <button type="button" onClick={copyOrderText}>
             {copyState === "copied" ? "Copied" : "Copy Order Text"}
           </button>

@@ -18,6 +18,16 @@ export type PrepareSupplierOrderState = {
     orderText: string;
     totalPacks: number;
     totalUnits: number | null;
+    lines: Array<{
+      styleId: string;
+      productName: string;
+      recommendedPacks: number;
+      recommendedUnits: number | null;
+      unitsPerPack: number | null;
+      productImageUrl: string | null;
+      productImageSource: string | null;
+      productImageCapturedAt: string | null;
+    }>;
   } | null;
 };
 
