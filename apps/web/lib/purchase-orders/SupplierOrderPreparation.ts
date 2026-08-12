@@ -4,16 +4,16 @@ export type SupplierOrderPreparationLine = {
   recommendedPacks: number;
   recommendedUnits: number | null;
   unitsPerPack: number | null;
-  productImageUrl?: string | null;
-  productImageSource?: string | null;
-  productImageCapturedAt?: string | null;
+  supplierImageUrl?: string | null;
+  supplierImageSource?: string | null;
+  supplierImageCapturedAt?: string | null;
 };
 
 export type PreparedSupplierOrderLine = SupplierOrderPreparationLine & {
   styleId: string;
-  productImageUrl: string | null;
-  productImageSource: string | null;
-  productImageCapturedAt: string | null;
+  supplierImageUrl: string | null;
+  supplierImageSource: string | null;
+  supplierImageCapturedAt: string | null;
 };
 
 export type PreparedSupplierOrder = {
@@ -24,11 +24,11 @@ export type PreparedSupplierOrder = {
   lines: PreparedSupplierOrderLine[];
 };
 
-export function readProductImageSnapshot(
+export function readSupplierImageSnapshot(
   sourceSnapshot: unknown,
 ): Pick<
   PreparedSupplierOrderLine,
-  "productImageUrl" | "productImageSource" | "productImageCapturedAt"
+  "supplierImageUrl" | "supplierImageSource" | "supplierImageCapturedAt"
 > {
   if (
     !sourceSnapshot ||
@@ -36,19 +36,27 @@ export function readProductImageSnapshot(
     Array.isArray(sourceSnapshot)
   ) {
     return {
-      productImageUrl: null,
-      productImageSource: null,
-      productImageCapturedAt: null,
+      supplierImageUrl: null,
+      supplierImageSource: null,
+      supplierImageCapturedAt: null,
     };
   }
 
   const snapshot = sourceSnapshot as Record<string, unknown>;
   const imageUrl =
-    typeof snapshot.productImageUrl === "string"
-      ? snapshot.productImageUrl
+    typeof snapshot.supplierImageUrl === "string"
+      ? snapshot.supplierImageUrl
       : null;
   const trustedUrl = imageUrl
     ? (() => {
+        if (
+          /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=\r\n]+$/i.test(
+            imageUrl,
+          )
+        ) {
+          return imageUrl;
+        }
+
         try {
           const url = new URL(imageUrl);
           return url.protocol === "https:" || url.protocol === "http:"
@@ -61,14 +69,14 @@ export function readProductImageSnapshot(
     : null;
 
   return {
-    productImageUrl: trustedUrl,
-    productImageSource:
-      trustedUrl && typeof snapshot.productImageSource === "string"
-        ? snapshot.productImageSource
+    supplierImageUrl: trustedUrl,
+    supplierImageSource:
+      trustedUrl && typeof snapshot.supplierImageSource === "string"
+        ? snapshot.supplierImageSource
         : null,
-    productImageCapturedAt:
-      trustedUrl && typeof snapshot.productImageCapturedAt === "string"
-        ? snapshot.productImageCapturedAt
+    supplierImageCapturedAt:
+      trustedUrl && typeof snapshot.supplierImageCapturedAt === "string"
+        ? snapshot.supplierImageCapturedAt
         : null,
   };
 }
@@ -126,9 +134,9 @@ export function createSupplierOrderText(input: {
     lines: input.lines.map((line) => ({
       ...line,
       styleId: line.styleId ?? "",
-      productImageUrl: line.productImageUrl ?? null,
-      productImageSource: line.productImageSource ?? null,
-      productImageCapturedAt: line.productImageCapturedAt ?? null,
+      supplierImageUrl: line.supplierImageUrl ?? null,
+      supplierImageSource: line.supplierImageSource ?? null,
+      supplierImageCapturedAt: line.supplierImageCapturedAt ?? null,
     })),
     orderText: [
       "Purchase Order",

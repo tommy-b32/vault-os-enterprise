@@ -3,7 +3,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
   createSupplierOrderText,
-  readProductImageSnapshot,
+  readSupplierImageSnapshot,
   type PreparedSupplierOrder,
 } from "@/lib/purchase-orders/SupplierOrderPreparation";
 
@@ -64,12 +64,20 @@ type StyleProductRow = {
   parent_product_id: string;
 };
 
-type CanonicalProductImageRow = {
+type SupplierCatalogueArchiveRow = {
   id: string;
-  featured_image_url: string | null;
 };
 
-async function getCanonicalProductImageSnapshots(
+type SupplierCatalogueReviewItemRow = {
+  id: string;
+  linked_product_id: string;
+  supplier_product_evidence: unknown;
+  decision_metadata: Record<string, unknown>;
+  decided_at: string;
+};
+
+async function getCanonicalSupplierImageSnapshots(
+  supplierId: string,
   styleIds: string[],
   capturedAt: string,
 ): Promise<Map<string, Record<string, string | null>>> {
@@ -90,35 +98,85 @@ async function getCanonicalProductImageSnapshots(
     return new Map();
   }
 
-  const products = await supabaseAdmin
-    .from("vault_products")
-    .select("id, featured_image_url")
-    .in(
-      "id",
-      productIds,
-    );
+  const archives = await supabaseAdmin
+    .from("vault_supplier_catalogue_archives")
+    .select("id")
+    .eq("supplier_id", supplierId);
 
-  if (products.error) {
-    throw products.error;
+  if (archives.error) {
+    throw archives.error;
   }
 
-  const imageByProductId = new Map(
-    ((products.data ?? []) as CanonicalProductImageRow[]).map((product) => [
-      product.id,
-      product.featured_image_url,
-    ]),
-  );
+  const archiveIds = ((archives.data ?? []) as SupplierCatalogueArchiveRow[])
+    .map((archive) => archive.id);
+  if (archiveIds.length === 0) {
+    return new Map();
+  }
 
-  return new Map(
-    styleRows.map((style) => [
-      style.style_id,
-      {
-        productImageUrl: imageByProductId.get(style.parent_product_id) ?? null,
-        productImageSource: "vault_products.featured_image_url",
-        productImageCapturedAt: capturedAt,
-      },
-    ]),
+  const reviewItems = await supabaseAdmin
+    .from("vault_supplier_catalogue_review_items")
+    .select(`
+      id,
+      linked_product_id,
+      supplier_product_evidence,
+      decision_metadata,
+      decided_at
+    `)
+    .in("archive_id", archiveIds)
+    .eq("review_status", "matched")
+    .in("linked_product_id", productIds)
+    .order("decided_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (reviewItems.error) {
+    throw reviewItems.error;
+  }
+
+  const parentProductByStyle = new Map(
+    styleRows.map((style) => [style.style_id, style.parent_product_id]),
   );
+  const snapshots = new Map<string, Record<string, string | null>>();
+
+  for (const item of (reviewItems.data ?? []) as SupplierCatalogueReviewItemRow[]) {
+    const styleId = item.decision_metadata.style_id;
+    if (
+      typeof styleId !== "string" ||
+      snapshots.has(styleId) ||
+      parentProductByStyle.get(styleId) !== item.linked_product_id
+    ) {
+      continue;
+    }
+
+    const evidence = item.supplier_product_evidence as {
+      images?: Array<{ id?: unknown; url?: unknown; role?: unknown }>;
+    };
+    const images = Array.isArray(evidence?.images) ? evidence.images : [];
+    const rolePriority = [
+      "supplier",
+      "official",
+      "detail",
+      "back",
+      "label",
+      "other",
+    ];
+    const image =
+      rolePriority
+        .map((role) => images.find((candidate) => candidate.role === role))
+        .find(Boolean) ?? images[0];
+    const imageUrl = typeof image?.url === "string" ? image.url : null;
+    const imageId = typeof image?.id === "string" ? image.id : null;
+
+    snapshots.set(styleId, {
+      supplierImageUrl: imageUrl,
+      supplierImageSource:
+        imageUrl && imageId
+          ? `vault_supplier_catalogue_review_items:${item.id}:supplier_product_evidence.images:${imageId}`
+          : null,
+      supplierImageCapturedAt: capturedAt,
+    });
+  }
+
+  return snapshots;
 }
 
 function assertDraftInput(
@@ -249,7 +307,8 @@ export async function createPurchaseOrderDraft(
     };
   }
 
-  const imageSnapshots = await getCanonicalProductImageSnapshots(
+  const imageSnapshots = await getCanonicalSupplierImageSnapshots(
+    input.supplierId,
     input.lines.map((line) => line.styleId),
     new Date().toISOString(),
   );
@@ -288,30 +347,48 @@ export async function createPurchaseOrderDraft(
     );
   }
 
-  const lineRows = input.lines.map((line) => ({
-    purchase_order_id: header.data.id,
-    supplier_id: line.supplierId,
-    style_id: line.styleId,
-    product_name: line.productName,
-    recommended_packs: line.recommendedPacks,
-    recommended_units: line.recommendedUnits,
-    units_per_pack: line.unitsPerPack,
-    product_moq_packs: line.productMoqPacks,
-    pack_cost_gbp: line.packCostGbp,
-    line_cost_gbp: line.lineCostGbp,
-    expected_profit_gbp: line.expectedProfitGbp,
-    recommendation_confidence: line.recommendationConfidence,
-    recommendation_priority: line.recommendationPriority,
-    source_recommendation_type: line.sourceRecommendationType,
-    source_snapshot: {
-      ...line.sourceSnapshot,
-      ...(imageSnapshots.get(line.styleId) ?? {
-        productImageUrl: null,
-        productImageSource: null,
-        productImageCapturedAt: null,
-      }),
-    },
-  }));
+  const lineRows = input.lines.map((line) => {
+    const {
+      productImageUrl: _ignoredProductImageUrl,
+      productImageSource: _ignoredProductImageSource,
+      productImageCapturedAt: _ignoredProductImageCapturedAt,
+      supplierImageUrl: _ignoredSupplierImageUrl,
+      supplierImageSource: _ignoredSupplierImageSource,
+      supplierImageCapturedAt: _ignoredSupplierImageCapturedAt,
+      ...trustedSourceSnapshot
+    } = line.sourceSnapshot;
+    void _ignoredProductImageUrl;
+    void _ignoredProductImageSource;
+    void _ignoredProductImageCapturedAt;
+    void _ignoredSupplierImageUrl;
+    void _ignoredSupplierImageSource;
+    void _ignoredSupplierImageCapturedAt;
+
+    return {
+      purchase_order_id: header.data.id,
+      supplier_id: line.supplierId,
+      style_id: line.styleId,
+      product_name: line.productName,
+      recommended_packs: line.recommendedPacks,
+      recommended_units: line.recommendedUnits,
+      units_per_pack: line.unitsPerPack,
+      product_moq_packs: line.productMoqPacks,
+      pack_cost_gbp: line.packCostGbp,
+      line_cost_gbp: line.lineCostGbp,
+      expected_profit_gbp: line.expectedProfitGbp,
+      recommendation_confidence: line.recommendationConfidence,
+      recommendation_priority: line.recommendationPriority,
+      source_recommendation_type: line.sourceRecommendationType,
+      source_snapshot: {
+        ...trustedSourceSnapshot,
+        ...(imageSnapshots.get(line.styleId) ?? {
+          supplierImageUrl: null,
+          supplierImageSource: null,
+          supplierImageCapturedAt: null,
+        }),
+      },
+    };
+  });
 
   const lines = await supabaseAdmin
     .from("vault_purchase_order_lines")
@@ -578,7 +655,7 @@ export async function prepareApprovedPurchaseOrder(
         recommendedPacks: line.recommended_packs,
         recommendedUnits: line.recommended_units,
         unitsPerPack: line.units_per_pack,
-        ...readProductImageSnapshot(line.source_snapshot),
+        ...readSupplierImageSnapshot(line.source_snapshot),
       })),
   });
 }

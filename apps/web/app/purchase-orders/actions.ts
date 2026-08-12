@@ -24,9 +24,9 @@ export type PrepareSupplierOrderState = {
       recommendedPacks: number;
       recommendedUnits: number | null;
       unitsPerPack: number | null;
-      productImageUrl: string | null;
-      productImageSource: string | null;
-      productImageCapturedAt: string | null;
+      supplierImageUrl: string | null;
+      supplierImageSource: string | null;
+      supplierImageCapturedAt: string | null;
     }>;
   } | null;
 };

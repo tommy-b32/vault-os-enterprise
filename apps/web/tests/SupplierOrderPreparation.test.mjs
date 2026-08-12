@@ -4,7 +4,7 @@ import test from "node:test";
 
 import {
   createSupplierOrderText,
-  readProductImageSnapshot,
+  readSupplierImageSnapshot,
 } from "../lib/purchase-orders/SupplierOrderPreparation.ts";
 
 const persistedLines = [
@@ -38,42 +38,50 @@ test("persisted image evidence remains associated with its exact style", () => {
     {
       ...persistedLines[0],
       styleId: "hoodie::black",
-      productImageUrl: "https://cdn.example/hoodie.jpg",
-      productImageSource: "vault_products.featured_image_url",
-      productImageCapturedAt: "2026-08-12T10:00:00.000Z",
+      supplierImageUrl: "https://supplier.example/hoodie.jpg",
+      supplierImageSource: "vault_supplier_catalogue_review_items:item-1:supplier_product_evidence.images:image-1",
+      supplierImageCapturedAt: "2026-08-12T10:00:00.000Z",
     },
     {
       ...persistedLines[1],
       styleId: "cargo::stone",
-      productImageUrl: "https://cdn.example/cargo.jpg",
-      productImageSource: "vault_products.featured_image_url",
-      productImageCapturedAt: "2026-08-12T10:00:00.000Z",
+      supplierImageUrl: "https://supplier.example/cargo.jpg",
+      supplierImageSource: "vault_supplier_catalogue_review_items:item-2:supplier_product_evidence.images:image-2",
+      supplierImageCapturedAt: "2026-08-12T10:00:00.000Z",
     },
   ];
 
   const prepared = createSupplierOrderText({ supplierName: "Exclusive", lines });
 
   assert.equal(prepared.lines[0].styleId, "hoodie::black");
-  assert.equal(prepared.lines[0].productImageUrl, "https://cdn.example/hoodie.jpg");
+  assert.equal(prepared.lines[0].supplierImageUrl, "https://supplier.example/hoodie.jpg");
   assert.equal(prepared.lines[1].styleId, "cargo::stone");
-  assert.equal(prepared.lines[1].productImageUrl, "https://cdn.example/cargo.jpg");
-  assert.notEqual(prepared.lines[0].productImageUrl, prepared.lines[1].productImageUrl);
+  assert.equal(prepared.lines[1].supplierImageUrl, "https://supplier.example/cargo.jpg");
+  assert.notEqual(prepared.lines[0].supplierImageUrl, prepared.lines[1].supplierImageUrl);
   assert.equal(prepared.totalPacks, 3);
   assert.equal(prepared.totalUnits, 16);
 });
 
 test("historical lines without trusted snapshot evidence never guess an image", () => {
-  assert.deepEqual(readProductImageSnapshot({ styleId: "hoodie::black" }), {
-    productImageUrl: null,
-    productImageSource: null,
-    productImageCapturedAt: null,
+  assert.deepEqual(readSupplierImageSnapshot({ styleId: "hoodie::black" }), {
+    supplierImageUrl: null,
+    supplierImageSource: null,
+    supplierImageCapturedAt: null,
   });
   assert.equal(
-    readProductImageSnapshot({
-      productImageUrl: "javascript:alert(1)",
-      productImageSource: "browser",
-    }).productImageUrl,
+    readSupplierImageSnapshot({
+      supplierImageUrl: "javascript:alert(1)",
+      supplierImageSource: "browser",
+    }).supplierImageUrl,
     null,
+  );
+  assert.equal(
+    readSupplierImageSnapshot({
+      supplierImageUrl: "data:image/png;base64,aGVsbG8=",
+      supplierImageSource: "vault_supplier_catalogue_review_items:item-1:supplier_product_evidence.images:image-1",
+      supplierImageCapturedAt: "2026-08-12T10:00:00.000Z",
+    }).supplierImageUrl,
+    "data:image/png;base64,aGVsbG8=",
   );
 });
 
@@ -87,7 +95,7 @@ test("snapshotted images do not change generated plain text or totals", () => {
     lines: persistedLines.map((line, index) => ({
       ...line,
       styleId: `style-${index}`,
-      productImageUrl: `https://cdn.example/product-${index}.jpg`,
+      supplierImageUrl: `https://supplier.example/product-${index}.jpg`,
     })),
   });
 
@@ -136,9 +144,14 @@ test("server preparation requires authentication and canonical approved state", 
   assert.match(action, /requireAuthenticatedOperator\(\)/);
   assert.match(repository, /order\.data\.status !== "approved"/);
   assert.match(repository, /vault_purchase_order_lines/);
-  assert.match(repository, /vault_products/);
-  assert.match(repository, /featured_image_url/);
-  assert.match(repository, /productImageCapturedAt/);
+  assert.match(repository, /vault_supplier_catalogue_review_items/);
+  assert.match(repository, /supplier_product_evidence/);
+  assert.match(repository, /decision_metadata/);
+  assert.match(repository, /supplierImageCapturedAt/);
+  assert.match(repository, /\.eq\("supplier_id", supplierId\)/);
+  assert.match(repository, /parentProductByStyle\.get\(styleId\) !== item\.linked_product_id/);
+  assert.match(repository, /supplierImageUrl: _ignoredSupplierImageUrl/);
+  assert.doesNotMatch(repository.slice(0, repository.indexOf("function assertDraftInput")), /featured_image_url/);
   assert.doesNotMatch(action, /PurchaseIntelligence|wallet|inventory|WhatsApp|fetch\(/);
   const preparation = repository.slice(
     repository.indexOf("export async function prepareApprovedPurchaseOrder"),
@@ -155,6 +168,6 @@ test("UI supports review and copy only, with no guessed supplier contact or send
   assert.match(component, /Nothing has been sent automatically/);
   assert.match(component, /navigator\.clipboard\.writeText/);
   assert.match(component, /Image unavailable for this saved snapshot/);
-  assert.match(component, /line\.productImageUrl/);
+  assert.match(component, /line\.supplierImageUrl/);
   assert.doesNotMatch(component, /wa\.me|api\.whatsapp|phone|telephone/);
 });

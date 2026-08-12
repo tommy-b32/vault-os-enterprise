@@ -68,14 +68,14 @@ export function SupplierOrderPreparation({
             {state.preparedOrder.lines.map((line) => (
               <article key={line.styleId}>
                 <div className="purchase-order-preparation-image">
-                  {line.productImageUrl ? (
-                    // Canonical URLs are captured server-side from vault_products.
+                  {line.supplierImageUrl ? (
+                    // Canonical evidence is captured server-side from the accepted supplier catalogue match.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       alt={line.productName}
                       loading="lazy"
                       referrerPolicy="no-referrer"
-                      src={line.productImageUrl}
+                      src={line.supplierImageUrl}
                     />
                   ) : (
                     <span>Image unavailable for this saved snapshot.</span>
