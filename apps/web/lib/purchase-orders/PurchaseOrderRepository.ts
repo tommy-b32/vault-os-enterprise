@@ -1,6 +1,10 @@
 import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import {
+  createSupplierOrderText,
+  type PreparedSupplierOrder,
+} from "@/lib/purchase-orders/SupplierOrderPreparation";
 
 export type PurchaseOrderDraftLineInput = {
   styleId: string;
@@ -432,4 +436,70 @@ export async function approvePurchaseOrderDraft(input: {
   throw new Error(
     `Purchase order cannot be approved from status '${current.data.status}'.`,
   );
+}
+
+export async function prepareApprovedPurchaseOrder(
+  purchaseOrderId: string,
+): Promise<PreparedSupplierOrder> {
+  const order = await supabaseAdmin
+    .from("vault_purchase_orders")
+    .select(`
+      id,
+      supplier_id,
+      status,
+      vault_purchase_order_lines (
+        id,
+        product_name,
+        recommended_packs,
+        recommended_units,
+        units_per_pack,
+        created_at
+      )
+    `)
+    .eq("id", purchaseOrderId)
+    .maybeSingle();
+
+  if (order.error) {
+    throw order.error;
+  }
+
+  if (!order.data) {
+    throw new Error("Purchase order was not found.");
+  }
+
+  if (order.data.status !== "approved") {
+    throw new Error(
+      `Supplier order preparation requires APPROVED status; found '${order.data.status}'.`,
+    );
+  }
+
+  const supplier = await supabaseAdmin
+    .from("vault_suppliers")
+    .select("supplier_name")
+    .eq("id", order.data.supplier_id)
+    .maybeSingle();
+
+  if (supplier.error) {
+    throw supplier.error;
+  }
+
+  if (!supplier.data) {
+    throw new Error("The persisted supplier could not be found.");
+  }
+
+  return createSupplierOrderText({
+    supplierName: supplier.data.supplier_name,
+    lines: [...(order.data.vault_purchase_order_lines ?? [])]
+      .sort(
+        (left, right) =>
+          left.created_at.localeCompare(right.created_at) ||
+          left.id.localeCompare(right.id),
+      )
+      .map((line) => ({
+        productName: line.product_name,
+        recommendedPacks: line.recommended_packs,
+        recommendedUnits: line.recommended_units,
+        unitsPerPack: line.units_per_pack,
+      })),
+  });
 }

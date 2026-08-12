@@ -3017,6 +3017,58 @@ input:focus-visible {
   color: var(--vault-warning);
 }
 
+.purchase-order-preparation {
+  margin-top: 14px;
+  padding: 17px;
+  border: 1px solid var(--vault-border);
+  border-radius: 12px;
+  background: var(--vault-panel);
+}
+
+.purchase-order-preparation > form button,
+.purchase-order-preparation-review > button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--vault-border-gold);
+  border-radius: 9px;
+  color: var(--vault-gold-bright);
+  background: rgba(217, 173, 74, 0.06);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.purchase-order-preparation-review {
+  display: grid;
+  gap: 14px;
+  margin-top: 17px;
+  padding-top: 17px;
+  border-top: 1px solid var(--vault-border);
+}
+
+.purchase-order-preparation-review h2,
+.purchase-order-preparation-review p {
+  margin: 0;
+}
+
+.purchase-order-preparation-review pre {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  border: 1px solid var(--vault-border);
+  border-radius: 9px;
+  color: var(--vault-text);
+  background: rgba(0, 0, 0, 0.18);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.purchase-order-preparation-review > button {
+  justify-self: start;
+}
+
 .purchase-order-actions a,
 .purchase-order-actions button {
   min-height: 42px;

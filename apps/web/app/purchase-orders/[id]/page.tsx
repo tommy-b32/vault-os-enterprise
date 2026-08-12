@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import VaultAppShell from "@/components/layout/VaultAppShell";
 import { PurchaseOrderApprovalButton } from "@/components/purchase-orders/PurchaseOrderApprovalButton";
+import { SupplierOrderPreparation } from "@/components/purchase-orders/SupplierOrderPreparation";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
 
@@ -311,6 +312,10 @@ export default async function PurchaseOrderDetailPage({
           ) : null}
         </section>
 
+        {draft.status === "approved" ? (
+          <SupplierOrderPreparation purchaseOrderId={draft.id} />
+        ) : null}
+
         <footer className="purchase-order-actions">
           <Link href="/purchase-orders">
             ← Back to Purchase Orders
@@ -320,13 +325,15 @@ export default async function PurchaseOrderDetailPage({
             <PurchaseOrderApprovalButton purchaseOrderId={draft.id} />
           ) : null}
 
-          <button
-            disabled
-            type="button"
-            title="Supplier issue workflow will be added in a later sprint."
-          >
-            Send to Supplier
-          </button>
+          {draft.status === "draft" ? (
+            <button
+              disabled
+              type="button"
+              title="Approve this purchase order before supplier preparation."
+            >
+              Prepare Supplier Order
+            </button>
+          ) : null}
         </footer>
       </main>
     </VaultAppShell>
