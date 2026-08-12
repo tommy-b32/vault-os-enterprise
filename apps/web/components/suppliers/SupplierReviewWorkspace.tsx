@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -69,6 +70,7 @@ import {
 
 import {
   LinkProductEngine,
+  type LinkProductResult,
 } from "@/lib/brain/LinkProductEngine";
 
 import type {
@@ -272,6 +274,9 @@ export function SupplierReviewWorkspace({
   items,
   archiveId,
 }: Props) {
+  const completedLinkResultsRef = useRef<
+    Record<string, LinkProductResult>
+  >({});
   const [currentIndex, setCurrentIndex] =
     useState(0);
 
@@ -834,26 +839,27 @@ export function SupplierReviewWorkspace({
     );
 
     setAcceptanceStatus(
-      "Confirming your selected product match...",
+      "Saving product and supplier memory...",
     );
 
     try {
-      await wait(220);
-
-      setAcceptanceProgress(
-        28,
-      );
-
-      setAcceptanceStatus(
-        "Saving product and supplier memory...",
-      );
-
       const result =
+        completedLinkResultsRef.current[currentItem.card.id] ??
         await LinkProductEngine.execute({
           productLink,
           productMemory,
           supplierMemory,
         });
+
+      completedLinkResultsRef.current[currentItem.card.id] = result;
+
+      setAcceptanceProgress(
+        72,
+      );
+
+      setAcceptanceStatus(
+        "Recording the canonical review decision...",
+      );
 
       await persistDecision({
         reviewItemId: currentItem.card.id,
@@ -861,6 +867,7 @@ export function SupplierReviewWorkspace({
         linkedProductId: selectedMatch.product.parent_product_id,
         metadata: { confidence: selectedMatch.confidence, style_id: selectedMatch.product.style_id },
       });
+      delete completedLinkResultsRef.current[currentItem.card.id];
 
       const learningReason:
         BrainDecisionReason =
@@ -930,7 +937,7 @@ export function SupplierReviewWorkspace({
       setMemoryLoadError(null);
 
       setAcceptanceProgress(
-        68,
+        92,
       );
 
       setAcceptanceStatus(
@@ -956,8 +963,6 @@ export function SupplierReviewWorkspace({
           `${selectedMatch.product.product_name} is now the confirmed match for this ${currentItem.card.supplierName} item.`,
       });
 
-      await wait(280);
-
       setAcceptanceProgress(
         100,
       );
@@ -965,8 +970,6 @@ export function SupplierReviewWorkspace({
       setAcceptanceStatus(
         "Selected product linked and supplier memory updated.",
       );
-
-      await wait(420);
 
       setIsAcceptingMatch(
         false,

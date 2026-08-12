@@ -52,15 +52,17 @@ export const LinkProductEngine = {
     input: LinkProductInput,
   ): Promise<LinkProductResult> {
 
-    const productMemory =
-      await VaultMemoryRepository.save(
+    const [
+      productMemory,
+      supplierMemory,
+    ] = await Promise.all([
+      VaultMemoryRepository.save(
         input.productMemory,
-      );
-
-    const supplierMemory =
-      await SupplierMemoryRepository.recordSuccessfulMatch(
+      ),
+      SupplierMemoryRepository.recordSuccessfulMatch(
         input.supplierMemory,
-      );
+      ),
+    ]);
 
     ProductLinkRepository.save(
       input.productLink,

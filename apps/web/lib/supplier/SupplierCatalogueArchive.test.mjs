@@ -193,6 +193,67 @@ test("review decisions persist before local review advances", async () => {
   assert.match(workspace, /status: "create_product"/);
 });
 
+test("accepted Match Review memory writes run concurrently before the canonical decision", async () => {
+  const [engine, workspace] = await Promise.all([
+    readWeb("lib/brain/LinkProductEngine.ts"),
+    readWeb("components/suppliers/SupplierReviewWorkspace.tsx"),
+  ]);
+  assert.match(engine, /Promise\.all\(\[/);
+  assert.match(engine, /VaultMemoryRepository\.save/);
+  assert.match(engine, /SupplierMemoryRepository\.recordSuccessfulMatch/);
+
+  const accept = workspace.slice(
+    workspace.indexOf("async function acceptCurrentMatch"),
+    workspace.indexOf("async function skipCurrentItem"),
+  );
+  assert.ok(
+    accept.indexOf("await LinkProductEngine.execute") <
+      accept.indexOf("await persistDecision"),
+    "durable memory writes must finish before the canonical decision",
+  );
+  assert.ok(
+    accept.indexOf("await persistDecision") < accept.indexOf("setDecisions"),
+    "the canonical decision must persist before the UI advances",
+  );
+});
+
+test("accepted product identity and decision metadata remain unchanged", async () => {
+  const workspace = await readWeb("components/suppliers/SupplierReviewWorkspace.tsx");
+  assert.match(workspace, /linkedProductId: selectedMatch\.product\.parent_product_id/);
+  assert.match(workspace, /metadata: \{ confidence: selectedMatch\.confidence, style_id: selectedMatch\.product\.style_id \}/);
+});
+
+test("a canonical-decision retry reuses completed memory writes", async () => {
+  const workspace = await readWeb("components/suppliers/SupplierReviewWorkspace.tsx");
+  const accept = workspace.slice(
+    workspace.indexOf("async function acceptCurrentMatch"),
+    workspace.indexOf("async function skipCurrentItem"),
+  );
+  assert.match(accept, /completedLinkResultsRef\.current\[currentItem\.card\.id\] \?\?/);
+  assert.match(accept, /completedLinkResultsRef\.current\[currentItem\.card\.id\] = result/);
+  assert.match(accept, /await persistDecision[\s\S]*delete completedLinkResultsRef\.current\[currentItem\.card\.id\]/);
+});
+
+test("acceptance progress contains no artificial success-path delay", async () => {
+  const workspace = await readWeb("components/suppliers/SupplierReviewWorkspace.tsx");
+  const accept = workspace.slice(
+    workspace.indexOf("async function acceptCurrentMatch"),
+    workspace.indexOf("async function skipCurrentItem"),
+  );
+  assert.doesNotMatch(accept.slice(0, accept.indexOf("} catch (error)")), /await wait\(/);
+  assert.match(accept, /Recording the canonical review decision/);
+});
+
+test("decision persistence remains item-scoped and refreshes canonical archive counts", async () => {
+  const repository = await readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts");
+  const decide = repository.slice(
+    repository.indexOf("async decide"),
+    repository.indexOf("} as const"),
+  );
+  assert.match(decide, /\.eq\("archive_id", input\.archiveId\)\.eq\("review_item_id", input\.reviewItemId\)\.eq\("review_status", "pending"\)/);
+  assert.match(decide, /refresh_supplier_catalogue_archive/);
+});
+
 test("archive cards and review routes use explicit archive identity", async () => {
   const page = await readWeb("app/supplier-catalogue/page.tsx");
   assert.match(page, /SupplierCatalogueArchiveRepository\.list\(\)/);
