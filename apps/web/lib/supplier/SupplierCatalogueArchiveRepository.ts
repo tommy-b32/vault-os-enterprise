@@ -3,6 +3,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { CatalogueReviewQueueDetails, CatalogueReviewQueueItem } from "@/lib/supplier/CatalogueReviewQueueEngine";
 import type { CatalogueAnalysisSession } from "@/lib/supplier/catalogue-analysis-types";
+import type { SupplierDocumentPage } from "@/lib/supplier/types";
 
 export type SupplierCatalogueArchiveStatus = "uploading" | "processing" | "ready_for_review" | "in_review" | "completed" | "failed";
 export type SupplierCatalogueArchive = {
@@ -25,7 +26,7 @@ function mapArchive(row: ArchiveRow): SupplierCatalogueArchive {
 const ARCHIVE_SELECT = `id, supplier_id, original_filename, display_name, status, page_count, detected_product_count, matched_product_count, unmatched_product_count, created_at, updated_at, supplier:vault_suppliers(supplier_name)`;
 
 export const SupplierCatalogueArchiveRepository = {
-  async create(input: { operatorId: string; idempotencyKey: string; originalFilename: string; details: CatalogueReviewQueueDetails; pageCount: number; sourceDocumentId: string; }) {
+  async create(input: { operatorId: string; idempotencyKey: string; originalFilename: string; details: CatalogueReviewQueueDetails; pageCount: number; sourceDocumentId: string; pages: SupplierDocumentPage[]; }) {
     const { data: supplier, error: supplierError } = await supabaseAdmin.from("vault_suppliers").select("id").ilike("supplier_name", input.details.supplierName).eq("is_active", true).maybeSingle();
     if (supplierError || !supplier) throw new Error("Choose a canonical active supplier before archiving this catalogue.");
     const { data, error } = await supabaseAdmin.from("vault_supplier_catalogue_archives").upsert({
@@ -35,11 +36,54 @@ export const SupplierCatalogueArchiveRepository = {
       page_count: input.pageCount, source_metadata: { document_id: input.sourceDocumentId }, failure_reason: null,
     }, { onConflict: "created_by_operator_id,idempotency_key" }).select("id").single();
     if (error || !data) throw new Error("The supplier catalogue archive could not be created.");
+    const pageRows = input.pages.map((page) => ({
+      archive_id: data.id,
+      page_number: page.pageNumber,
+      analysis_state: "pending",
+      parsed_evidence: {
+        pageNumber: page.pageNumber,
+        status: "pending",
+        extraction: null,
+        error: null,
+        attempts: 0,
+        analysedAt: null,
+        sourcePage: page,
+      },
+      error_message: null,
+      analysed_at: null,
+    }));
+    if (pageRows.length > 0) {
+      const { error: pageError } = await supabaseAdmin
+        .from("vault_supplier_catalogue_pages")
+        .upsert(pageRows, { onConflict: "archive_id,page_number", ignoreDuplicates: true });
+      if (pageError) throw new Error("Catalogue source pages could not be archived.");
+    }
     return data.id as string;
   },
 
   async saveAnalysis(input: { archiveId: string; session: CatalogueAnalysisSession; items: CatalogueReviewQueueItem[]; }) {
-    const pages = Object.values(input.session.pages).map((page) => ({ archive_id: input.archiveId, page_number: page.pageNumber, analysis_state: page.status, parsed_evidence: page, error_message: page.error, analysed_at: page.analysedAt }));
+    const { data: existingPages, error: existingError } = await supabaseAdmin
+      .from("vault_supplier_catalogue_pages")
+      .select("page_number, analysis_state, parsed_evidence")
+      .eq("archive_id", input.archiveId);
+    if (existingError) throw new Error("Existing catalogue page state could not be loaded.");
+    const existingByPage = new Map((existingPages ?? []).map((page) => [page.page_number, page]));
+    const terminalStates = new Set(["complete", "skipped"]);
+    const pages = Object.values(input.session.pages).map((page) => {
+      const existing = existingByPage.get(page.pageNumber);
+      const preserveTerminal = existing && terminalStates.has(existing.analysis_state) && !terminalStates.has(page.status);
+      const sourcePage = existing?.parsed_evidence?.sourcePage ?? null;
+      return preserveTerminal
+        ? null
+        : {
+            archive_id: input.archiveId,
+            page_number: page.pageNumber,
+            analysis_state: page.status,
+            parsed_evidence: { ...page, sourcePage },
+            error_message: page.error,
+            analysed_at: page.analysedAt,
+          };
+    }).filter((page) => page !== null);
     if (pages.length > 0) {
       const { error } = await supabaseAdmin.from("vault_supplier_catalogue_pages").upsert(pages, { onConflict: "archive_id,page_number" });
       if (error) throw new Error("Catalogue page evidence could not be archived.");
@@ -53,10 +97,32 @@ export const SupplierCatalogueArchiveRepository = {
       const { error } = await supabaseAdmin.from("vault_supplier_catalogue_review_items").upsert(items, { onConflict: "archive_id,review_item_id", ignoreDuplicates: true });
       if (error) throw new Error("Catalogue review items could not be archived.");
     }
-    const { error: readyError } = await supabaseAdmin.from("vault_supplier_catalogue_archives").update({ status: "ready_for_review", failure_reason: null }).eq("id", input.archiveId).in("status", ["processing", "ready_for_review"]);
+    const { error: readyError } = await supabaseAdmin.from("vault_supplier_catalogue_archives").update({ status: "ready_for_review", failure_reason: null }).eq("id", input.archiveId).in("status", ["processing", "ready_for_review", "failed"]);
     if (readyError) throw new Error("Catalogue archive readiness could not be saved.");
     const { error: refreshError } = await supabaseAdmin.rpc("refresh_supplier_catalogue_archive", { target_archive_id: input.archiveId });
     if (refreshError) throw new Error("Catalogue archive counts could not be refreshed.");
+  },
+
+  async getPageSummary(archiveId: string) {
+    const [{ data: pages, error: pageError }, { count: reviewItemCount, error: reviewError }] = await Promise.all([
+      supabaseAdmin.from("vault_supplier_catalogue_pages").select("analysis_state, parsed_evidence", { count: "exact" }).eq("archive_id", archiveId),
+      supabaseAdmin.from("vault_supplier_catalogue_review_items").select("id", { count: "exact", head: true }).eq("archive_id", archiveId),
+    ]);
+    if (pageError || reviewError) throw new Error("Catalogue analysis summary could not be loaded.");
+    const states = (pages ?? []).map((page) => page.analysis_state);
+    const resumable = (pages ?? []).filter((page) => {
+      if (!["pending", "failed"].includes(page.analysis_state)) return false;
+      const sourcePage = page.parsed_evidence?.sourcePage;
+      return sourcePage && Array.isArray(sourcePage.images) && sourcePage.images.some((image: { dataUrl?: unknown }) => typeof image.dataUrl === "string" && image.dataUrl.startsWith("data:image/"));
+    }).length;
+    return {
+      total: states.length,
+      pending: states.filter((state) => state === "pending" || state === "analysing").length,
+      analysed: states.filter((state) => state === "complete" || state === "skipped").length,
+      failed: states.filter((state) => state === "failed").length,
+      reviewItems: reviewItemCount ?? 0,
+      resumable,
+    };
   },
 
   async markFailed(archiveId: string, reason: string) {

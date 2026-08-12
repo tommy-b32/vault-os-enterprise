@@ -30,6 +30,47 @@ test("archive queues are isolated and reload from the server", async () => {
   assert.match(repository, /\.eq\("archive_id", input\.archiveId\)\.eq\("review_item_id", input\.reviewItemId\)/);
 });
 
+test("rendered source pages are persisted when the archive is created", async () => {
+  const [repository, workspace] = await Promise.all([
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+    readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),
+  ]);
+  assert.match(workspace, /pages: extractionResult\.pages/);
+  assert.match(repository, /sourcePage: page/);
+  assert.match(repository, /onConflict: "archive_id,page_number", ignoreDuplicates: true/);
+});
+
+test("page analysis checkpoints terminal and failed evidence without stale regression", async () => {
+  const repository = await readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts");
+  assert.match(repository, /terminalStates = new Set\(\["complete", "skipped"\]\)/);
+  assert.match(repository, /preserveTerminal/);
+  assert.match(repository, /error_message: page\.error/);
+  assert.match(repository, /analysed_at: page\.analysedAt/);
+});
+
+test("batch progress checkpoints review items idempotently", async () => {
+  const [repository, workspace] = await Promise.all([
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+    readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),
+  ]);
+  assert.match(workspace, /checkpointAnalysis/);
+  assert.match(workspace, /CatalogueReviewQueueEngine\.buildQueue/);
+  assert.match(repository, /ignoreDuplicates: true/);
+  assert.match(repository, /review_status: "pending"/);
+});
+
+test("archive detail reports truthful page and review counts", async () => {
+  const [repository, page] = await Promise.all([
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+    readWeb("app/supplier-catalogue/[catalogueId]/page.tsx"),
+  ]);
+  assert.match(repository, /getPageSummary/);
+  for (const label of ["Pending", "Analysed", "Failed", "Review items"]) {
+    assert.match(page, new RegExp(label));
+  }
+  assert.match(page, /cannot be resumed safely/);
+});
+
 test("review decisions persist before local review advances", async () => {
   const workspace = await readWeb("components/suppliers/SupplierReviewWorkspace.tsx");
   assert.match(workspace, /await persistDecision/);

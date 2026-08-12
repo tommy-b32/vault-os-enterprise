@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -48,6 +50,9 @@ export function SupplierCatalogueImportWorkspace({
 }: Props) {
   const archiveIdRef = useRef<string | null>(null);
   const archiveRequestRef = useRef<Promise<string> | null>(null);
+  const checkpointAnalysisRef = useRef<
+    ((session: CatalogueAnalysisSession) => Promise<void>) | null
+  >(null);
   const [
     selectedFile,
     setSelectedFile,
@@ -120,6 +125,7 @@ export function SupplierCatalogueImportWorkspace({
         originalFilename: selectedFile.name,
         sourceDocumentId: extractionResult.document.id,
         pageCount: extractionResult.pages.length,
+        pages: extractionResult.pages,
         details,
       }),
     }).then(async (response) => {
@@ -228,6 +234,46 @@ export function SupplierCatalogueImportWorkspace({
     }
   }
 
+  async function checkpointAnalysis(
+    session: CatalogueAnalysisSession,
+  ) {
+    setAnalysisSession(session);
+    if (!catalogueDetails || !extractionResult) return;
+
+    try {
+      const archiveId = await ensureArchive(catalogueDetails);
+      const memories = await VaultMemoryRepository.getAll();
+      const items = CatalogueReviewQueueEngine.buildQueue({
+        session,
+        extractionResult,
+        details: catalogueDetails,
+        products,
+        memories,
+      });
+      const response = await fetch(`/api/supplier-catalogue/archives/${archiveId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ session, items }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Catalogue progress could not be archived.");
+    } catch (error) {
+      setQueueSaveError(error instanceof Error ? error.message : "Catalogue progress could not be archived.");
+    }
+  }
+
+  useEffect(() => {
+    checkpointAnalysisRef.current = checkpointAnalysis;
+  });
+
+  const handleAnalysisSessionChange = useCallback(
+    (session: CatalogueAnalysisSession) => {
+      setAnalysisSession(session);
+      void checkpointAnalysisRef.current?.(session);
+    },
+    [],
+  );
+
   async function saveAndOpenReview(
     itemsToReview:
       CatalogueReviewQueueItem[],
@@ -330,7 +376,7 @@ export function SupplierCatalogueImportWorkspace({
             selectedFile.name
           }
           onAnalysisSessionChange={
-            setAnalysisSession
+            handleAnalysisSessionChange
           }
           onCancel={
             resetImport
