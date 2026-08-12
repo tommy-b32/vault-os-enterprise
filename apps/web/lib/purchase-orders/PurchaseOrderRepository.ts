@@ -41,6 +41,11 @@ export type SavedPurchaseOrderDraft = {
   createdAt: string;
 };
 
+type SupplierNameRow = {
+  id: string;
+  supplier_name: string;
+};
+
 function assertDraftInput(
   input: CreatePurchaseOrderDraftInput,
 ) {
@@ -91,14 +96,42 @@ function assertDraftInput(
 
     if (
       line.productMoqPacks !== null &&
-      line.recommendedPacks <
-        line.productMoqPacks
+      line.recommendedPacks < line.productMoqPacks
     ) {
       throw new Error(
         `${line.productName} is below its canonical product MOQ.`,
       );
     }
   }
+}
+
+async function getSupplierNames(
+  supplierIds: string[],
+): Promise<Map<string, string>> {
+  const uniqueSupplierIds =
+    Array.from(new Set(supplierIds.filter(Boolean)));
+
+  if (uniqueSupplierIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("vault_suppliers")
+    .select("id, supplier_name")
+    .in("id", uniqueSupplierIds);
+
+  if (error) {
+    throw error;
+  }
+
+  return new Map(
+    ((data ?? []) as SupplierNameRow[]).map(
+      (supplier) => [
+        supplier.id,
+        supplier.supplier_name,
+      ],
+    ),
+  );
 }
 
 export async function createPurchaseOrderDraft(
@@ -133,15 +166,11 @@ export async function createPurchaseOrderDraft(
   if (existing.data) {
     return {
       id: existing.data.id,
-      supplierId:
-        existing.data.supplier_id,
+      supplierId: existing.data.supplier_id,
       status: existing.data.status,
-      estimatedTotalGbp:
-        existing.data.estimated_total_gbp,
-      totalPacks:
-        existing.data.total_packs,
-      createdAt:
-        existing.data.created_at,
+      estimatedTotalGbp: existing.data.estimated_total_gbp,
+      totalPacks: existing.data.total_packs,
+      createdAt: existing.data.created_at,
     };
   }
 
@@ -151,19 +180,14 @@ export async function createPurchaseOrderDraft(
       supplier_id: input.supplierId,
       status: "draft",
       currency: input.currency,
-      estimated_total_gbp:
-        input.estimatedTotalGbp,
+      estimated_total_gbp: input.estimatedTotalGbp,
       total_packs: input.totalPacks,
       recommended_by_vault_brain: true,
-      recommendation_confidence:
-        input.recommendationConfidence,
+      recommendation_confidence: input.recommendationConfidence,
       reasoning: input.reasoning,
-      created_by_operator_id:
-        input.operatorId,
-      idempotency_key:
-        input.idempotencyKey,
-      source_snapshot:
-        input.sourceSnapshot,
+      created_by_operator_id: input.operatorId,
+      idempotency_key: input.idempotencyKey,
+      source_snapshot: input.sourceSnapshot,
     })
     .select(`
       id,
@@ -184,39 +208,23 @@ export async function createPurchaseOrderDraft(
     );
   }
 
-  const lineRows = input.lines.map(
-    (line) => ({
-      purchase_order_id:
-        header.data.id,
-      supplier_id:
-        line.supplierId,
-      style_id: line.styleId,
-      product_name:
-        line.productName,
-      recommended_packs:
-        line.recommendedPacks,
-      recommended_units:
-        line.recommendedUnits,
-      units_per_pack:
-        line.unitsPerPack,
-      product_moq_packs:
-        line.productMoqPacks,
-      pack_cost_gbp:
-        line.packCostGbp,
-      line_cost_gbp:
-        line.lineCostGbp,
-      expected_profit_gbp:
-        line.expectedProfitGbp,
-      recommendation_confidence:
-        line.recommendationConfidence,
-      recommendation_priority:
-        line.recommendationPriority,
-      source_recommendation_type:
-        line.sourceRecommendationType,
-      source_snapshot:
-        line.sourceSnapshot,
-    }),
-  );
+  const lineRows = input.lines.map((line) => ({
+    purchase_order_id: header.data.id,
+    supplier_id: line.supplierId,
+    style_id: line.styleId,
+    product_name: line.productName,
+    recommended_packs: line.recommendedPacks,
+    recommended_units: line.recommendedUnits,
+    units_per_pack: line.unitsPerPack,
+    product_moq_packs: line.productMoqPacks,
+    pack_cost_gbp: line.packCostGbp,
+    line_cost_gbp: line.lineCostGbp,
+    expected_profit_gbp: line.expectedProfitGbp,
+    recommendation_confidence: line.recommendationConfidence,
+    recommendation_priority: line.recommendationPriority,
+    source_recommendation_type: line.sourceRecommendationType,
+    source_snapshot: line.sourceSnapshot,
+  }));
 
   const lines = await supabaseAdmin
     .from("vault_purchase_order_lines")
@@ -233,15 +241,11 @@ export async function createPurchaseOrderDraft(
 
   return {
     id: header.data.id,
-    supplierId:
-      header.data.supplier_id,
+    supplierId: header.data.supplier_id,
     status: header.data.status,
-    estimatedTotalGbp:
-      header.data.estimated_total_gbp,
-    totalPacks:
-      header.data.total_packs,
-    createdAt:
-      header.data.created_at,
+    estimatedTotalGbp: header.data.estimated_total_gbp,
+    totalPacks: header.data.total_packs,
+    createdAt: header.data.created_at,
   };
 }
 
@@ -262,9 +266,6 @@ export async function getPurchaseOrderDrafts() {
         source_snapshot,
         created_at,
         updated_at,
-        vault_suppliers (
-          supplier_name
-        ),
         vault_purchase_order_lines (
           id,
           style_id,
@@ -286,7 +287,23 @@ export async function getPurchaseOrderDrafts() {
     throw error;
   }
 
-  return data ?? [];
+  const drafts = data ?? [];
+
+  const supplierNames =
+    await getSupplierNames(
+      drafts.map((draft) => draft.supplier_id),
+    );
+
+  return drafts.map((draft) => ({
+    ...draft,
+    vault_suppliers: [
+      {
+        supplier_name:
+          supplierNames.get(draft.supplier_id) ??
+          "Unknown supplier",
+      },
+    ],
+  }));
 }
 
 export async function getPurchaseOrderDraft(
@@ -297,9 +314,6 @@ export async function getPurchaseOrderDraft(
       .from("vault_purchase_orders")
       .select(`
         *,
-        vault_suppliers (
-          supplier_name
-        ),
         vault_purchase_order_lines (
           *
         )
@@ -312,5 +326,23 @@ export async function getPurchaseOrderDraft(
     throw error;
   }
 
-  return data;
+  if (!data) {
+    return null;
+  }
+
+  const supplierNames =
+    await getSupplierNames([
+      data.supplier_id,
+    ]);
+
+  return {
+    ...data,
+    vault_suppliers: [
+      {
+        supplier_name:
+          supplierNames.get(data.supplier_id) ??
+          "Unknown supplier",
+      },
+    ],
+  };
 }
