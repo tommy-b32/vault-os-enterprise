@@ -24,10 +24,13 @@ import type {
 
 import type {
   SupplierExtractionResult,
+  SupplierDocumentPage,
 } from "@/lib/supplier/types";
 
 type Props = {
   extractionResult: SupplierExtractionResult;
+  initialSession?: CatalogueAnalysisSession;
+  loadSourcePages?: (pageNumbers: number[]) => Promise<SupplierDocumentPage[]>;
   canOpenReviewQueue?: boolean;
   isPreparingReviewQueue?: boolean;
   onSessionChange?: (
@@ -40,6 +43,8 @@ type Props = {
 
 export function CatalogueBatchAnalysisPanel({
   extractionResult,
+  initialSession,
+  loadSourcePages,
   canOpenReviewQueue = false,
   isPreparingReviewQueue = false,
   onSessionChange,
@@ -47,7 +52,7 @@ export function CatalogueBatchAnalysisPanel({
 }: Props) {
   const [session, setSession] =
     useState<CatalogueAnalysisSession>(() =>
-      CatalogueBatchAnalysisEngine.createSession({
+      initialSession ?? CatalogueBatchAnalysisEngine.createSession({
         documentId:
           extractionResult.document.id,
         fileName:
@@ -182,6 +187,12 @@ export function CatalogueBatchAnalysisPanel({
 
   const hasDetectedProducts =
     session.productGroups.length > 0;
+
+  async function resolveSourcePages(pageNumbers: number[]): Promise<SupplierDocumentPage[]> {
+    if (loadSourcePages) return loadSourcePages(pageNumbers.slice(0, 3));
+    const selected = new Set(pageNumbers);
+    return extractionResult.pages.filter((page) => selected.has(page.pageNumber));
+  }
 
   function togglePageSelection(
     pageNumber: number,
@@ -338,11 +349,16 @@ console.log(
     setIsRunning(true);
 
     try {
+      const nextPageNumbers = Object.values(session.pages)
+        .filter((page) => page.status === "pending" || page.status === "failed")
+        .sort((left, right) => left.pageNumber - right.pageNumber)
+        .slice(0, 3)
+        .map((page) => page.pageNumber);
+      const sourcePages = await resolveSourcePages(nextPageNumbers);
       const analysedSession =
         await CatalogueBatchAnalysisEngine.runNextBatch({
           session,
-          pages:
-            extractionResult.pages,
+          pages: sourcePages,
           maximumPages: 3,
         });
 
@@ -381,11 +397,11 @@ console.log(
     setIsRunning(true);
 
     try {
+      const sourcePages = await resolveSourcePages(selectedPageNumbers);
       const analysedSession =
         await CatalogueBatchAnalysisEngine.runSelectedPages({
           session,
-          pages:
-            extractionResult.pages,
+          pages: sourcePages,
           pageNumbers:
             selectedPageNumbers,
         });

@@ -9,21 +9,34 @@ export type SupplierCatalogueArchiveStatus = "uploading" | "processing" | "ready
 export type SupplierCatalogueArchive = {
   id: string; supplierId: string; supplierName: string; originalFilename: string; displayName: string;
   status: SupplierCatalogueArchiveStatus; pageCount: number; detectedProductCount: number;
-  matchedProductCount: number; unmatchedProductCount: number; createdAt: string; updatedAt: string;
+  matchedProductCount: number; unmatchedProductCount: number; catalogueType: "products" | "footwear" | "accessories";
+  leadTimeDays: number | null; sourceDocumentId: string; createdAt: string; updatedAt: string;
 };
 
 type ArchiveRow = {
   id: string; supplier_id: string; original_filename: string; display_name: string; status: SupplierCatalogueArchiveStatus;
   page_count: number; detected_product_count: number; matched_product_count: number; unmatched_product_count: number;
+  catalogue_type: "products" | "footwear" | "accessories"; lead_time_days: number | null; source_metadata: { document_id?: string } | null;
   created_at: string; updated_at: string; supplier: { supplier_name: string } | Array<{ supplier_name: string }> | null;
 };
 
 function mapArchive(row: ArchiveRow): SupplierCatalogueArchive {
   const supplier = Array.isArray(row.supplier) ? row.supplier[0] : row.supplier;
-  return { id: row.id, supplierId: row.supplier_id, supplierName: supplier?.supplier_name ?? "Unknown supplier", originalFilename: row.original_filename, displayName: row.display_name, status: row.status, pageCount: row.page_count, detectedProductCount: row.detected_product_count, matchedProductCount: row.matched_product_count, unmatchedProductCount: row.unmatched_product_count, createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, supplierId: row.supplier_id, supplierName: supplier?.supplier_name ?? "Unknown supplier", originalFilename: row.original_filename, displayName: row.display_name, status: row.status, pageCount: row.page_count, detectedProductCount: row.detected_product_count, matchedProductCount: row.matched_product_count, unmatchedProductCount: row.unmatched_product_count, catalogueType: row.catalogue_type, leadTimeDays: row.lead_time_days, sourceDocumentId: row.source_metadata?.document_id ?? row.id, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
-const ARCHIVE_SELECT = `id, supplier_id, original_filename, display_name, status, page_count, detected_product_count, matched_product_count, unmatched_product_count, created_at, updated_at, supplier:vault_suppliers(supplier_name)`;
+const ARCHIVE_SELECT = `id, supplier_id, original_filename, display_name, status, page_count, detected_product_count, matched_product_count, unmatched_product_count, catalogue_type, lead_time_days, source_metadata, created_at, updated_at, supplier:vault_suppliers(supplier_name)`;
+
+export type SupplierCataloguePageState = {
+  pageNumber: number;
+  status: CatalogueAnalysisSession["pages"][number]["status"];
+  error: string | null;
+  analysedAt: string | null;
+};
+
+export type SupplierCatalogueArchiveWithProgress = SupplierCatalogueArchive & {
+  analysis: { total: number; analysed: number; failed: number; pending: number; pendingReviewItems: number; catalogueComplete: boolean };
+};
 
 export const SupplierCatalogueArchiveRepository = {
   async create(input: { operatorId: string; idempotencyKey: string; originalFilename: string; details: CatalogueReviewQueueDetails; pageCount: number; sourceDocumentId: string; }) {
@@ -118,23 +131,53 @@ export const SupplierCatalogueArchiveRepository = {
   },
 
   async getPageSummary(archiveId: string) {
-    const [{ data: pages, error: pageError }, { data: resumablePage, error: resumableError }, { count: reviewItemCount, error: reviewError }] = await Promise.all([
+    const [{ data: pages, error: pageError }, { data: resumablePage, error: resumableError }, { count: reviewItemCount, error: reviewError }, { count: pendingReviewItemCount, error: pendingReviewError }, { data: archive, error: archiveError }] = await Promise.all([
       supabaseAdmin.from("vault_supplier_catalogue_pages").select("analysis_state", { count: "exact" }).eq("archive_id", archiveId),
       supabaseAdmin.from("vault_supplier_catalogue_pages").select("parsed_evidence").eq("archive_id", archiveId).in("analysis_state", ["pending", "failed"]).limit(1).maybeSingle(),
       supabaseAdmin.from("vault_supplier_catalogue_review_items").select("id", { count: "exact", head: true }).eq("archive_id", archiveId),
+      supabaseAdmin.from("vault_supplier_catalogue_review_items").select("id", { count: "exact", head: true }).eq("archive_id", archiveId).eq("review_status", "pending"),
+      supabaseAdmin.from("vault_supplier_catalogue_archives").select("page_count").eq("id", archiveId).maybeSingle(),
     ]);
-    if (pageError || resumableError || reviewError) throw new Error("Catalogue analysis summary could not be loaded.");
+    if (pageError || resumableError || reviewError || pendingReviewError || archiveError) throw new Error("Catalogue analysis summary could not be loaded.");
     const states = (pages ?? []).map((page) => page.analysis_state);
+    const expectedTotal = archive?.page_count ?? states.length;
+    const missingPages = Math.max(0, expectedTotal - states.length);
     const sourcePage = resumablePage?.parsed_evidence?.sourcePage;
     const resumable = sourcePage && Array.isArray(sourcePage.images) && sourcePage.images.some((image: { dataUrl?: unknown }) => typeof image.dataUrl === "string" && image.dataUrl.startsWith("data:image/")) ? 1 : 0;
     return {
-      total: states.length,
-      pending: states.filter((state) => state === "pending" || state === "analysing").length,
+      total: expectedTotal,
+      persistedPages: states.length,
+      pending: states.filter((state) => state === "pending" || state === "analysing").length + missingPages,
       analysed: states.filter((state) => state === "complete" || state === "skipped").length,
       failed: states.filter((state) => state === "failed").length,
       reviewItems: reviewItemCount ?? 0,
+      pendingReviewItems: pendingReviewItemCount ?? 0,
       resumable,
+      catalogueComplete: states.length === expectedTotal && states.length > 0 && states.every((state) => state === "complete" || state === "skipped"),
     };
+  },
+
+  async getPageStates(archiveId: string): Promise<SupplierCataloguePageState[]> {
+    const { data, error } = await supabaseAdmin
+      .from("vault_supplier_catalogue_pages")
+      .select("page_number, analysis_state, error_message, analysed_at")
+      .eq("archive_id", archiveId)
+      .order("page_number", { ascending: true });
+    if (error) throw new Error("Catalogue page states could not be loaded.");
+    return (data ?? []).map((page) => ({ pageNumber: page.page_number, status: page.analysis_state, error: page.error_message, analysedAt: page.analysed_at }));
+  },
+
+  async getSourcePages(archiveId: string, pageNumbers: number[]): Promise<SupplierDocumentPage[]> {
+    const uniquePageNumbers = Array.from(new Set(pageNumbers.filter(Number.isInteger)));
+    if (uniquePageNumbers.length === 0 || uniquePageNumbers.length > 3) throw new Error("Load between one and three catalogue source pages at a time.");
+    const { data, error } = await supabaseAdmin
+      .from("vault_supplier_catalogue_pages")
+      .select("page_number, parsed_evidence")
+      .eq("archive_id", archiveId)
+      .in("page_number", uniquePageNumbers)
+      .order("page_number", { ascending: true });
+    if (error) throw new Error("Catalogue source page evidence could not be loaded.");
+    return (data ?? []).map((page) => page.parsed_evidence?.sourcePage as SupplierDocumentPage).filter((page) => page && Array.isArray(page.images));
   },
 
   async markFailed(archiveId: string, reason: string) {
@@ -146,6 +189,23 @@ export const SupplierCatalogueArchiveRepository = {
     const { data, error } = await supabaseAdmin.from("vault_supplier_catalogue_archives").select(ARCHIVE_SELECT).order("created_at", { ascending: false });
     if (error) throw new Error("Supplier catalogue archives could not be loaded.");
     return ((data ?? []) as ArchiveRow[]).map(mapArchive);
+  },
+
+  async listWithProgress(): Promise<SupplierCatalogueArchiveWithProgress[]> {
+    const [archives, { data: pages, error: pageError }, { data: reviewItems, error: reviewError }] = await Promise.all([
+      this.list(),
+      supabaseAdmin.from("vault_supplier_catalogue_pages").select("archive_id, analysis_state"),
+      supabaseAdmin.from("vault_supplier_catalogue_review_items").select("archive_id, review_status"),
+    ]);
+    if (pageError || reviewError) throw new Error("Supplier catalogue progress could not be loaded.");
+    return archives.map((archive) => {
+      const archivePages = (pages ?? []).filter((page) => page.archive_id === archive.id);
+      const states = archivePages.map((page) => page.analysis_state);
+      const analysed = states.filter((state) => state === "complete" || state === "skipped").length;
+      const failed = states.filter((state) => state === "failed").length;
+      const pendingReviewItems = (reviewItems ?? []).filter((item) => item.archive_id === archive.id && item.review_status === "pending").length;
+      return { ...archive, analysis: { total: archive.pageCount, analysed, failed, pending: archive.pageCount - analysed - failed, pendingReviewItems, catalogueComplete: states.length === archive.pageCount && archive.pageCount > 0 && analysed === archive.pageCount } };
+    });
   },
 
   async get(archiveId: string): Promise<SupplierCatalogueArchive | null> {

@@ -23,6 +23,85 @@ test("archive state and counts are canonical and deterministic", async () => {
   assert.match(sql, /matched_product_count = matched_count/);
 });
 
+test("review completion and catalogue analysis completion are independent", async () => {
+  const [repository, listPage, detailPage] = await Promise.all([
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+    readWeb("app/supplier-catalogue/page.tsx"),
+    readWeb("app/supplier-catalogue/[catalogueId]/page.tsx"),
+  ]);
+  assert.match(repository, /pendingReviewItems/);
+  assert.match(repository, /catalogueComplete: states\.length === expectedTotal[\s\S]*states\.every/);
+  assert.match(listPage, /archive\.analysis\.catalogueComplete/);
+  assert.match(listPage, /archive\.analysis\.pendingReviewItems/);
+  assert.doesNotMatch(listPage, /status\(archive\.status\)/);
+  assert.match(detailPage, /All currently detected review items have been resolved/);
+  assert.match(detailPage, /All persisted catalogue pages have been analysed or skipped/);
+});
+
+test("a 620-page archive with four resolved items remains analysis in progress", () => {
+  const states = Array.from({ length: 620 }, (_, index) => index < 4 ? "complete" : "pending");
+  const analysed = states.filter((state) => state === "complete" || state === "skipped").length;
+  const catalogueComplete = states.length > 0 && analysed === states.length;
+  assert.equal(analysed, 4);
+  assert.equal(catalogueComplete, false);
+});
+
+test("archive cards derive progress without loading image-heavy evidence", async () => {
+  const repository = await readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts");
+  const method = repository.slice(repository.indexOf("async listWithProgress"), repository.indexOf("async get("));
+  assert.match(method, /select\("archive_id, analysis_state"\)/);
+  assert.match(method, /select\("archive_id, review_status"\)/);
+  assert.doesNotMatch(method, /parsed_evidence|review_payload|supplier_product_evidence/);
+});
+
+test("recoverable archives expose resume while historical archives remain truthful", async () => {
+  const detailPage = await readWeb("app/supplier-catalogue/[catalogueId]/page.tsx");
+  assert.match(detailPage, /unresolvedPages > 0 && pageSummary\.resumable > 0/);
+  assert.match(detailPage, /Continue Catalogue Analysis/);
+  assert.match(detailPage, /unresolvedPages > 0 && pageSummary\.resumable === 0/);
+  assert.match(detailPage, /cannot be resumed safely/);
+});
+
+test("resume uses the existing archive identity and bounded persisted source evidence", async () => {
+  const [workspace, route, repository] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueResumeWorkspace.tsx"),
+    readWeb("app/api/supplier-catalogue/archives/[archiveId]/pages/route.ts"),
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+  ]);
+  assert.match(workspace, /archives\/\$\{archive\.id\}\/pages/);
+  assert.match(workspace, /archives\/\$\{archive\.id\}/);
+  assert.doesNotMatch(workspace, /api\/supplier-catalogue\/archives"/);
+  assert.match(route, /getSourcePages\(archiveId, pageNumbers\)/);
+  const sourceMethod = repository.slice(repository.indexOf("async getSourcePages"), repository.indexOf("async markFailed"));
+  assert.match(sourceMethod, /uniquePageNumbers\.length > 3/);
+  assert.match(sourceMethod, /\.in\("page_number", uniquePageNumbers\)/);
+  assert.match(sourceMethod, /select\("page_number, parsed_evidence"\)/);
+});
+
+test("resumed sequential analysis starts from unresolved pages and keeps failures retryable", async () => {
+  const [panel, engine] = await Promise.all([
+    readWeb("components/suppliers/CatalogueBatchAnalysisPanel.tsx"),
+    readWeb("lib/supplier/CatalogueBatchAnalysisEngine.ts"),
+  ]);
+  assert.match(panel, /page\.status === "pending" \|\| page\.status === "failed"/);
+  assert.match(panel, /sort\(\(left, right\) => left\.pageNumber - right\.pageNumber\)/);
+  assert.match(panel, /\.slice\(0, 3\)/);
+  assert.match(engine, /record\.status === "pending" \|\|[\s\S]*record\.status === "failed"/);
+  assert.doesNotMatch(engine.slice(engine.indexOf("function getNextPages"), engine.indexOf("function getSelectedPages")), /record\.status === "complete"|record\.status === "skipped"/);
+});
+
+test("resumed checkpoints preserve terminal pages and review decisions", async () => {
+  const [workspace, repository] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueResumeWorkspace.tsx"),
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+  ]);
+  assert.match(workspace, /changedPages/);
+  assert.match(workspace, /REVIEW_ITEM_BATCH_SIZE = 5/);
+  assert.match(repository, /terminalStates = new Set\(\["complete", "skipped"\]\)/);
+  assert.match(repository, /onConflict: "archive_id,review_item_id", ignoreDuplicates: true/);
+  assert.match(repository, /review_status: "pending"/);
+});
+
 test("archive queues are isolated and reload from the server", async () => {
   const repository = await readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts");
   assert.match(repository, /\.eq\("archive_id", archiveId\)\.eq\("review_status", "pending"\)/);
@@ -179,7 +258,7 @@ test("archive detail reports truthful page and review counts", async () => {
     readWeb("app/supplier-catalogue/[catalogueId]/page.tsx"),
   ]);
   assert.match(repository, /getPageSummary/);
-  for (const label of ["Pending", "Analysed", "Failed", "Review items"]) {
+  for (const label of ["Pending", "Analysed", "Failed", "Review pending"]) {
     assert.match(page, new RegExp(label));
   }
   assert.match(page, /cannot be resumed safely/);
@@ -256,7 +335,7 @@ test("decision persistence remains item-scoped and refreshes canonical archive c
 
 test("archive cards and review routes use explicit archive identity", async () => {
   const page = await readWeb("app/supplier-catalogue/page.tsx");
-  assert.match(page, /SupplierCatalogueArchiveRepository\.list\(\)/);
+  assert.match(page, /SupplierCatalogueArchiveRepository\.listWithProgress\(\)/);
   assert.match(page, /`\/supplier-catalogue\/\$\{archive\.id\}`/);
   assert.doesNotMatch(page, /const supplierCatalogues|const catalogueStats/);
   await access(new URL("app/supplier-catalogue/[catalogueId]/review/page.tsx", webRoot));
