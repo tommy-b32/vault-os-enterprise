@@ -29,6 +29,9 @@ export type ShopifyProductNode = {
     url: string;
   } | null;
   variants: {
+    pageInfo: {
+      hasNextPage: boolean;
+    };
     nodes: ShopifyVariantNode[];
   };
 };
@@ -69,7 +72,11 @@ const PRODUCT_QUERY = `
           url
         }
 
-        variants(first: 100) {
+        variants(first: 250) {
+          pageInfo {
+            hasNextPage
+          }
+
           nodes {
             id
             title
@@ -110,6 +117,16 @@ export async function fetchAllShopifyProducts(): Promise<
     );
 
     const connection = data.products;
+
+    const incompleteProduct = connection.nodes.find(
+      (product) => product.variants.pageInfo.hasNextPage,
+    );
+
+    if (incompleteProduct) {
+      throw new Error(
+        `Shopify variant pagination is incomplete for product ${incompleteProduct.id}; catalogue reconciliation was not applied`,
+      );
+    }
 
     products.push(...connection.nodes);
 

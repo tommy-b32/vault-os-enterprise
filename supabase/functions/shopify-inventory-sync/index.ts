@@ -190,6 +190,7 @@ Deno.serve(async (request: Request) => {
           "id, source_inventory_item_id, available_for_sale",
         )
         .eq("source", "shopify")
+        .eq("source_active", true)
         .not(
           "source_inventory_item_id",
           "is",

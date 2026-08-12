@@ -4,6 +4,10 @@ import {
   fetchAllShopifyProducts,
   type ShopifyVariantNode,
 } from "../_shared/shopify/products.ts";
+import {
+  classifyCatalogueWrites,
+  findStaleCanonicalVariantIds,
+} from "../_shared/shopify/catalogue-reconciliation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +50,8 @@ Deno.serve(async (request: Request) => {
     );
   }
 
+  let runContext: { supabase: ReturnType<typeof createClient>; id: string; startedAtMs: number } | null = null;
+
   try {
     const supabaseUrl =
       Deno.env.get("SUPABASE_URL");
@@ -70,8 +76,38 @@ Deno.serve(async (request: Request) => {
       },
     );
 
+    let runInventoryAfterCatalogue = false;
+    try {
+      const body = await request.json();
+      runInventoryAfterCatalogue = body?.runInventoryAfterCatalogue === true;
+    } catch {
+      // Empty manual requests remain catalogue-only.
+    }
+
+    const startedAt = new Date();
+    const { data: run, error: runError } = await supabase
+      .from("vault_shopify_catalogue_sync_runs")
+      .insert({ sync_status: "syncing", sync_started_at: startedAt.toISOString(), shopify_api_success: null })
+      .select("id")
+      .single();
+    if (runError) {
+      if (runError.code === "23505") return respond({ success: false, sync_status: "syncing", error: "A catalogue synchronisation is already running" }, 409);
+      throw runError;
+    }
+    runContext = { supabase, id: run.id, startedAtMs: startedAt.getTime() };
+
+    const [{ data: existingProducts, error: existingProductsError }, { data: existingVariants, error: existingVariantsError }] = await Promise.all([
+      supabase.from("vault_products").select("source_product_id").eq("source", "shopify"),
+      supabase.from("vault_variants").select("id, source_variant_id, source_active").eq("source", "shopify"),
+    ]);
+    if (existingProductsError || existingVariantsError) throw existingProductsError ?? existingVariantsError;
+
     const products =
       await fetchAllShopifyProducts();
+
+    const shopifyVariants = products.flatMap((product) => product.variants.nodes);
+    const productWrites = classifyCatalogueWrites((existingProducts ?? []).map((product) => product.source_product_id), products.map((product) => product.id));
+    const variantWrites = classifyCatalogueWrites((existingVariants ?? []).map((variant) => variant.source_variant_id), shopifyVariants.map((variant) => variant.id));
 
     let productsSynced = 0;
     let variantsSynced = 0;
@@ -162,6 +198,8 @@ Deno.serve(async (request: Request) => {
                       ),
                 available_for_sale:
                   variant.availableForSale,
+                source_active: true,
+                source_deleted_at: null,
                 updated_at:
                   new Date().toISOString(),
               },
@@ -184,12 +222,56 @@ Deno.serve(async (request: Request) => {
       }
     }
 
+    const staleVariantIds = findStaleCanonicalVariantIds(
+      (existingVariants ?? []).filter((variant) => variant.source_active),
+      shopifyVariants,
+    );
+    const reconciledAt = new Date().toISOString();
+    for (let index = 0; index < staleVariantIds.length; index += 500) {
+      const batch = staleVariantIds.slice(index, index + 500);
+      const { error: retireError } = await supabase.from("vault_variants").update({ source_active: false, source_deleted_at: reconciledAt, available_for_sale: false }).in("id", batch);
+      if (retireError) throw retireError;
+      const { error: inventoryCleanupError } = await supabase.from("vault_inventory_levels").delete().in("variant_id", batch);
+      if (inventoryCleanupError) throw inventoryCleanupError;
+    }
+
+    const completedAt = new Date();
+    const { error: completionError } = await supabase.from("vault_shopify_catalogue_sync_runs").update({
+      sync_status: "current", sync_completed_at: completedAt.toISOString(), sync_duration_ms: completedAt.getTime() - startedAt.getTime(),
+      shopify_products_processed: products.length, shopify_variants_processed: shopifyVariants.length,
+      products_created: productWrites.created, products_updated: productWrites.updated,
+      variants_created: variantWrites.created, variants_updated: variantWrites.updated,
+      stale_variants_reconciled: staleVariantIds.length, shopify_api_success: true,
+      inventory_sync_requested: runInventoryAfterCatalogue, error_message: null,
+    }).eq("id", run.id);
+    if (completionError) throw completionError;
+
+    let inventorySync: unknown = null;
+    if (runInventoryAfterCatalogue) {
+      const { data, error } = await supabase.functions.invoke("shopify-inventory-sync", { body: {} });
+      if (error) {
+        return respond({
+          success: false,
+          catalogue_sync: "current",
+          error: `Catalogue sync completed, but inventory sync could not start: ${error.message}`,
+        }, 502);
+      }
+      inventorySync = data;
+    }
+
     return respond({
       success: true,
-      sync_mode: "full_catalogue_without_inventory",
+      sync_mode: runInventoryAfterCatalogue
+        ? "full_catalogue_then_inventory"
+        : "full_catalogue_without_inventory",
       products_synced: productsSynced,
       variants_synced: variantsSynced,
-      inventory_sync: "pending_separate_worker",
+      products_created: productWrites.created,
+      products_updated: productWrites.updated,
+      variants_created: variantWrites.created,
+      variants_updated: variantWrites.updated,
+      stale_variants_reconciled: staleVariantIds.length,
+      inventory_sync: runInventoryAfterCatalogue ? inventorySync : "not_requested",
       completed_at:
         new Date().toISOString(),
     });
@@ -198,6 +280,16 @@ Deno.serve(async (request: Request) => {
       "[Vault Shopify Product Sync]",
       error,
     );
+
+    if (runContext) {
+      const failedAt = new Date();
+      await runContext.supabase.from("vault_shopify_catalogue_sync_runs").update({
+        sync_status: "failed", sync_completed_at: failedAt.toISOString(),
+        sync_duration_ms: failedAt.getTime() - runContext.startedAtMs,
+        shopify_api_success: false,
+        error_message: error instanceof Error ? error.message : "Unexpected product synchronisation error",
+      }).eq("id", runContext.id);
+    }
 
     return respond(
       {
