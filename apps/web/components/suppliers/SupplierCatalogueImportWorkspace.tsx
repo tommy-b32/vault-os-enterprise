@@ -45,6 +45,17 @@ type Props = {
   products?: CatalogueProduct[];
 };
 
+const SOURCE_PAGE_BATCH_SIZE = 2;
+const REVIEW_ITEM_BATCH_SIZE = 5;
+
+function batches<T>(values: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
+
 export function SupplierCatalogueImportWorkspace({
   products = [],
 }: Props) {
@@ -53,6 +64,7 @@ export function SupplierCatalogueImportWorkspace({
   const checkpointAnalysisRef = useRef<
     ((session: CatalogueAnalysisSession) => Promise<void>) | null
   >(null);
+  const persistedPageSignaturesRef = useRef<Record<number, string>>({});
   const [
     selectedFile,
     setSelectedFile,
@@ -125,14 +137,23 @@ export function SupplierCatalogueImportWorkspace({
         originalFilename: selectedFile.name,
         sourceDocumentId: extractionResult.document.id,
         pageCount: extractionResult.pages.length,
-        pages: extractionResult.pages,
         details,
       }),
     }).then(async (response) => {
       const payload = await response.json();
       if (!response.ok || !payload.archiveId) throw new Error(payload.error ?? "Catalogue archive could not be created.");
-      archiveIdRef.current = payload.archiveId;
-      return payload.archiveId as string;
+      const archiveId = payload.archiveId as string;
+      for (const pages of batches(extractionResult.pages, SOURCE_PAGE_BATCH_SIZE)) {
+        const pageResponse = await fetch(`/api/supplier-catalogue/archives/${archiveId}/pages`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pages }),
+        });
+        const pagePayload = await pageResponse.json();
+        if (!pageResponse.ok) throw new Error(pagePayload.error ?? "Catalogue source pages could not be saved.");
+      }
+      archiveIdRef.current = archiveId;
+      return archiveId;
     }).finally(() => { archiveRequestRef.current = null; });
 
     archiveRequestRef.current = request;
@@ -151,6 +172,7 @@ export function SupplierCatalogueImportWorkspace({
 
     archiveIdRef.current = null;
     archiveRequestRef.current = null;
+    persistedPageSignaturesRef.current = {};
   }
 
   async function prepareCatalogueIntelligence(
@@ -177,23 +199,21 @@ export function SupplierCatalogueImportWorkspace({
       const memories =
         await VaultMemoryRepository.getAll();
 
-      const queue =
-        CatalogueReviewQueueEngine.buildQueue({
-          session,
-          extractionResult,
-          details,
-          products,
-          memories,
-        });
-
       const archiveId = await ensureArchive(details);
-      const archiveResponse = await fetch(`/api/supplier-catalogue/archives/${archiveId}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ session, items: queue }),
-      });
-      const archivePayload = await archiveResponse.json();
-      if (!archiveResponse.ok) throw new Error(archivePayload.error ?? "Catalogue analysis could not be archived.");
+      const previewItems: CatalogueReviewQueueItem[] = [];
+      for (const productGroups of batches(session.productGroups, REVIEW_ITEM_BATCH_SIZE)) {
+        const queue = CatalogueReviewQueueEngine.buildQueue({
+          session: { ...session, productGroups }, extractionResult, details, products, memories,
+        });
+        for (const items of batches(queue, REVIEW_ITEM_BATCH_SIZE)) {
+          const archiveResponse = await fetch(`/api/supplier-catalogue/archives/${archiveId}`, {
+            method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ items }),
+          });
+          const archivePayload = await archiveResponse.json();
+          if (!archiveResponse.ok) throw new Error(archivePayload.error ?? "Catalogue review items could not be archived.");
+          if (previewItems.length < REVIEW_ITEM_BATCH_SIZE) previewItems.push(...items.slice(0, REVIEW_ITEM_BATCH_SIZE - previewItems.length));
+        }
+      }
 
       setAnalysisSession(
         session,
@@ -204,7 +224,7 @@ export function SupplierCatalogueImportWorkspace({
       );
 
       setReviewItems(
-        queue,
+        previewItems,
       );
 
     } catch (error) {
@@ -243,20 +263,39 @@ export function SupplierCatalogueImportWorkspace({
     try {
       const archiveId = await ensureArchive(catalogueDetails);
       const memories = await VaultMemoryRepository.getAll();
-      const items = CatalogueReviewQueueEngine.buildQueue({
-        session,
-        extractionResult,
-        details: catalogueDetails,
-        products,
-        memories,
-      });
-      const response = await fetch(`/api/supplier-catalogue/archives/${archiveId}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ session, items }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Catalogue progress could not be archived.");
+      const changedPages = Object.fromEntries(
+        Object.values(session.pages)
+          .filter((page) => {
+            const signature = `${page.status}:${page.attempts}:${page.analysedAt ?? ""}:${page.error ?? ""}`;
+            if (persistedPageSignaturesRef.current[page.pageNumber] === signature) return false;
+            persistedPageSignaturesRef.current[page.pageNumber] = signature;
+            return page.status !== "pending";
+          })
+          .map((page) => [page.pageNumber, page]),
+      );
+      if (Object.keys(changedPages).length > 0) {
+        const response = await fetch(`/api/supplier-catalogue/archives/${archiveId}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ session: { ...session, pages: changedPages, productGroups: [] } }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "Catalogue progress could not be archived.");
+      }
+      for (const productGroups of batches(session.productGroups, REVIEW_ITEM_BATCH_SIZE)) {
+        const queue = CatalogueReviewQueueEngine.buildQueue({
+          session: { ...session, productGroups }, extractionResult, details: catalogueDetails, products, memories,
+        });
+        for (const items of batches(queue, REVIEW_ITEM_BATCH_SIZE)) {
+          const itemResponse = await fetch(`/api/supplier-catalogue/archives/${archiveId}`, {
+            method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ items }),
+          });
+          if (!itemResponse.ok) {
+            const itemPayload = await itemResponse.json();
+            throw new Error(itemPayload.error ?? "Catalogue review items could not be archived.");
+          }
+        }
+      }
     } catch (error) {
       setQueueSaveError(error instanceof Error ? error.message : "Catalogue progress could not be archived.");
     }
@@ -351,6 +390,7 @@ export function SupplierCatalogueImportWorkspace({
 
           archiveIdRef.current = null;
           archiveRequestRef.current = null;
+          persistedPageSignaturesRef.current = {};
         }}
         onExtractionComplete={(
           result,

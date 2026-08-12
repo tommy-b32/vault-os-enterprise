@@ -26,7 +26,7 @@ function mapArchive(row: ArchiveRow): SupplierCatalogueArchive {
 const ARCHIVE_SELECT = `id, supplier_id, original_filename, display_name, status, page_count, detected_product_count, matched_product_count, unmatched_product_count, created_at, updated_at, supplier:vault_suppliers(supplier_name)`;
 
 export const SupplierCatalogueArchiveRepository = {
-  async create(input: { operatorId: string; idempotencyKey: string; originalFilename: string; details: CatalogueReviewQueueDetails; pageCount: number; sourceDocumentId: string; pages: SupplierDocumentPage[]; }) {
+  async create(input: { operatorId: string; idempotencyKey: string; originalFilename: string; details: CatalogueReviewQueueDetails; pageCount: number; sourceDocumentId: string; }) {
     const { data: supplier, error: supplierError } = await supabaseAdmin.from("vault_suppliers").select("id").ilike("supplier_name", input.details.supplierName).eq("is_active", true).maybeSingle();
     if (supplierError || !supplier) throw new Error("Choose a canonical active supplier before archiving this catalogue.");
     const { data, error } = await supabaseAdmin.from("vault_supplier_catalogue_archives").upsert({
@@ -36,8 +36,13 @@ export const SupplierCatalogueArchiveRepository = {
       page_count: input.pageCount, source_metadata: { document_id: input.sourceDocumentId }, failure_reason: null,
     }, { onConflict: "created_by_operator_id,idempotency_key" }).select("id").single();
     if (error || !data) throw new Error("The supplier catalogue archive could not be created.");
+    return data.id as string;
+  },
+
+  async saveSourcePages(input: { archiveId: string; pages: SupplierDocumentPage[] }) {
+    if (input.pages.length === 0 || input.pages.length > 3) throw new Error("Catalogue source pages must be saved in batches of one to three pages.");
     const pageRows = input.pages.map((page) => ({
-      archive_id: data.id,
+      archive_id: input.archiveId,
       page_number: page.pageNumber,
       analysis_state: "pending",
       parsed_evidence: {
@@ -58,18 +63,35 @@ export const SupplierCatalogueArchiveRepository = {
         .upsert(pageRows, { onConflict: "archive_id,page_number", ignoreDuplicates: true });
       if (pageError) throw new Error("Catalogue source pages could not be archived.");
     }
-    return data.id as string;
+  },
+
+  async saveReviewItems(input: { archiveId: string; items: CatalogueReviewQueueItem[] }) {
+    if (input.items.length > 5) throw new Error("Catalogue review items must be saved in batches of at most five.");
+    const items = input.items.map((item) => ({
+      archive_id: input.archiveId, review_item_id: item.card.id, source_page_number: item.card.pageNumber,
+      supplier_product_evidence: item.card, proposed_match: item.match, review_payload: item,
+      review_status: "pending", linked_product_id: null, decided_at: null, decided_by_operator_id: null, decision_metadata: {},
+    }));
+    if (items.length > 0) {
+      const { error } = await supabaseAdmin.from("vault_supplier_catalogue_review_items").upsert(items, { onConflict: "archive_id,review_item_id", ignoreDuplicates: true });
+      if (error) throw new Error("Catalogue review items could not be archived.");
+    }
   },
 
   async saveAnalysis(input: { archiveId: string; session: CatalogueAnalysisSession; items: CatalogueReviewQueueItem[]; }) {
-    const { data: existingPages, error: existingError } = await supabaseAdmin
-      .from("vault_supplier_catalogue_pages")
-      .select("page_number, analysis_state, parsed_evidence")
-      .eq("archive_id", input.archiveId);
+    const incomingPages = Object.values(input.session.pages);
+    const pageNumbers = incomingPages.map((page) => page.pageNumber);
+    const { data: existingPages, error: existingError } = pageNumbers.length === 0
+      ? { data: [], error: null }
+      : await supabaseAdmin
+          .from("vault_supplier_catalogue_pages")
+          .select("page_number, analysis_state, parsed_evidence")
+          .eq("archive_id", input.archiveId)
+          .in("page_number", pageNumbers);
     if (existingError) throw new Error("Existing catalogue page state could not be loaded.");
     const existingByPage = new Map((existingPages ?? []).map((page) => [page.page_number, page]));
     const terminalStates = new Set(["complete", "skipped"]);
-    const pages = Object.values(input.session.pages).map((page) => {
+    const pages = incomingPages.map((page) => {
       const existing = existingByPage.get(page.pageNumber);
       const preserveTerminal = existing && terminalStates.has(existing.analysis_state) && !terminalStates.has(page.status);
       const sourcePage = existing?.parsed_evidence?.sourcePage ?? null;
@@ -88,15 +110,7 @@ export const SupplierCatalogueArchiveRepository = {
       const { error } = await supabaseAdmin.from("vault_supplier_catalogue_pages").upsert(pages, { onConflict: "archive_id,page_number" });
       if (error) throw new Error("Catalogue page evidence could not be archived.");
     }
-    const items = input.items.map((item) => ({
-      archive_id: input.archiveId, review_item_id: item.card.id, source_page_number: item.card.pageNumber,
-      supplier_product_evidence: item.card, proposed_match: item.match, review_payload: item,
-      review_status: "pending", linked_product_id: null, decided_at: null, decided_by_operator_id: null, decision_metadata: {},
-    }));
-    if (items.length > 0) {
-      const { error } = await supabaseAdmin.from("vault_supplier_catalogue_review_items").upsert(items, { onConflict: "archive_id,review_item_id", ignoreDuplicates: true });
-      if (error) throw new Error("Catalogue review items could not be archived.");
-    }
+    await this.saveReviewItems({ archiveId: input.archiveId, items: input.items });
     const { error: readyError } = await supabaseAdmin.from("vault_supplier_catalogue_archives").update({ status: "ready_for_review", failure_reason: null }).eq("id", input.archiveId).in("status", ["processing", "ready_for_review", "failed"]);
     if (readyError) throw new Error("Catalogue archive readiness could not be saved.");
     const { error: refreshError } = await supabaseAdmin.rpc("refresh_supplier_catalogue_archive", { target_archive_id: input.archiveId });
@@ -104,17 +118,15 @@ export const SupplierCatalogueArchiveRepository = {
   },
 
   async getPageSummary(archiveId: string) {
-    const [{ data: pages, error: pageError }, { count: reviewItemCount, error: reviewError }] = await Promise.all([
-      supabaseAdmin.from("vault_supplier_catalogue_pages").select("analysis_state, parsed_evidence", { count: "exact" }).eq("archive_id", archiveId),
+    const [{ data: pages, error: pageError }, { data: resumablePage, error: resumableError }, { count: reviewItemCount, error: reviewError }] = await Promise.all([
+      supabaseAdmin.from("vault_supplier_catalogue_pages").select("analysis_state", { count: "exact" }).eq("archive_id", archiveId),
+      supabaseAdmin.from("vault_supplier_catalogue_pages").select("parsed_evidence").eq("archive_id", archiveId).in("analysis_state", ["pending", "failed"]).limit(1).maybeSingle(),
       supabaseAdmin.from("vault_supplier_catalogue_review_items").select("id", { count: "exact", head: true }).eq("archive_id", archiveId),
     ]);
-    if (pageError || reviewError) throw new Error("Catalogue analysis summary could not be loaded.");
+    if (pageError || resumableError || reviewError) throw new Error("Catalogue analysis summary could not be loaded.");
     const states = (pages ?? []).map((page) => page.analysis_state);
-    const resumable = (pages ?? []).filter((page) => {
-      if (!["pending", "failed"].includes(page.analysis_state)) return false;
-      const sourcePage = page.parsed_evidence?.sourcePage;
-      return sourcePage && Array.isArray(sourcePage.images) && sourcePage.images.some((image: { dataUrl?: unknown }) => typeof image.dataUrl === "string" && image.dataUrl.startsWith("data:image/"));
-    }).length;
+    const sourcePage = resumablePage?.parsed_evidence?.sourcePage;
+    const resumable = sourcePage && Array.isArray(sourcePage.images) && sourcePage.images.some((image: { dataUrl?: unknown }) => typeof image.dataUrl === "string" && image.dataUrl.startsWith("data:image/")) ? 1 : 0;
     return {
       total: states.length,
       pending: states.filter((state) => state === "pending" || state === "analysing").length,

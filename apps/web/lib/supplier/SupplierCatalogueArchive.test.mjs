@@ -30,14 +30,36 @@ test("archive queues are isolated and reload from the server", async () => {
   assert.match(repository, /\.eq\("archive_id", input\.archiveId\)\.eq\("review_item_id", input\.reviewItemId\)/);
 });
 
-test("rendered source pages are persisted when the archive is created", async () => {
+test("rendered source pages are persisted in bounded batches after metadata-only archive creation", async () => {
   const [repository, workspace] = await Promise.all([
     readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
     readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),
   ]);
-  assert.match(workspace, /pages: extractionResult\.pages/);
+  const createBody = workspace.match(/body: JSON\.stringify\(\{([\s\S]*?)details,/i)?.[1] ?? "";
+  assert.doesNotMatch(createBody, /\bpages\s*:/);
+  assert.match(workspace, /SOURCE_PAGE_BATCH_SIZE = 2/);
+  assert.match(workspace, /batches\(extractionResult\.pages, SOURCE_PAGE_BATCH_SIZE\)/);
   assert.match(repository, /sourcePage: page/);
   assert.match(repository, /onConflict: "archive_id,page_number", ignoreDuplicates: true/);
+});
+
+test("large catalogues never serialize all rendered pages or review items together", async () => {
+  const workspace = await readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx");
+  assert.doesNotMatch(workspace, /JSON\.stringify\(\{[^}]*pages: extractionResult\.pages/s);
+  assert.match(workspace, /REVIEW_ITEM_BATCH_SIZE = 5/);
+  assert.match(workspace, /batches\(session\.productGroups, REVIEW_ITEM_BATCH_SIZE\)/);
+  assert.match(workspace, /JSON\.stringify\(\{ items \}\)/);
+});
+
+test("page checkpoints send only changed non-pending records", async () => {
+  const [workspace, repository] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+  ]);
+  assert.match(workspace, /changedPages/);
+  assert.match(workspace, /page\.status !== "pending"/);
+  assert.match(workspace, /productGroups: \[\]/);
+  assert.match(repository, /\.in\("page_number", pageNumbers\)/);
 });
 
 test("page analysis checkpoints terminal and failed evidence without stale regression", async () => {
