@@ -61,6 +61,8 @@ export function SupplierCatalogueImportWorkspace({
 }: Props) {
   const archiveIdRef = useRef<string | null>(null);
   const archiveRequestRef = useRef<Promise<string> | null>(null);
+  const archiveReviewItemCountRef = useRef(0);
+  const sourcePersistenceRef = useRef<Promise<void> | null>(null);
   const checkpointAnalysisRef = useRef<
     ((session: CatalogueAnalysisSession) => Promise<void>) | null
   >(null);
@@ -143,6 +145,21 @@ export function SupplierCatalogueImportWorkspace({
       const payload = await response.json();
       if (!response.ok || !payload.archiveId) throw new Error(payload.error ?? "Catalogue archive could not be created.");
       const archiveId = payload.archiveId as string;
+      archiveIdRef.current = archiveId;
+      archiveReviewItemCountRef.current =
+        typeof payload.reviewItemCount === "number" ? payload.reviewItemCount : 0;
+      return archiveId;
+    }).finally(() => { archiveRequestRef.current = null; });
+
+    archiveRequestRef.current = request;
+    return request;
+  }
+
+  async function persistSourcePages(archiveId: string): Promise<void> {
+    if (sourcePersistenceRef.current) return sourcePersistenceRef.current;
+    if (!extractionResult) throw new Error("Extract the catalogue before saving its source pages.");
+
+    const request = (async () => {
       for (const pages of batches(extractionResult.pages, SOURCE_PAGE_BATCH_SIZE)) {
         const pageResponse = await fetch(`/api/supplier-catalogue/archives/${archiveId}/pages`, {
           method: "POST",
@@ -152,11 +169,9 @@ export function SupplierCatalogueImportWorkspace({
         const pagePayload = await pageResponse.json();
         if (!pageResponse.ok) throw new Error(pagePayload.error ?? "Catalogue source pages could not be saved.");
       }
-      archiveIdRef.current = archiveId;
-      return archiveId;
-    }).finally(() => { archiveRequestRef.current = null; });
+    })().finally(() => { sourcePersistenceRef.current = null; });
 
-    archiveRequestRef.current = request;
+    sourcePersistenceRef.current = request;
     return request;
   }
 
@@ -172,6 +187,8 @@ export function SupplierCatalogueImportWorkspace({
 
     archiveIdRef.current = null;
     archiveRequestRef.current = null;
+    archiveReviewItemCountRef.current = 0;
+    sourcePersistenceRef.current = null;
     persistedPageSignaturesRef.current = {};
   }
 
@@ -196,10 +213,13 @@ export function SupplierCatalogueImportWorkspace({
     );
 
     try {
+      const archiveId = await ensureArchive(details);
+      if (archiveReviewItemCountRef.current > 0) {
+        window.location.assign(`/supplier-catalogue/${archiveId}/review`);
+        return;
+      }
       const memories =
         await VaultMemoryRepository.getForSupplier(details.supplierName);
-
-      const archiveId = await ensureArchive(details);
       const previewItems: CatalogueReviewQueueItem[] = [];
       for (const productGroups of batches(session.productGroups, REVIEW_ITEM_BATCH_SIZE)) {
         const queue = CatalogueReviewQueueEngine.buildQueue({
@@ -211,6 +231,7 @@ export function SupplierCatalogueImportWorkspace({
           });
           const archivePayload = await archiveResponse.json();
           if (!archiveResponse.ok) throw new Error(archivePayload.error ?? "Catalogue review items could not be archived.");
+          archiveReviewItemCountRef.current += items.length;
           if (previewItems.length < REVIEW_ITEM_BATCH_SIZE) previewItems.push(...items.slice(0, REVIEW_ITEM_BATCH_SIZE - previewItems.length));
         }
       }
@@ -226,6 +247,12 @@ export function SupplierCatalogueImportWorkspace({
       setReviewItems(
         previewItems,
       );
+
+      if (archiveReviewItemCountRef.current === 0) {
+        throw new Error("No canonical review items are ready for this catalogue.");
+      }
+
+      window.location.assign(`/supplier-catalogue/${archiveId}/review`);
 
     } catch (error) {
       const message =
@@ -392,6 +419,8 @@ export function SupplierCatalogueImportWorkspace({
 
           archiveIdRef.current = null;
           archiveRequestRef.current = null;
+          archiveReviewItemCountRef.current = 0;
+          sourcePersistenceRef.current = null;
           persistedPageSignaturesRef.current = {};
         }}
         onExtractionComplete={(
@@ -417,6 +446,9 @@ export function SupplierCatalogueImportWorkspace({
           fileName={
             selectedFile.name
           }
+          isPreparingReviewQueue={
+            isPreparingIntelligence
+          }
           onAnalysisSessionChange={
             handleAnalysisSessionChange
           }
@@ -425,7 +457,9 @@ export function SupplierCatalogueImportWorkspace({
           }
           onContinue={(details) => {
             setCatalogueDetails(details);
-            void ensureArchive(details).catch((error) => {
+            void ensureArchive(details).then((archiveId) =>
+              persistSourcePages(archiveId),
+            ).catch((error) => {
               setQueueSaveError(error instanceof Error ? error.message : "Catalogue archive could not be created.");
             });
           }}
@@ -467,7 +501,7 @@ export function SupplierCatalogueImportWorkspace({
             </p>
 
             <h3>
-              Loading Vault Brain Memory and analysing the full catalogue...
+              Preparing canonical review items and opening Match Review...
             </h3>
           </div>
         </div>

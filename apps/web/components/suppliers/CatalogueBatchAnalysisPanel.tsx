@@ -29,6 +29,7 @@ import type {
 type Props = {
   extractionResult: SupplierExtractionResult;
   canOpenReviewQueue?: boolean;
+  isPreparingReviewQueue?: boolean;
   onSessionChange?: (
     session: CatalogueAnalysisSession,
   ) => void;
@@ -40,6 +41,7 @@ type Props = {
 export function CatalogueBatchAnalysisPanel({
   extractionResult,
   canOpenReviewQueue = false,
+  isPreparingReviewQueue = false,
   onSessionChange,
   onOpenReviewQueue,
 }: Props) {
@@ -713,13 +715,16 @@ console.log(
             className="brain-button brain-button-secondary"
             disabled={
               isRunning ||
+              isPreparingReviewQueue ||
               !hasDetectedProducts ||
               !canOpenReviewQueue
             }
             onClick={openReviewQueue}
             type="button"
           >
-            Open Review Queue →
+            {isPreparingReviewQueue
+              ? "Preparing Review Queue..."
+              : "Open Review Queue →"}
           </button>
 
           <button

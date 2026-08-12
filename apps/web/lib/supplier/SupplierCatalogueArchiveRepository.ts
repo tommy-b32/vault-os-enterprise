@@ -160,6 +160,15 @@ export const SupplierCatalogueArchiveRepository = {
     return (data ?? []).map((row) => row.review_payload as CatalogueReviewQueueItem);
   },
 
+  async getReviewItemCount(archiveId: string): Promise<number> {
+    const { count, error } = await supabaseAdmin
+      .from("vault_supplier_catalogue_review_items")
+      .select("id", { count: "exact", head: true })
+      .eq("archive_id", archiveId);
+    if (error) throw new Error("Catalogue review readiness could not be loaded.");
+    return count ?? 0;
+  },
+
   async decide(input: { archiveId: string; reviewItemId: string; operatorId: string; status: "matched" | "skipped" | "create_product"; linkedProductId: string | null; metadata?: Record<string, unknown>; }) {
     if (input.status === "matched" && !input.linkedProductId) throw new Error("A matched review decision requires a canonical product.");
     const { data, error } = await supabaseAdmin.from("vault_supplier_catalogue_review_items").update({ review_status: input.status, linked_product_id: input.linkedProductId, decided_at: new Date().toISOString(), decided_by_operator_id: input.operatorId, decision_metadata: input.metadata ?? {} }).eq("archive_id", input.archiveId).eq("review_item_id", input.reviewItemId).eq("review_status", "pending").select("id").maybeSingle();

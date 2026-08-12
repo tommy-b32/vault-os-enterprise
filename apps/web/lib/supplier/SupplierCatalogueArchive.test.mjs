@@ -51,6 +51,63 @@ test("large catalogues never serialize all rendered pages or review items togeth
   assert.match(workspace, /JSON\.stringify\(\{ items \}\)/);
 });
 
+test("Open Review Queue navigates only after canonical archive identity and review readiness", async () => {
+  const workspace = await readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx");
+  const prepare = workspace.slice(
+    workspace.indexOf("async function prepareCatalogueIntelligence"),
+    workspace.indexOf("async function checkpointAnalysis"),
+  );
+  assert.match(prepare, /const archiveId = await ensureArchive\(details\)/);
+  assert.match(prepare, /archiveReviewItemCountRef\.current > 0[\s\S]*window\.location\.assign\(`\/supplier-catalogue\/\$\{archiveId\}\/review`\)/);
+  assert.match(prepare, /archiveReviewItemCountRef\.current === 0[\s\S]*throw new Error\("No canonical review items are ready/);
+  assert.doesNotMatch(prepare, /\/supplier-catalogue\/review[`"']/);
+  assert.ok(
+    prepare.indexOf("archiveReviewItemCountRef.current > 0") <
+      prepare.indexOf("VaultMemoryRepository.getForSupplier"),
+    "existing review items should navigate before Vault Memory preparation",
+  );
+});
+
+test("existing canonical review items are reused without duplicate preparation", async () => {
+  const [workspace, route, repository] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),
+    readWeb("app/api/supplier-catalogue/archives/route.ts"),
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+  ]);
+  assert.match(route, /getReviewItemCount\(archiveId\)/);
+  assert.match(workspace, /archiveReviewItemCountRef\.current > 0[\s\S]*return;/);
+  assert.match(repository, /onConflict: "archive_id,review_item_id", ignoreDuplicates: true/);
+});
+
+test("review preparation failure is visible and the button reports its busy state", async () => {
+  const [workspace, importPanel, batchPanel] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),
+    readWeb("components/suppliers/SupplierCatalogueImportPanel.tsx"),
+    readWeb("components/suppliers/CatalogueBatchAnalysisPanel.tsx"),
+  ]);
+  assert.match(workspace, /setQueueSaveError\([\s\S]*message/);
+  assert.match(workspace, /role="alert"/);
+  assert.match(importPanel, /isPreparingReviewQueue=\{[\s\S]*isPreparingReviewQueue/);
+  assert.match(batchPanel, /disabled=\{[\s\S]*isPreparingReviewQueue/);
+  assert.match(batchPanel, /Preparing Review Queue\.\.\./);
+});
+
+test("canonical archive identity is available before bounded source persistence finishes", async () => {
+  const workspace = await readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx");
+  const identity = workspace.slice(
+    workspace.indexOf("async function ensureArchive"),
+    workspace.indexOf("async function persistSourcePages"),
+  );
+  const sourcePersistence = workspace.slice(
+    workspace.indexOf("async function persistSourcePages"),
+    workspace.indexOf("function resetImport"),
+  );
+  assert.match(identity, /archiveIdRef\.current = archiveId[\s\S]*return archiveId/);
+  assert.doesNotMatch(identity, /\/pages`/);
+  assert.match(sourcePersistence, /batches\(extractionResult\.pages, SOURCE_PAGE_BATCH_SIZE\)/);
+  assert.match(workspace, /ensureArchive\(details\)\.then\(\(archiveId\) =>[\s\S]*persistSourcePages\(archiveId\)/);
+});
+
 test("catalogue matching loads supplier-scoped memory without image-heavy evidence", async () => {
   const [workspace, repository, route] = await Promise.all([
     readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),

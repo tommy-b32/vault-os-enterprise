@@ -7,7 +7,8 @@ export async function POST(request: Request) {
     const operator = await requireOperatorRole("owner", "operator");
     const body = await request.json();
     const archiveId = await SupplierCatalogueArchiveRepository.create({ operatorId: operator.id, idempotencyKey: body.idempotencyKey, originalFilename: body.originalFilename, details: body.details, pageCount: body.pageCount, sourceDocumentId: body.sourceDocumentId });
-    return NextResponse.json({ archiveId });
+    const reviewItemCount = await SupplierCatalogueArchiveRepository.getReviewItemCount(archiveId);
+    return NextResponse.json({ archiveId, reviewItemCount });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Catalogue archive could not be created." }, { status: 400 });
   }

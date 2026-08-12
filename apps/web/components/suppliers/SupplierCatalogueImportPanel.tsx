@@ -60,6 +60,7 @@ type CatalogueDetails = {
 type Props = {
   fileName: string;
   extractionResult: SupplierExtractionResult;
+  isPreparingReviewQueue?: boolean;
 
   onCancel?: () => void;
 
@@ -94,6 +95,7 @@ function removePdfExtension(
 export function SupplierCatalogueImportPanel({
   fileName,
   extractionResult,
+  isPreparingReviewQueue = false,
   onCancel,
   onAnalysisSessionChange,
   onOpenReviewQueue,
@@ -687,6 +689,9 @@ export function SupplierCatalogueImportPanel({
             }
             extractionResult={
               extractionResult
+            }
+            isPreparingReviewQueue={
+              isPreparingReviewQueue
             }
             onOpenReviewQueue={
               handleOpenReviewQueue
