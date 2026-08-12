@@ -11,6 +11,7 @@ import type { CatalogueProduct } from "@/types/catalogue";
 
 type Props = {
   archive: SupplierCatalogueArchive;
+  hasPendingReviewItems: boolean;
   pageStates: SupplierCataloguePageState[];
   products: CatalogueProduct[];
 };
@@ -23,7 +24,7 @@ function batches<T>(values: T[], size: number): T[][] {
   return result;
 }
 
-export function SupplierCatalogueResumeWorkspace({ archive, pageStates, products }: Props) {
+export function SupplierCatalogueResumeWorkspace({ archive, hasPendingReviewItems, pageStates, products }: Props) {
   const sourcePagesRef = useRef<Record<number, SupplierDocumentPage>>({});
   const persistedSignaturesRef = useRef<Record<number, string>>(
     Object.fromEntries(pageStates.map((page) => [page.pageNumber, `${page.status}:0:${page.analysedAt ?? ""}:${page.error ?? ""}`])),
@@ -104,6 +105,10 @@ export function SupplierCatalogueResumeWorkspace({ archive, pageStates, products
     setIsSaving(true);
     setMessage(null);
     try {
+      if (session.productGroups.length === 0 && hasPendingReviewItems) {
+        window.location.assign(`/supplier-catalogue/${archive.id}/review`);
+        return;
+      }
       await persistSession(session);
       const sourcePages = Object.values(sourcePagesRef.current);
       const memories = await VaultMemoryRepository.getForSupplier(archive.supplierName);
@@ -133,15 +138,25 @@ export function SupplierCatalogueResumeWorkspace({ archive, pageStates, products
     }
   }
 
-  return <section>
+  const recoverableUnresolvedPages = pageStates.filter((page) => page.hasSourceEvidence && (page.status === "pending" || page.status === "failed")).length;
+
+  return <section className="supplier-guided-analysis">
+    <section className="supplier-guided-confirmed-details">
+      <article><span>Declared pages</span><strong>{archive.pageCount}</strong></article>
+      <article><span>Durable pages</span><strong>{pageStates.filter((page) => page.hasSourceEvidence).length}</strong></article>
+      <article><span>Analysable now</span><strong>{recoverableUnresolvedPages}</strong></article>
+      <article><span>Unavailable</span><strong>{pageStates.filter((page) => !page.hasSourceEvidence).length}</strong></article>
+    </section>
     {message ? <div className="supplier-review-queue-error" role="alert"><strong>Catalogue analysis update</strong><p>{message}</p></div> : null}
     {isSaving ? <p role="status">Saving analysis and preparing new review items...</p> : null}
     <CatalogueBatchAnalysisPanel
       canOpenReviewQueue
       extractionResult={extractionResult}
       initialSession={initialSession}
+      existingReviewItemsReady={hasPendingReviewItems}
       isPreparingReviewQueue={isSaving}
       loadSourcePages={loadSourcePages}
+      sourceAvailablePageNumbers={pageStates.filter((page) => page.hasSourceEvidence).map((page) => page.pageNumber)}
       onOpenReviewQueue={(session) => { void openReviewQueue(session); }}
       onSessionChange={(session) => { void persistSession(session).catch((error) => setMessage(error instanceof Error ? error.message : "Catalogue progress could not be saved.")); }}
     />

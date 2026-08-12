@@ -11272,6 +11272,49 @@ grid-template-columns:1fr;
    VAULT OS — BATCH ANALYSIS ACTION BUTTONS
 ========================================================== */
 
+.catalogue-batch-analysis-panel { overflow: hidden; color: var(--vault-text); background: rgba(8, 10, 9, 0.78); border: 1px solid var(--vault-border); border-radius: 14px; }
+.catalogue-batch-analysis-header,
+.catalogue-page-selection-header,
+.catalogue-batch-analysis-footer,
+.catalogue-page-selection-actions { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px; }
+.catalogue-batch-analysis-header,
+.catalogue-page-selection-header { border-bottom: 1px solid var(--vault-border); }
+.catalogue-batch-analysis-header h3,
+.catalogue-page-selection-header h4 { margin: 4px 0 6px; color: #f4f1e9; }
+.catalogue-batch-analysis-header p:last-child,
+.catalogue-page-selection-header p,
+.catalogue-batch-analysis-footer p,
+.catalogue-page-selection-actions span { margin: 0; color: var(--vault-muted); }
+.catalogue-batch-analysis-header > span { padding: 6px 10px; color: var(--vault-gold-bright); background: rgba(217, 173, 74, 0.08); border: 1px solid rgba(217, 173, 74, 0.22); border-radius: 999px; font-size: 0.68rem; font-weight: 750; text-transform: uppercase; }
+.catalogue-batch-analysis-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding: 18px; }
+.catalogue-batch-analysis-stats article { display: grid; gap: 6px; padding: 13px; background: rgba(6, 8, 7, 0.72); border: 1px solid var(--vault-border); border-radius: 9px; }
+.catalogue-batch-analysis-stats span,
+.catalogue-page-selection-number,
+.catalogue-page-selection-state { color: var(--vault-muted); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.045em; text-transform: uppercase; }
+.catalogue-batch-analysis-stats strong { color: var(--vault-gold-bright); font-size: 1.2rem; }
+.catalogue-page-selection-panel { border-top: 1px solid var(--vault-border); border-bottom: 1px solid var(--vault-border); }
+.catalogue-page-selection-grid { max-height: 720px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; overflow-y: auto; padding: 16px; }
+.catalogue-page-selection-card { min-width: 0; display: grid; grid-template-rows: auto 145px auto; gap: 8px; padding: 10px; color: var(--vault-text); text-align: left; background: #0d100e; border: 1px solid #30332f; border-radius: 10px; cursor: pointer; }
+.catalogue-page-selection-card img,
+.catalogue-page-selection-empty { width: 100%; height: 145px; display: grid; place-items: center; object-fit: contain; color: var(--vault-muted); background: #070908; border-radius: 7px; font-size: 0.72rem; text-align: center; }
+.catalogue-page-selection-card.is-selected { border-color: var(--vault-gold); box-shadow: 0 0 0 2px rgba(217, 173, 74, 0.12); }
+.catalogue-page-selection-card.is-analysed { border-color: rgba(107, 201, 120, 0.45); }
+.catalogue-page-selection-card.is-analysed .catalogue-page-selection-state { color: var(--vault-success); }
+.catalogue-page-selection-card.is-unavailable { opacity: 0.48; }
+.catalogue-page-selection-card:disabled { cursor: not-allowed; }
+.catalogue-page-selection-actions,
+.catalogue-batch-analysis-footer { align-items: flex-start; }
+.catalogue-page-selection-actions > div,
+.catalogue-batch-analysis-footer > div:first-child { display: grid; gap: 6px; }
+
+@media (max-width: 900px) {
+  .catalogue-batch-analysis-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalogue-batch-analysis-header,
+  .catalogue-page-selection-header,
+  .catalogue-batch-analysis-footer,
+  .catalogue-page-selection-actions { align-items: stretch; flex-direction: column; }
+}
+
 .catalogue-batch-analysis-actions {
   display: flex;
   align-items: center;

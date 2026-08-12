@@ -78,6 +78,67 @@ test("resume uses the existing archive identity and bounded persisted source evi
   assert.match(sourceMethod, /select\("page_number, parsed_evidence"\)/);
 });
 
+test("resume restores durable previews lazily through the canonical analysis panel", async () => {
+  const [workspace, panel, repository, styles] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueResumeWorkspace.tsx"),
+    readWeb("components/suppliers/CatalogueBatchAnalysisPanel.tsx"),
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+    readWeb("app/globals.css"),
+  ]);
+  assert.match(workspace, /<CatalogueBatchAnalysisPanel/);
+  assert.match(workspace, /sourceAvailablePageNumbers=/);
+  assert.match(repository, /\.not\("parsed_evidence->sourcePage", "is", null\)/);
+  assert.match(panel, /IntersectionObserver/);
+  assert.match(panel, /loadSourcePages\(\[pageNumber\]\)/);
+  assert.match(panel, /loadedSourcePages\[page\.pageNumber\]\?\.images\[0\]/);
+  assert.match(styles, /\.catalogue-page-selection-grid/);
+  assert.match(styles, /\.catalogue-page-selection-card\.is-unavailable/);
+});
+
+test("resume distinguishes completed, analysable, and unavailable pages", async () => {
+  const [workspace, panel] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueResumeWorkspace.tsx"),
+    readWeb("components/suppliers/CatalogueBatchAnalysisPanel.tsx"),
+  ]);
+  assert.match(workspace, /Analysable now/);
+  assert.match(workspace, /Unavailable/);
+  assert.match(panel, /record\?\.status !== "complete"/);
+  assert.match(panel, /disabled=\{!isAnalysable\}/);
+  assert.match(panel, /record\?\.status ===[\s\S]*"complete"[\s\S]*"Analysed"/);
+});
+
+test("next and selected analysis exclude pages without durable evidence", async () => {
+  const panel = await readWeb("components/suppliers/CatalogueBatchAnalysisPanel.tsx");
+  const next = panel.slice(panel.indexOf("async function analyseNextBatch"), panel.indexOf("async function analyseSelectedPages"));
+  const selected = panel.slice(panel.indexOf("async function analyseSelectedPages"), panel.indexOf("function openReviewQueue"));
+  assert.match(next, /sourceAvailableNumbers\.has\(page\.pageNumber\)/);
+  assert.match(next, /\.slice\(0, 3\)/);
+  assert.match(panel, /pageNumbers\.filter\(\(pageNumber\) => analysablePageNumbers\.has\(pageNumber\)\)\.slice\(0, 3\)/);
+  assert.match(selected, /resolveSourcePages\(selectedPageNumbers\)/);
+  assert.match(panel, /analysablePageNumbers\.has\(candidate\)/);
+});
+
+test("resume never constructs a 620-page image payload", async () => {
+  const [workspace, panel, route] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueResumeWorkspace.tsx"),
+    readWeb("components/suppliers/CatalogueBatchAnalysisPanel.tsx"),
+    readWeb("app/api/supplier-catalogue/archives/[archiveId]/pages/route.ts"),
+  ]);
+  assert.match(workspace, /pageNumbers\.slice\(0, 3\)/);
+  assert.match(panel, /loadSourcePages\(\[pageNumber\]\)/);
+  assert.doesNotMatch(`${workspace}${route}`, /pages:\s*extractionResult\.pages/);
+});
+
+test("existing canonical review queue remains directly accessible on resume", async () => {
+  const [workspace, page] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueResumeWorkspace.tsx"),
+    readWeb("app/supplier-catalogue/[catalogueId]/analyse/page.tsx"),
+  ]);
+  assert.match(page, /hasPendingReviewItems=\{pageSummary\.pendingReviewItems > 0\}/);
+  assert.match(workspace, /session\.productGroups\.length === 0 && hasPendingReviewItems/);
+  assert.match(workspace, /window\.location\.assign\(`\/supplier-catalogue\/\$\{archive\.id\}\/review`\)/);
+});
+
 test("resumed sequential analysis starts from unresolved pages and keeps failures retryable", async () => {
   const [panel, engine] = await Promise.all([
     readWeb("components/suppliers/CatalogueBatchAnalysisPanel.tsx"),

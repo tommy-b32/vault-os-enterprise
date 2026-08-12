@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -31,6 +32,8 @@ type Props = {
   extractionResult: SupplierExtractionResult;
   initialSession?: CatalogueAnalysisSession;
   loadSourcePages?: (pageNumbers: number[]) => Promise<SupplierDocumentPage[]>;
+  sourceAvailablePageNumbers?: number[];
+  existingReviewItemsReady?: boolean;
   canOpenReviewQueue?: boolean;
   isPreparingReviewQueue?: boolean;
   onSessionChange?: (
@@ -41,10 +44,36 @@ type Props = {
   ) => void;
 };
 
+function LazyCataloguePagePreview({ pageNumber, preview, canLoad, onVisible }: {
+  pageNumber: number;
+  preview: SupplierDocumentPage["images"][number] | undefined;
+  canLoad: boolean;
+  onVisible: (pageNumber: number) => void;
+}) {
+  const elementRef = useRef<HTMLSpanElement | null>(null);
+  const requestedRef = useRef(false);
+  useEffect(() => {
+    if (!canLoad || preview || requestedRef.current || !elementRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      requestedRef.current = true;
+      onVisible(pageNumber);
+      observer.disconnect();
+    }, { rootMargin: "300px" });
+    observer.observe(elementRef.current);
+    return () => observer.disconnect();
+  }, [canLoad, onVisible, pageNumber, preview]);
+
+  if (preview) return <img alt={`Supplier catalogue page ${pageNumber}`} loading="lazy" src={preview.dataUrl} />;
+  return <span className="catalogue-page-selection-empty" ref={elementRef}>{canLoad ? "Loading preview..." : "Preview unavailable"}</span>;
+}
+
 export function CatalogueBatchAnalysisPanel({
   extractionResult,
   initialSession,
   loadSourcePages,
+  sourceAvailablePageNumbers,
+  existingReviewItemsReady = false,
   canOpenReviewQueue = false,
   isPreparingReviewQueue = false,
   onSessionChange,
@@ -64,6 +93,10 @@ export function CatalogueBatchAnalysisPanel({
 
   const [isRunning, setIsRunning] =
     useState(false);
+  const [loadedSourcePages, setLoadedSourcePages] = useState<Record<number, SupplierDocumentPage>>(
+    Object.fromEntries(extractionResult.pages.filter((page) => page.images.length > 0).map((page) => [page.pageNumber, page])),
+  );
+  const previewRequestsRef = useRef<Set<number>>(new Set());
 
   const [
     overlayTitle,
@@ -187,17 +220,42 @@ export function CatalogueBatchAnalysisPanel({
 
   const hasDetectedProducts =
     session.productGroups.length > 0;
+  const sourceAvailableNumbers = useMemo(
+    () => new Set(sourceAvailablePageNumbers ?? extractionResult.pages.filter((page) => page.images.length > 0).map((page) => page.pageNumber)),
+    [extractionResult.pages, sourceAvailablePageNumbers],
+  );
+  const analysablePageNumbers = useMemo(
+    () => new Set(Object.values(session.pages).filter((page) =>
+      (page.status === "pending" || page.status === "failed") && sourceAvailableNumbers.has(page.pageNumber),
+    ).map((page) => page.pageNumber)),
+    [session.pages, sourceAvailableNumbers],
+  );
 
   async function resolveSourcePages(pageNumbers: number[]): Promise<SupplierDocumentPage[]> {
-    if (loadSourcePages) return loadSourcePages(pageNumbers.slice(0, 3));
-    const selected = new Set(pageNumbers);
+    const safePageNumbers = pageNumbers.filter((pageNumber) => analysablePageNumbers.has(pageNumber)).slice(0, 3);
+    const cached = safePageNumbers.map((pageNumber) => loadedSourcePages[pageNumber]).filter(Boolean);
+    const cachedNumbers = new Set(cached.map((page) => page.pageNumber));
+    const missing = safePageNumbers.filter((pageNumber) => !cachedNumbers.has(pageNumber));
+    const loaded = loadSourcePages && missing.length > 0 ? await loadSourcePages(missing) : [];
+    if (loaded.length > 0) setLoadedSourcePages((current) => ({ ...current, ...Object.fromEntries(loaded.map((page) => [page.pageNumber, page])) }));
+    if (loadSourcePages) return [...cached, ...loaded].sort((left, right) => left.pageNumber - right.pageNumber);
+    const selected = new Set(safePageNumbers);
     return extractionResult.pages.filter((page) => selected.has(page.pageNumber));
+  }
+
+  function loadPreview(pageNumber: number) {
+    if (!loadSourcePages || previewRequestsRef.current.has(pageNumber)) return;
+    previewRequestsRef.current.add(pageNumber);
+    void loadSourcePages([pageNumber]).then((pages) => {
+      setLoadedSourcePages((current) => ({ ...current, ...Object.fromEntries(pages.map((page) => [page.pageNumber, page])) }));
+    }).catch(() => { previewRequestsRef.current.delete(pageNumber); });
   }
 
   function togglePageSelection(
     pageNumber: number,
     useRange: boolean,
   ) {
+    if (!analysablePageNumbers.has(pageNumber)) return;
     if (
       useRange &&
       lastSelectedPageNumber !== null
@@ -218,7 +276,8 @@ export function CatalogueBatchAnalysisPanel({
           .filter(
             (candidate) =>
               candidate >= start &&
-              candidate <= end,
+              candidate <= end &&
+              analysablePageNumbers.has(candidate),
           );
 
       setSelectedPageNumbers((current) =>
@@ -350,7 +409,7 @@ console.log(
 
     try {
       const nextPageNumbers = Object.values(session.pages)
-        .filter((page) => page.status === "pending" || page.status === "failed")
+        .filter((page) => (page.status === "pending" || page.status === "failed") && sourceAvailableNumbers.has(page.pageNumber))
         .sort((left, right) => left.pageNumber - right.pageNumber)
         .slice(0, 3)
         .map((page) => page.pageNumber);
@@ -540,7 +599,7 @@ console.log(
           {extractionResult.pages.map(
             (page) => {
               const preview =
-                page.images[0];
+                loadedSourcePages[page.pageNumber]?.images[0] ?? page.images[0];
 
               const isSelected =
                 selectedPageNumbers.includes(
@@ -551,6 +610,7 @@ console.log(
                 session.pages[
                   page.pageNumber
                 ];
+              const isAnalysable = analysablePageNumbers.has(page.pageNumber);
 
               return (
                 <button
@@ -564,10 +624,12 @@ console.log(
                     "complete"
                       ? "is-analysed"
                       : "",
+                    !isAnalysable && record?.status !== "complete" ? "is-unavailable" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                   key={page.pageNumber}
+                  disabled={!isAnalysable}
                   onClick={(event) =>
                     togglePageSelection(
                       page.pageNumber,
@@ -580,17 +642,12 @@ console.log(
                     Page {page.pageNumber}
                   </span>
 
-                  {preview ? (
-                    <img
-                      alt={`Supplier catalogue page ${page.pageNumber}`}
-                      loading="lazy"
-                      src={preview.dataUrl}
-                    />
-                  ) : (
-                    <span className="catalogue-page-selection-empty">
-                      Preview unavailable
-                    </span>
-                  )}
+                  <LazyCataloguePagePreview
+                    canLoad={sourceAvailableNumbers.has(page.pageNumber)}
+                    onVisible={loadPreview}
+                    pageNumber={page.pageNumber}
+                    preview={preview}
+                  />
 
                   <span className="catalogue-page-selection-state">
                     {isSelected
@@ -598,7 +655,9 @@ console.log(
                       : record?.status ===
                           "complete"
                         ? "Analysed"
-                        : "Select"}
+                        : isAnalysable
+                          ? "Select"
+                          : "Unavailable"}
                   </span>
                 </button>
               );
@@ -732,7 +791,7 @@ console.log(
             disabled={
               isRunning ||
               isPreparingReviewQueue ||
-              !hasDetectedProducts ||
+              (!hasDetectedProducts && !existingReviewItemsReady) ||
               !canOpenReviewQueue
             }
             onClick={openReviewQueue}
@@ -749,7 +808,7 @@ console.log(
               isRunning ||
               (
                 selectedPageNumbers.length === 0 &&
-                remainingPages === 0
+                (remainingPages === 0 || analysablePageNumbers.size === 0)
               )
             }
             onClick={() => {
@@ -772,7 +831,9 @@ console.log(
                 ? `Analyse Selected Pages (${selectedPageNumbers.length})`
                 : remainingPages === 0
                   ? "Catalogue analysis complete"
-                  : "Analyse Next 3 Pages"}
+                  : analysablePageNumbers.size === 0
+                    ? "No durable pages available"
+                    : "Analyse Next 3 Pages"}
           </button>
         </div>
       </footer>

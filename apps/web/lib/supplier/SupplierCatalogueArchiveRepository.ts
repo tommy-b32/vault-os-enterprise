@@ -32,6 +32,7 @@ export type SupplierCataloguePageState = {
   status: CatalogueAnalysisSession["pages"][number]["status"];
   error: string | null;
   analysedAt: string | null;
+  hasSourceEvidence: boolean;
 };
 
 export type SupplierCatalogueArchiveWithProgress = SupplierCatalogueArchive & {
@@ -158,13 +159,13 @@ export const SupplierCatalogueArchiveRepository = {
   },
 
   async getPageStates(archiveId: string): Promise<SupplierCataloguePageState[]> {
-    const { data, error } = await supabaseAdmin
-      .from("vault_supplier_catalogue_pages")
-      .select("page_number, analysis_state, error_message, analysed_at")
-      .eq("archive_id", archiveId)
-      .order("page_number", { ascending: true });
-    if (error) throw new Error("Catalogue page states could not be loaded.");
-    return (data ?? []).map((page) => ({ pageNumber: page.page_number, status: page.analysis_state, error: page.error_message, analysedAt: page.analysed_at }));
+    const [{ data, error }, { data: sourcePages, error: sourceError }] = await Promise.all([
+      supabaseAdmin.from("vault_supplier_catalogue_pages").select("page_number, analysis_state, error_message, analysed_at").eq("archive_id", archiveId).order("page_number", { ascending: true }),
+      supabaseAdmin.from("vault_supplier_catalogue_pages").select("page_number").eq("archive_id", archiveId).not("parsed_evidence->sourcePage", "is", null),
+    ]);
+    if (error || sourceError) throw new Error("Catalogue page states could not be loaded.");
+    const sourcePageNumbers = new Set((sourcePages ?? []).map((page) => page.page_number));
+    return (data ?? []).map((page) => ({ pageNumber: page.page_number, status: page.analysis_state, error: page.error_message, analysedAt: page.analysed_at, hasSourceEvidence: sourcePageNumbers.has(page.page_number) }));
   },
 
   async getSourcePages(archiveId: string, pageNumbers: number[]): Promise<SupplierDocumentPage[]> {
@@ -177,7 +178,11 @@ export const SupplierCatalogueArchiveRepository = {
       .in("page_number", uniquePageNumbers)
       .order("page_number", { ascending: true });
     if (error) throw new Error("Catalogue source page evidence could not be loaded.");
-    return (data ?? []).map((page) => page.parsed_evidence?.sourcePage as SupplierDocumentPage).filter((page) => page && Array.isArray(page.images));
+    return (data ?? [])
+      .map((page) => page.parsed_evidence?.sourcePage as SupplierDocumentPage)
+      .filter((page) => page && Array.isArray(page.images) && page.images.some((image) =>
+        typeof image.dataUrl === "string" && (image.dataUrl.startsWith("data:image/") || image.dataUrl.startsWith("https://")),
+      ));
   },
 
   async markFailed(archiveId: string, reason: string) {
