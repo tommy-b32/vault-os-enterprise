@@ -87,6 +87,25 @@ const MEMORY_SELECT = `
   updated_at
 `;
 
+const MATCHING_MEMORY_SELECT = `
+  id,
+  supplier_name,
+  supplier_product_name,
+  supplier_reference,
+  fabric_vault_product_id,
+  fabric_vault_product_name,
+  confidence,
+  visual_fingerprint,
+  first_seen,
+  last_seen,
+  accepted_count,
+  last_supplier_cost,
+  currency,
+  lead_time_days,
+  created_at,
+  updated_at
+`;
+
 function readRequiredString(
   value: unknown,
   fieldName: string,
@@ -295,26 +314,25 @@ function mapMemoryRow(
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const denied = await authorizeApiRequest();
   if (denied) return denied;
   try {
+    const url = new URL(request.url);
+    const matchingSupplier = url.searchParams.get("matchingSupplier")?.trim() ?? "";
+    let query = supabaseAdmin
+      .from("vault_product_memory")
+      .select(matchingSupplier ? MATCHING_MEMORY_SELECT : MEMORY_SELECT)
+      .order("last_seen", { ascending: false });
+
+    if (matchingSupplier) {
+      query = query.eq("supplier_name", matchingSupplier);
+    }
+
     const {
       data,
       error,
-    } = await supabaseAdmin
-      .from(
-        "vault_product_memory",
-      )
-      .select(
-        MEMORY_SELECT,
-      )
-      .order(
-        "last_seen",
-        {
-          ascending: false,
-        },
-      );
+    } = await query;
 
     if (error) {
       throw new Error(
@@ -322,8 +340,10 @@ export async function GET() {
       );
     }
 
-    const rows =
-      (data ?? []) as VaultMemoryRow[];
+    const rows = ((data ?? []) as unknown as Array<Partial<VaultMemoryRow>>).map((row) => ({
+      ...row,
+      supplier_image_url: row.supplier_image_url ?? null,
+    })) as VaultMemoryRow[];
 
     return NextResponse.json({
       memories:

@@ -51,6 +51,41 @@ test("large catalogues never serialize all rendered pages or review items togeth
   assert.match(workspace, /JSON\.stringify\(\{ items \}\)/);
 });
 
+test("catalogue matching loads supplier-scoped memory without image-heavy evidence", async () => {
+  const [workspace, repository, route] = await Promise.all([
+    readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),
+    readWeb("lib/brain/VaultMemoryRepository.ts"),
+    readWeb("app/api/vault-memory/route.ts"),
+  ]);
+  assert.match(workspace, /VaultMemoryRepository\.getForSupplier\(details\.supplierName\)/);
+  assert.match(repository, /matchingSupplier=\$\{encodeURIComponent\(supplierName\)\}/);
+  const matchingSelect = route.match(/const MATCHING_MEMORY_SELECT = `([\s\S]*?)`;/)?.[1] ?? "";
+  assert.doesNotMatch(matchingSelect, /supplier_image_url/);
+  assert.match(route, /query = query\.eq\("supplier_name", matchingSupplier\)/);
+});
+
+test("page-source writes remain bounded and do not load archive evidence", async () => {
+  const repository = await readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts");
+  const sourceMethod = repository.slice(
+    repository.indexOf("async saveSourcePages"),
+    repository.indexOf("async saveReviewItems"),
+  );
+  assert.match(sourceMethod, /input\.pages\.length > 3/);
+  assert.match(sourceMethod, /ignoreDuplicates: true/);
+  assert.doesNotMatch(sourceMethod, /\.select\(|refresh_supplier_catalogue_archive|parsed_evidence.*select/s);
+});
+
+test("summary state query excludes parsed evidence except one resumability probe", async () => {
+  const repository = await readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts");
+  const summary = repository.slice(
+    repository.indexOf("async getPageSummary"),
+    repository.indexOf("async markFailed"),
+  );
+  assert.match(summary, /select\("analysis_state"/);
+  assert.match(summary, /select\("parsed_evidence"\).*\.limit\(1\)/s);
+  assert.doesNotMatch(summary, /select\("analysis_state, parsed_evidence"/);
+});
+
 test("page checkpoints send only changed non-pending records", async () => {
   const [workspace, repository] = await Promise.all([
     readWeb("components/suppliers/SupplierCatalogueImportWorkspace.tsx"),

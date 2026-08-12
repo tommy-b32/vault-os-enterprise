@@ -197,7 +197,7 @@ export function SupplierCatalogueImportWorkspace({
 
     try {
       const memories =
-        await VaultMemoryRepository.getAll();
+        await VaultMemoryRepository.getForSupplier(details.supplierName);
 
       const archiveId = await ensureArchive(details);
       const previewItems: CatalogueReviewQueueItem[] = [];
@@ -262,7 +262,9 @@ export function SupplierCatalogueImportWorkspace({
 
     try {
       const archiveId = await ensureArchive(catalogueDetails);
-      const memories = await VaultMemoryRepository.getAll();
+      const memories = await VaultMemoryRepository.getForSupplier(
+        catalogueDetails.supplierName,
+      );
       const changedPages = Object.fromEntries(
         Object.values(session.pages)
           .filter((page) => {
