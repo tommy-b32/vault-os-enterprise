@@ -10,8 +10,91 @@ import {
   markPurchaseOrderOrdered,
   prepareApprovedPurchaseOrder,
   recordPurchaseOrderPayment,
+  recordPurchaseOrderReceipt,
   type CreatePurchaseOrderDraftInput,
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export type RecordPurchaseOrderReceiptState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export async function recordReceiptAgainstPurchaseOrder(
+  _previousState: RecordPurchaseOrderReceiptState,
+  formData: FormData,
+): Promise<RecordPurchaseOrderReceiptState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    const receivedDate = formData.get("received_date");
+    const idempotencyKey = formData.get("idempotency_key");
+    const parsedReceivedDate = typeof receivedDate === "string"
+      ? new Date(`${receivedDate}T00:00:00Z`)
+      : null;
+
+    if (typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId)) {
+      return { status: "error", message: "Invalid purchase order." };
+    }
+    if (typeof receivedDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(receivedDate) ||
+      !parsedReceivedDate || Number.isNaN(parsedReceivedDate.getTime()) ||
+      parsedReceivedDate.toISOString().slice(0, 10) !== receivedDate) {
+      return { status: "error", message: "Enter a valid received date." };
+    }
+    if (typeof idempotencyKey !== "string" || idempotencyKey.trim().length === 0) {
+      return { status: "error", message: "Receipt operation identity is missing." };
+    }
+
+    const lines: Array<{
+      purchaseOrderLineId: string;
+      quantityReceived: number;
+      discrepancyNote: string | null;
+    }> = [];
+    for (const [key, value] of formData.entries()) {
+      if (!key.startsWith("quantity:") || typeof value !== "string" || value.trim() === "") continue;
+      const purchaseOrderLineId = key.slice("quantity:".length);
+      const quantityReceived = Number(value);
+      if (!UUID_PATTERN.test(purchaseOrderLineId) || !Number.isInteger(quantityReceived) || quantityReceived < 0) {
+        return { status: "error", message: "Received quantities must be whole, non-negative units." };
+      }
+      if (quantityReceived === 0) continue;
+      const note = formData.get(`note:${purchaseOrderLineId}`);
+      lines.push({
+        purchaseOrderLineId,
+        quantityReceived,
+        discrepancyNote: typeof note === "string" && note.trim() ? note.trim() : null,
+      });
+    }
+    if (lines.length === 0) {
+      return { status: "error", message: "Enter at least one positive received quantity." };
+    }
+
+    const result = await recordPurchaseOrderReceipt({
+      purchaseOrderId,
+      operatorId: operator.id,
+      receivedDate,
+      idempotencyKey,
+      lines,
+    });
+    revalidatePath("/purchase-orders");
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return {
+      status: "success",
+      message: result.transitioned
+        ? result.fullyReceived
+          ? "Receipt recorded. Purchase order is fully received."
+          : "Partial receipt recorded."
+        : "This receipt was already recorded.",
+    };
+  } catch (error) {
+    console.error("Unable to record purchase-order receipt", error);
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Purchase-order receipt could not be recorded.",
+    };
+  }
+}
 
 export type RecordPurchaseOrderPaymentState = {
   status: "idle" | "success" | "error";

@@ -71,10 +71,19 @@ export type PurchaseOrderPaymentResult = {
   paymentId: string;
   purchaseOrderId: string;
   cashTransactionId: string;
-  status: "part_paid" | "paid";
+  status: "part_paid" | "paid" | "shipped" | "received";
   paidAmountGbp: number;
   outstandingAmountGbp: number;
   paymentDate: string;
+  transitioned: boolean;
+};
+
+export type PurchaseOrderReceiptResult = {
+  receiptId: string;
+  purchaseOrderId: string;
+  status: "ordered" | "part_paid" | "paid" | "shipped" | "received";
+  receivedAt: string | null;
+  fullyReceived: boolean;
   transitioned: boolean;
 };
 
@@ -569,7 +578,7 @@ export async function getPurchaseOrders() {
           source_recommendation_type
         )
       `)
-      .in("status", ["draft", "approved", "ordered", "part_paid", "paid"])
+      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received"])
       .order("created_at", {
         ascending: false,
       });
@@ -615,10 +624,23 @@ export async function getPurchaseOrder(
           created_by_operator_id,
           cash_transaction_id,
           created_at
+        ),
+        vault_purchase_order_receipts (
+          id,
+          received_date,
+          created_by_operator_id,
+          created_at,
+          vault_purchase_order_receipt_lines (
+            id,
+            purchase_order_line_id,
+            quantity_received,
+            discrepancy_note,
+            created_at
+          )
         )
       `)
       .eq("id", id)
-      .in("status", ["draft", "approved", "ordered", "part_paid", "paid"])
+      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received"])
       .maybeSingle();
 
   if (error) {
@@ -825,6 +847,44 @@ export async function recordPurchaseOrderPayment(input: {
   };
 }
 
+export async function recordPurchaseOrderReceipt(input: {
+  purchaseOrderId: string;
+  operatorId: string;
+  receivedDate: string;
+  idempotencyKey: string;
+  lines: Array<{
+    purchaseOrderLineId: string;
+    quantityReceived: number;
+    discrepancyNote: string | null;
+  }>;
+}): Promise<PurchaseOrderReceiptResult> {
+  const { data, error } = await supabaseAdmin.rpc(
+    "record_vault_purchase_order_receipt",
+    {
+      target_purchase_order_id: input.purchaseOrderId,
+      target_operator_id: input.operatorId,
+      target_received_date: input.receivedDate,
+      target_idempotency_key: input.idempotencyKey,
+      target_lines: input.lines.map((line) => ({
+        purchase_order_line_id: line.purchaseOrderLineId,
+        quantity_received: line.quantityReceived,
+        discrepancy_note: line.discrepancyNote,
+      })),
+    },
+  );
+  if (error) throw new Error(error.message);
+  const result = data?.[0];
+  if (!result) throw new Error("Purchase-order receipt did not return canonical evidence.");
+  return {
+    receiptId: result.receipt_id,
+    purchaseOrderId: result.purchase_order_id,
+    status: result.status,
+    receivedAt: result.received_at,
+    fullyReceived: result.fully_received,
+    transitioned: result.transitioned,
+  };
+}
+
 export async function prepareApprovedPurchaseOrder(
   purchaseOrderId: string,
 ): Promise<PreparedSupplierOrder> {
@@ -856,7 +916,7 @@ export async function prepareApprovedPurchaseOrder(
     throw new Error("Purchase order was not found.");
   }
 
-  if (!(["approved", "ordered", "part_paid", "paid"] as string[]).includes(order.data.status)) {
+  if (!(["approved", "ordered", "part_paid", "paid", "shipped", "received"] as string[]).includes(order.data.status)) {
     throw new Error(
       `Supplier order preparation requires an approved purchasing state; found '${order.data.status}'.`,
     );

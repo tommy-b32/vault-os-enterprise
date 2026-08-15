@@ -5,6 +5,7 @@ import VaultAppShell from "@/components/layout/VaultAppShell";
 import { PurchaseOrderApprovalButton } from "@/components/purchase-orders/PurchaseOrderApprovalButton";
 import { SupplierOrderPreparation } from "@/components/purchase-orders/SupplierOrderPreparation";
 import { PurchaseOrderPayment } from "@/components/purchase-orders/PurchaseOrderPayment";
+import { PurchaseOrderReceiving } from "@/components/purchase-orders/PurchaseOrderReceiving";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
 
@@ -20,6 +21,13 @@ type SavedPurchaseOrderLine = {
   line_cost_gbp: number | null;
   source_recommendation_type: string;
   recommendation_priority: string | null;
+};
+
+type SavedReceiptLine = {
+  id: string;
+  purchase_order_line_id: string;
+  quantity_received: number;
+  discrepancy_note: string | null;
 };
 
 function money(
@@ -90,6 +98,18 @@ export default async function PurchaseOrderDetailPage({
     );
   const payments = [...(draft.vault_purchase_order_payments ?? [])]
     .sort((left, right) => left.payment_date.localeCompare(right.payment_date) || left.created_at.localeCompare(right.created_at));
+  const receipts = [...(draft.vault_purchase_order_receipts ?? [])]
+    .sort((left, right) => left.received_date.localeCompare(right.received_date) || left.created_at.localeCompare(right.created_at));
+  const receivedByLine = new Map<string, number>();
+  for (const receipt of receipts) {
+    for (const receiptLine of receipt.vault_purchase_order_receipt_lines ?? []) {
+      receivedByLine.set(
+        receiptLine.purchase_order_line_id,
+        (receivedByLine.get(receiptLine.purchase_order_line_id) ?? 0) + receiptLine.quantity_received,
+      );
+    }
+  }
+  const productNameByLine = new Map(lines.map((line) => [line.id, line.product_name]));
 
   return (
     <VaultAppShell>
@@ -173,7 +193,7 @@ export default async function PurchaseOrderDetailPage({
             </article>
           ) : null}
 
-          {draft.status === "ordered" && draft.ordered_at ? (
+          {draft.ordered_at ? (
             <article>
               <span>Ordered</span>
               <strong>
@@ -189,6 +209,19 @@ export default async function PurchaseOrderDetailPage({
                   draft.ordering_operator?.email ??
                   "Vault operator"}
               </strong>
+            </article>
+          ) : null}
+
+          {draft.received_at ? (
+            <article>
+              <span>Fully received</span>
+              <strong>{new Intl.DateTimeFormat("en-GB", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              }).format(new Date(draft.received_at))}</strong>
             </article>
           ) : null}
         </section>
@@ -334,14 +367,14 @@ export default async function PurchaseOrderDetailPage({
           ) : null}
         </section>
 
-        {["approved", "ordered", "part_paid", "paid"].includes(draft.status) ? (
+        {["approved", "ordered", "part_paid", "paid", "shipped", "received"].includes(draft.status) ? (
           <SupplierOrderPreparation
             purchaseOrderId={draft.id}
             purchaseOrderStatus={draft.status}
           />
         ) : null}
 
-        {["ordered", "part_paid", "paid"].includes(draft.status) ? (
+        {["ordered", "part_paid", "paid", "shipped", "received"].includes(draft.status) ? (
           <PurchaseOrderPayment
             actualTotalGbp={draft.actual_total_gbp}
             estimatedTotalGbp={draft.estimated_total_gbp}
@@ -349,6 +382,33 @@ export default async function PurchaseOrderDetailPage({
             payments={payments}
             purchaseOrderId={draft.id}
             key={`${draft.id}:${draft.paid_amount_gbp}`}
+            status={draft.status}
+          />
+        ) : null}
+
+        {["ordered", "part_paid", "paid", "shipped", "received"].includes(draft.status) ? (
+          <PurchaseOrderReceiving
+            key={`${draft.id}:${draft.status}:${Array.from(receivedByLine.values()).reduce((sum, value) => sum + value, 0)}`}
+            lines={lines.map((line) => ({
+              id: line.id,
+              productName: line.product_name,
+              orderedQuantity: line.recommended_units ??
+                (line.units_per_pack === null ? null : line.recommended_packs * line.units_per_pack),
+              receivedQuantity: receivedByLine.get(line.id) ?? 0,
+            }))}
+            purchaseOrderId={draft.id}
+            receipts={receipts.map((receipt) => ({
+              id: receipt.id,
+              receivedDate: receipt.received_date,
+              createdAt: receipt.created_at,
+              lines: (receipt.vault_purchase_order_receipt_lines ?? []).map((line: SavedReceiptLine) => ({
+                id: line.id,
+                purchaseOrderLineId: line.purchase_order_line_id,
+                productName: productNameByLine.get(line.purchase_order_line_id) ?? "Unknown PO line",
+                quantityReceived: line.quantity_received,
+                discrepancyNote: line.discrepancy_note,
+              })),
+            }))}
             status={draft.status}
           />
         ) : null}

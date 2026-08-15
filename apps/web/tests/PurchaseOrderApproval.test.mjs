@@ -61,7 +61,7 @@ test("approval mutates only canonical header approval fields", () => {
 });
 
 test("approved and ordered orders remain visible and drafts cannot prepare supplier orders", () => {
-  assert.match(repository, /\.in\("status", \["draft", "approved", "ordered", "part_paid", "paid"\]\)/);
+  assert.match(repository, /\.in\("status", \["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received"\]\)/);
   assert.match(listPage, /draft\.status\.toUpperCase\(\)/);
   assert.match(detailPage, /draft\.status === "draft"/);
   assert.match(detailPage, /Prepare Supplier Order/);

@@ -68,7 +68,7 @@ test("mark ordered is explicit only after preparation and never sends externally
   assert.match(component, /Vault OS has not sent or placed this order automatically/);
   assert.match(component, /Mark as Ordered/);
   assert.match(component, /purchaseOrderStatus === "approved"/);
-  assert.match(detail, /draft\.status === "ordered" && draft\.ordered_at/);
+  assert.match(detail, /draft\.ordered_at/);
   assert.doesNotMatch(component + actions, /wa\.me|api\.whatsapp|fetch\(|sendMessage|placeOrder/);
 });
 

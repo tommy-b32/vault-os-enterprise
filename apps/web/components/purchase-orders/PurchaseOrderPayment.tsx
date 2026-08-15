@@ -30,7 +30,7 @@ export function PurchaseOrderPayment({
   payments,
 }: {
   purchaseOrderId: string;
-  status: "ordered" | "part_paid" | "paid";
+  status: "ordered" | "part_paid" | "paid" | "shipped" | "received";
   estimatedTotalGbp: number | null;
   actualTotalGbp: number | null;
   paidAmountGbp: number;
@@ -70,7 +70,7 @@ export function PurchaseOrderPayment({
         ))}
       </div>
 
-      {status !== "paid" ? (
+      {status !== "paid" && outstanding !== 0 ? (
         <form action={action}>
           <input name="purchase_order_id" type="hidden" value={purchaseOrderId} />
           <input name="idempotency_key" suppressHydrationWarning type="hidden" value={idempotencyKey} />
