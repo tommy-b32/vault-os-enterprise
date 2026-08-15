@@ -26,7 +26,7 @@ export function SupplierOrderPreparation({
   purchaseOrderStatus,
 }: {
   purchaseOrderId: string;
-  purchaseOrderStatus: "approved" | "ordered";
+  purchaseOrderStatus: "approved" | "ordered" | "part_paid" | "paid";
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(

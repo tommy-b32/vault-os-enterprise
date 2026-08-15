@@ -67,6 +67,17 @@ export type PurchaseOrderOrderedResult = {
   transitioned: boolean;
 };
 
+export type PurchaseOrderPaymentResult = {
+  paymentId: string;
+  purchaseOrderId: string;
+  cashTransactionId: string;
+  status: "part_paid" | "paid";
+  paidAmountGbp: number;
+  outstandingAmountGbp: number;
+  paymentDate: string;
+  transitioned: boolean;
+};
+
 const APPROVAL_REASON_LABELS: Record<string, string> = {
   reorder_approval_missing: "Required product purchasing authorisation is missing.",
   supplier_minimum_packs_not_satisfied: "The supplier minimum pack quantity is not satisfied by current qualified demand.",
@@ -558,7 +569,7 @@ export async function getPurchaseOrders() {
           source_recommendation_type
         )
       `)
-      .in("status", ["draft", "approved", "ordered"])
+      .in("status", ["draft", "approved", "ordered", "part_paid", "paid"])
       .order("created_at", {
         ascending: false,
       });
@@ -596,10 +607,18 @@ export async function getPurchaseOrder(
         *,
         vault_purchase_order_lines (
           *
+        ),
+        vault_purchase_order_payments (
+          id,
+          amount_gbp,
+          payment_date,
+          created_by_operator_id,
+          cash_transaction_id,
+          created_at
         )
       `)
       .eq("id", id)
-      .in("status", ["draft", "approved", "ordered"])
+      .in("status", ["draft", "approved", "ordered", "part_paid", "paid"])
       .maybeSingle();
 
   if (error) {
@@ -774,6 +793,38 @@ export async function markPurchaseOrderOrdered(input: {
   );
 }
 
+export async function recordPurchaseOrderPayment(input: {
+  purchaseOrderId: string;
+  operatorId: string;
+  amountGbp: number;
+  paymentDate: string;
+  idempotencyKey: string;
+}): Promise<PurchaseOrderPaymentResult> {
+  const { data, error } = await supabaseAdmin.rpc(
+    "record_vault_purchase_order_payment",
+    {
+      target_purchase_order_id: input.purchaseOrderId,
+      target_operator_id: input.operatorId,
+      target_amount_gbp: input.amountGbp,
+      target_payment_date: input.paymentDate,
+      target_idempotency_key: input.idempotencyKey,
+    },
+  );
+  if (error) throw new Error(error.message);
+  const result = data?.[0];
+  if (!result) throw new Error("Purchase-order payment did not return canonical evidence.");
+  return {
+    paymentId: result.payment_id,
+    purchaseOrderId: result.purchase_order_id,
+    cashTransactionId: result.cash_transaction_id,
+    status: result.status,
+    paidAmountGbp: Number(result.paid_amount_gbp),
+    outstandingAmountGbp: Number(result.outstanding_amount_gbp),
+    paymentDate: result.payment_date,
+    transitioned: result.transitioned,
+  };
+}
+
 export async function prepareApprovedPurchaseOrder(
   purchaseOrderId: string,
 ): Promise<PreparedSupplierOrder> {
@@ -805,9 +856,9 @@ export async function prepareApprovedPurchaseOrder(
     throw new Error("Purchase order was not found.");
   }
 
-  if (order.data.status !== "approved" && order.data.status !== "ordered") {
+  if (!(["approved", "ordered", "part_paid", "paid"] as string[]).includes(order.data.status)) {
     throw new Error(
-      `Supplier order preparation requires APPROVED or ORDERED status; found '${order.data.status}'.`,
+      `Supplier order preparation requires an approved purchasing state; found '${order.data.status}'.`,
     );
   }
 

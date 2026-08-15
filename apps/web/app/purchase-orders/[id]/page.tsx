@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import VaultAppShell from "@/components/layout/VaultAppShell";
 import { PurchaseOrderApprovalButton } from "@/components/purchase-orders/PurchaseOrderApprovalButton";
 import { SupplierOrderPreparation } from "@/components/purchase-orders/SupplierOrderPreparation";
+import { PurchaseOrderPayment } from "@/components/purchase-orders/PurchaseOrderPayment";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
 
@@ -87,6 +88,8 @@ export default async function PurchaseOrderDetailPage({
         (line.recommended_units ?? 0),
       0,
     );
+  const payments = [...(draft.vault_purchase_order_payments ?? [])]
+    .sort((left, right) => left.payment_date.localeCompare(right.payment_date) || left.created_at.localeCompare(right.created_at));
 
   return (
     <VaultAppShell>
@@ -331,10 +334,22 @@ export default async function PurchaseOrderDetailPage({
           ) : null}
         </section>
 
-        {draft.status === "approved" || draft.status === "ordered" ? (
+        {["approved", "ordered", "part_paid", "paid"].includes(draft.status) ? (
           <SupplierOrderPreparation
             purchaseOrderId={draft.id}
             purchaseOrderStatus={draft.status}
+          />
+        ) : null}
+
+        {["ordered", "part_paid", "paid"].includes(draft.status) ? (
+          <PurchaseOrderPayment
+            actualTotalGbp={draft.actual_total_gbp}
+            estimatedTotalGbp={draft.estimated_total_gbp}
+            paidAmountGbp={draft.paid_amount_gbp}
+            payments={payments}
+            purchaseOrderId={draft.id}
+            key={`${draft.id}:${draft.paid_amount_gbp}`}
+            status={draft.status}
           />
         ) : null}
 

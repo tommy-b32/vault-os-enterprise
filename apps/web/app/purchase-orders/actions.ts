@@ -3,13 +3,72 @@
 import { revalidatePath } from "next/cache";
 
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
+import { parsePositiveAmountToPence, penceToDatabaseAmount } from "@/lib/business/CashLedgerRules";
 import {
   approvePurchaseOrderDraft,
   createPurchaseOrderDraft,
   markPurchaseOrderOrdered,
   prepareApprovedPurchaseOrder,
+  recordPurchaseOrderPayment,
   type CreatePurchaseOrderDraftInput,
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
+
+export type RecordPurchaseOrderPaymentState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export async function recordPaymentAgainstPurchaseOrder(
+  _previousState: RecordPurchaseOrderPaymentState,
+  formData: FormData,
+): Promise<RecordPurchaseOrderPaymentState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    const amount = formData.get("amount_gbp");
+    const paymentDate = formData.get("payment_date");
+    const idempotencyKey = formData.get("idempotency_key");
+    if (typeof purchaseOrderId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(purchaseOrderId)) {
+      return { status: "error", message: "Invalid purchase order." };
+    }
+    if (typeof amount !== "string") return { status: "error", message: "Payment amount is required." };
+    const parsedPaymentDate = typeof paymentDate === "string"
+      ? new Date(`${paymentDate}T00:00:00Z`)
+      : null;
+    if (typeof paymentDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) ||
+      !parsedPaymentDate || Number.isNaN(parsedPaymentDate.getTime()) ||
+      parsedPaymentDate.toISOString().slice(0, 10) !== paymentDate) {
+      return { status: "error", message: "Enter a valid payment date." };
+    }
+    if (typeof idempotencyKey !== "string" || idempotencyKey.trim().length === 0) {
+      return { status: "error", message: "Payment operation identity is missing." };
+    }
+    const amountPence = parsePositiveAmountToPence(amount);
+    const result = await recordPurchaseOrderPayment({
+      purchaseOrderId,
+      operatorId: operator.id,
+      amountGbp: Number(penceToDatabaseAmount(amountPence)),
+      paymentDate,
+      idempotencyKey,
+    });
+    revalidatePath("/commercial");
+    revalidatePath("/purchase-orders");
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return {
+      status: "success",
+      message: result.transitioned
+        ? `Payment recorded. Purchase order is ${result.status.replace("_", " ")}.`
+        : "This payment was already recorded.",
+    };
+  } catch (error) {
+    console.error("Unable to record purchase-order payment", error);
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Purchase-order payment could not be recorded.",
+    };
+  }
+}
 
 export type MarkPurchaseOrderOrderedState = {
   status: "idle" | "success" | "error";

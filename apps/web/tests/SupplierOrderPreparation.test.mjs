@@ -142,7 +142,7 @@ test("server preparation requires authentication and canonical approved or order
   ]);
 
   assert.match(action, /requireAuthenticatedOperator\(\)/);
-  assert.match(repository, /order\.data\.status !== "approved" && order\.data\.status !== "ordered"/);
+  assert.match(repository, /\["approved", "ordered", "part_paid", "paid"\]/);
   assert.match(repository, /vault_purchase_order_lines/);
   assert.match(repository, /vault_supplier_catalogue_review_items/);
   assert.match(repository, /supplier_product_evidence/);
