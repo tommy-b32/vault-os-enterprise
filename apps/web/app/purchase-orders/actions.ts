@@ -138,6 +138,8 @@ export async function savePurchaseOrderDraft(
       operatorId: operator.id,
     });
 
+    revalidatePath("/purchase-orders");
+
     return {
       success: true,
       draftId: draft.id,

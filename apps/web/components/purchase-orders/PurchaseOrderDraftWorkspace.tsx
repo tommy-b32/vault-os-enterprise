@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useMemo,
   useRef,
@@ -146,6 +147,7 @@ export function PurchaseOrderDraftWorkspace({
   wallet,
   walletUnavailable,
 }: PurchaseOrderDraftWorkspaceProps) {
+  const router = useRouter();
   const [quantities, setQuantities] = useState<
     Record<string, number>
   >(() =>
@@ -606,6 +608,7 @@ export function PurchaseOrderDraftWorkspace({
             state: "success",
             draftIds,
           });
+          router.refresh();
         })
         .catch((error) => {
           setSaveState({
@@ -1189,6 +1192,7 @@ export function PurchaseOrderDraftWorkspace({
         <button
           disabled={
             isSaving ||
+            saveState.state === "success" ||
             hasMoqFailure ||
             summary.orders.length === 0
           }
