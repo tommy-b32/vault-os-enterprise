@@ -136,9 +136,9 @@ test("buying and purchase-order identity uses supplier IDs", async () => {
     ]);
 
   assert.match(classifier, /supplierId: product\.supplier_id/);
-  assert.match(purchaseOrders, /candidate\.id === commercialInput\.supplierId/);
-  assert.match(purchaseOrders, /orderMap\.get\(commercialInput\.supplierId\)/);
-  assert.match(purchaseOrders, /orderMap\.set\(commercialInput\.supplierId/);
+  assert.match(purchaseOrders, /basket\.supplier\.id/);
+  assert.match(purchaseOrders, /supplierRowById\.get/);
+  assert.match(purchaseOrders, /supplierId:\s*basket\.supplier\.id/);
   assert.doesNotMatch(purchaseOrders, /supplier_name\.toLowerCase/);
   assert.doesNotMatch(supplierEngine, /profile\.supplierName[\s\S]{0,100}source\.supplierName/);
   assert.doesNotMatch(supplierSources, /score\.supplierName\s*===/);

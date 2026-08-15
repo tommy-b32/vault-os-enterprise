@@ -80,6 +80,7 @@ export default async function PurchaseOrdersPage() {
         manual_spending_limit_gbp,
         reserve_override_allowed,
         wallet_last_updated,
+        wallet_freshness_threshold_minutes,
         purchasing_power_state
       `)
       .single(),
@@ -352,6 +353,9 @@ export default async function PurchaseOrdersPage() {
           );
 
         return {
+          qualificationBlockers:
+            evaluation.qualifications.find((entry) => entry.supplier.id === basket.supplier.id)?.blockers ?? [],
+
           supplierId:
             basket.supplier.id,
 

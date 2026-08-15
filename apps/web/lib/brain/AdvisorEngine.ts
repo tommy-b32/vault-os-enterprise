@@ -144,7 +144,8 @@ function buildDiagnostics(
     topRejectionReasons,
     supplierMinimumPolicyBlockers:
       countReason("supplier_minimum_unknown") + countReason("supplier_minimum_not_evaluated"),
-    walletFreshnessPolicyBlockers: countReason("wallet_freshness_policy_missing"),
+    walletFreshnessPolicyBlockers:
+      countReason("wallet_freshness_unknown") + countReason("wallet_stale"),
     stockedProducts: countWithoutReason(candidates, "inventory_strategy_not_stocked"),
     restockEnabled: countWithoutReason(candidates, "restock_disabled"),
     supplierAssigned: countWithoutReason(candidates, "supplier_missing"),

@@ -4,6 +4,7 @@ import {
   type SupplierMinimum,
 } from "@/lib/supplier/SupplierMinimum";
 import type { CatalogueProduct } from "@/types/catalogue";
+import { WalletFreshness } from "@/lib/brain/WalletFreshness";
 
 export const TRUSTED_BUYING_MARGIN_PERCENT = 45;
 export const TRUSTED_BUYING_RETURN_PERCENT = 100;
@@ -44,7 +45,8 @@ export type TrustedBuyingCandidateRejectionReason =
   | "supplier_minimum_not_evaluated"
   | "supplier_minimum_currency_unavailable"
   | "wallet_unavailable"
-  | "wallet_freshness_policy_missing"
+  | "wallet_freshness_unknown"
+  | "wallet_stale"
   | "capital_not_evaluated"
   | "insufficient_reserve_safe_capacity"
   | "protected_reserve_breach";
@@ -61,6 +63,7 @@ export type TrustedBuyingSupplier = {
 export type TrustedBuyingWallet = {
   available: boolean;
   lastUpdated: string | null;
+  freshnessThresholdMinutes?: number | null;
 };
 
 export type TrustedBuyingCandidateResult = {
@@ -112,7 +115,7 @@ type ClassifierInput = {
   product: CatalogueProduct | null;
   supplier: TrustedBuyingSupplier | null;
   wallet: TrustedBuyingWallet | null;
-  walletFreshnessPolicyDefined?: boolean;
+  evaluatedAt?: string;
 };
 
 const POLICY_REASONS = new Set<TrustedBuyingCandidateRejectionReason>([
@@ -120,7 +123,8 @@ const POLICY_REASONS = new Set<TrustedBuyingCandidateRejectionReason>([
   "supplier_minimum_unknown",
   "supplier_minimum_not_evaluated",
   "supplier_minimum_currency_unavailable",
-  "wallet_freshness_policy_missing",
+  "wallet_freshness_unknown",
+  "wallet_stale",
   "capital_not_evaluated",
 ]);
 
@@ -153,7 +157,7 @@ export function classifyTrustedBuyingCandidate({
   product,
   supplier,
   wallet,
-  walletFreshnessPolicyDefined = false,
+  evaluatedAt,
 }: ClassifierInput): TrustedBuyingCandidateResult {
   const reasons: TrustedBuyingCandidateRejectionReason[] = [];
   const emptyMinimum = SupplierMinimumContract.create({
@@ -258,8 +262,14 @@ export function classifyTrustedBuyingCandidate({
     add(reasons, "supplier_minimum_currency_unavailable");
   }
 
+  const walletFreshness = WalletFreshness.evaluate({
+    evidenceTimestamp: wallet?.lastUpdated ?? null,
+    thresholdMinutes: wallet?.freshnessThresholdMinutes ?? null,
+    evaluatedAt,
+  });
   if (!wallet?.available) add(reasons, "wallet_unavailable");
-  else if (!walletFreshnessPolicyDefined) add(reasons, "wallet_freshness_policy_missing");
+  else if (walletFreshness.status === "unknown") add(reasons, "wallet_freshness_unknown");
+  else if (walletFreshness.status === "stale") add(reasons, "wallet_stale");
   add(reasons, "capital_not_evaluated");
 
   const packCost = commercial.landed_cost_per_pack_gbp;

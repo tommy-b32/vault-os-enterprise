@@ -40,7 +40,8 @@ const UNLOCK_BY_REASON: Record<string, string> = {
   target_stock_days_missing: "Trusted replenishment quantity becomes available for evaluation.",
   reorder_approval_missing: "The style becomes available for trusted buying qualification.",
   invalid_or_missing_commercial_cost: "Commercial qualification becomes available for evaluation.",
-  wallet_freshness_policy_missing: "Wallet freshness becomes available for policy assessment.",
+  wallet_freshness_unknown: "Wallet freshness evidence and policy become available.",
+  wallet_stale: "Wallet evidence is refreshed within the canonical policy.",
 };
 
 function firstLimitingDomain(domains: ExecutiveIntelligenceDomain[]): ExecutiveIntelligenceDomain | null {

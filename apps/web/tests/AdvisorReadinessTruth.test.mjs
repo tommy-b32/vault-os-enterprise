@@ -44,7 +44,7 @@ test("stale inventory and unknown supplier minimums are routed blockers", async 
   assert.match(source, /href: "\/commercial"/);
 });
 
-test("Advisor and Purchase Orders consume the same trusted result", async () => {
+test("Advisor and Purchase Orders consume canonical upstream purchasing contracts", async () => {
   const [advisorPage, purchaseOrders] = await Promise.all([
     readFile(advisorPageUrl, "utf8"),
     readFile(new URL("../app/purchase-orders/page.tsx", import.meta.url), "utf8"),
@@ -52,7 +52,7 @@ test("Advisor and Purchase Orders consume the same trusted result", async () => 
 
   assert.match(advisorPage, /const primaryDecision = analysis\.highestPriority/);
   assert.match(advisorPage, /primaryCommercialInput/);
-  assert.match(purchaseOrders, /AdvisorEngine\.analyse/);
-  assert.match(purchaseOrders, /advisor\.analysis\.ranked/);
+  assert.match(purchaseOrders, /PurchaseIntelligenceEngine\.evaluate/);
+  assert.match(purchaseOrders, /evaluation\.qualifications/);
   assert.doesNotMatch(purchaseOrders, /BuyingRecommendationEngine/);
 });

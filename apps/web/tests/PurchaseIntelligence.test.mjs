@@ -40,7 +40,8 @@ test("trust classification consumes canonical demand outcomes without disguising
   assert.match(source, /OPERATOR_WARNING_REASONS/);
   assert.match(source, /"reorder_approval_missing"/);
   assert.match(source, /"supplier_minimum_not_evaluated"/);
-  assert.match(source, /"wallet_freshness_policy_missing"/);
+  assert.match(source, /"wallet_freshness_unknown"/);
+  assert.match(source, /"wallet_stale"/);
 });
 
 test("blocked catalogue and trust states cannot become recommendations", async () => {
@@ -56,14 +57,22 @@ test("blocked catalogue and trust states cannot become recommendations", async (
   assert.match(engine, /demand\.status !== "needs_replenishment"/);
 });
 
-test("supplier recommendations require minima, capital and trusted confidence", async () => {
+test("valid demand recommendations remain visible while purchasing qualification is blocked", async () => {
   const source = await readFile(engineUrl, "utf8");
   assert.match(source, /supplier_minimum_value_not_satisfied/);
   assert.match(source, /supplier_minimum_packs_not_satisfied/);
   assert.match(source, /!capital\.affordable/);
   assert.match(source, /!capital\.reserveProtected/);
-  assert.match(source, /state !== "ready_to_purchase"/);
-  assert.match(source, /confidence: "trusted"/);
+  assert.doesNotMatch(source, /state !== "ready_to_purchase"[^\n]*continue/);
+  assert.match(source, /confidence: state === "ready_to_purchase" \? "trusted" : "advisory"/);
+  assert.match(source, /purchasingBlockers/);
+});
+
+test("EUR is not an unconditional blocker and monetary comparison still fails safely", async () => {
+  const source = await readFile(engineUrl, "utf8");
+  assert.doesNotMatch(source, /supplier\.currency !== "GBP"\) blockers\.push\("supplier_currency_basket_evaluation_unavailable"/);
+  assert.match(source, /supplier\?\.currency !== "GBP" \|\| spendGbp === null/);
+  assert.match(source, /supplier_minimum_value_not_evaluated/);
 });
 
 test("Purchase Intelligence is read-only and checks live inventory freshness", async () => {

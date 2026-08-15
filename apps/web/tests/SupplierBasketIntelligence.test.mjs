@@ -43,6 +43,35 @@ test("supplier ten packs short without strong candidates is MINIMUM_NOT_JUSTIFIE
   assert.equal(result.packs_short, 10);
 });
 
+test("Exclusive-shaped basket remains three required plus three qualified and fourteen packs short", () => {
+  const required = Array.from({ length: 3 }, (_, index) => demand({
+    styleId: `required-${index + 1}`,
+    productName: `Required ${index + 1}`,
+    suggestedPacks: 1,
+    suggestedUnits: 5,
+  }));
+  const candidates = Array.from({ length: 3 }, (_, index) => demand({
+    styleId: `qualified-${index + 1}`,
+    productName: `Qualified ${index + 1}`,
+    status: "no_replenishment_required",
+    suggestedPacks: 0,
+    suggestedUnits: 0,
+    productMoqPacks: 1,
+  }));
+  const demands = [...required, ...candidates];
+  const result = evaluate({
+    supplierOverrides: { name: "Exclusive", currency: "EUR", minimumOrderPacks: 20 },
+    demands,
+    products: demands.map((entry) => product({ style_id: entry.styleId })),
+  });
+
+  assert.equal(result.required_packs, 3);
+  assert.equal(result.advisory_supported_packs, 3);
+  assert.equal(result.intelligent_basket_packs, 6);
+  assert.equal(result.remaining_shortfall_packs, 14);
+  assert.equal(result.purchasing_state, "MINIMUM_NOT_JUSTIFIED");
+});
+
 test("supplier without positive replenishment demand is NO_DEMAND", () => {
   const result = evaluate({ demands: [demand({ status: "no_replenishment_required", suggestedPacks: 0, suggestedUnits: 0 })] });
   assert.equal(result.purchasing_state, "NO_DEMAND");

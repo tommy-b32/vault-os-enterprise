@@ -72,7 +72,7 @@ test("quantity remains downstream of demand and cannot create purchasing eligibi
   ]);
   assert.match(demand, /const replenishmentQualified = detection\.demand_status === "ACTIVE" \|\| slowReplenishmentQualified/);
   assert.match(demand, /if \(!replenishmentQualified\)/);
-  assert.match(purchase, /state !== "ready_to_purchase"/);
+  assert.match(purchase, /confidence: state === "ready_to_purchase" \? "trusted" : "advisory"/);
   assert.match(purchase, /reorder_approval_missing/);
   assert.match(page, /Recommended:/);
   assert.match(page, /Target stock:/);

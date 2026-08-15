@@ -94,7 +94,9 @@ test("supplier minimum and wallet gaps remain policy blockers", async () => {
   assert.match(source, /supplier_minimum_not_evaluated/);
   assert.match(source, /minimumEvaluation = "currency_unavailable"/);
   assert.match(source, /wallet_unavailable/);
-  assert.match(source, /wallet_freshness_policy_missing/);
+  assert.match(source, /wallet_freshness_unknown/);
+  assert.match(source, /wallet_stale/);
+  assert.match(source, /WalletFreshness\.evaluate/);
   assert.match(source, /reserveProtected: null/);
   assert.doesNotMatch(source, /CapitalEngine\.review/);
 });
@@ -125,12 +127,13 @@ test("commercial opportunity uses unit-correct canonical profit", () => {
   assert.equal(opportunity.estimatedProfit, 75);
 });
 
-test("Purchase Orders classifies upstream and renders Advisor ranking only", async () => {
+test("Purchase Orders consumes canonical purchase qualification and basket intelligence", async () => {
   const source = await readFile(
     new URL("../app/purchase-orders/page.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /TrustedBuyingCandidateClassifier\.classify/);
-  assert.match(source, /advisor\.analysis\.ranked/);
+  assert.match(source, /PurchaseIntelligenceEngine\.evaluate/);
+  assert.match(source, /evaluation\.qualifications/);
+  assert.match(source, /evaluation\.baskets/);
   assert.doesNotMatch(source, /BuyingRecommendationEngine/);
 });

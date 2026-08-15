@@ -1,6 +1,11 @@
 import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
+import { CapitalEngine } from "@/lib/brain/CapitalEngine";
+import { PurchaseIntelligenceEngine } from "@/lib/brain/PurchaseIntelligenceEngine";
+import { getCatalogueData } from "@/lib/catalogue";
+import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 import {
   createSupplierOrderText,
   readSupplierImageSnapshot,
@@ -53,6 +58,107 @@ export type PurchaseOrderApprovalResult = {
   approvedAt: string;
   transitioned: boolean;
 };
+
+const APPROVAL_REASON_LABELS: Record<string, string> = {
+  reorder_approval_missing: "Required product purchasing authorisation is missing.",
+  supplier_minimum_packs_not_satisfied: "The supplier minimum pack quantity is not satisfied by current qualified demand.",
+  supplier_minimum_value_not_satisfied: "The supplier minimum order value is not satisfied.",
+  supplier_minimum_value_not_evaluated: "The supplier minimum order value cannot be evaluated with trusted currency evidence.",
+  insufficient_reserve_safe_capacity: "The draft exceeds current reserve-safe purchasing capacity.",
+  wallet_freshness_unknown: "Wallet freshness is unknown.",
+  wallet_stale: "Wallet evidence is stale.",
+  wallet_unavailable: "The purchasing wallet is unavailable.",
+  supplier_basket_cost_unavailable: "Trusted supplier basket cost is unavailable.",
+  commercial_data_missing: "Trusted commercial evidence is incomplete.",
+};
+
+async function getCurrentApprovalBlockers(purchaseOrderId: string): Promise<string[]> {
+  const [order, catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
+    supabaseAdmin.from("vault_purchase_orders").select(`
+      id, supplier_id, status, estimated_total_gbp, total_packs,
+      vault_purchase_order_lines(style_id, recommended_packs)
+    `).eq("id", purchaseOrderId).maybeSingle(),
+    getCatalogueData(),
+    InventorySyncRepository.getFreshness(),
+    supabaseAdmin.from("vault_purchasing_wallet").select(`
+      ledger_balance_gbp, protected_reserve_gbp, committed_orders_gbp,
+      calculated_purchasing_power_gbp, available_purchasing_power_gbp,
+      manual_spending_limit_gbp, reserve_override_allowed, wallet_last_updated,
+      wallet_freshness_threshold_minutes, purchasing_power_state
+    `).single(),
+    supabaseAdmin.from("vault_suppliers").select(
+      "id, supplier_name, is_active, minimum_order_value, currency_code",
+    ),
+    supabaseAdmin.from("vault_supplier_purchasing_rules").select(
+      "supplier_id, minimum_order_packs",
+    ),
+  ]);
+
+  const sourceError = order.error ?? walletResult.error ?? suppliersResult.error ?? rulesResult.error;
+  if (sourceError) throw sourceError;
+  if (!order.data) throw new Error("Purchase order was not found.");
+  const orderData = order.data;
+  if (orderData.status === "approved") return [];
+  if (orderData.status !== "draft") {
+    return [`Purchase order cannot be approved from status '${orderData.status}'.`];
+  }
+
+  const minimumPacks = new Map((rulesResult.data ?? []).map((rule) => [rule.supplier_id, rule.minimum_order_packs]));
+  const suppliers = (suppliersResult.data ?? []).map((supplier) => ({
+    id: supplier.id,
+    name: supplier.supplier_name,
+    active: supplier.is_active,
+    currency: supplier.currency_code,
+    minimumOrderValue: supplier.minimum_order_value,
+    minimumOrderPacks: minimumPacks.get(supplier.id) ?? null,
+  }));
+  const evaluation = PurchaseIntelligenceEngine.evaluate({
+    products: catalogue.products,
+    suppliers,
+    wallet: walletResult.data as PurchasingWalletData,
+    inventoryTrusted: freshness.syncStatus === "current",
+  });
+  const qualification = evaluation.qualifications.find((entry) => entry.supplier.id === orderData.supplier_id);
+  const basket = evaluation.baskets.find((entry) => entry.supplier.id === orderData.supplier_id);
+  const blockers = [...(qualification?.blockers ?? ["Current supplier purchasing qualification is unavailable."])];
+
+  if (basket?.purchasing_state !== "READY_TO_ORDER") {
+    blockers.push("supplier_minimum_packs_not_satisfied");
+  }
+
+  const allowedPacks = new Map([
+    ...(basket?.top_products ?? []),
+    ...(basket?.additional_qualifying_products ?? []),
+  ].map((line) => [line.style_id, line.required_packs]));
+  for (const line of orderData.vault_purchase_order_lines ?? []) {
+    if (allowedPacks.get(line.style_id) !== line.recommended_packs) {
+      blockers.push(`Draft line '${line.style_id}' no longer matches current demand-qualified packs.`);
+    }
+  }
+
+  const draftSpend = orderData.estimated_total_gbp;
+  if (draftSpend === null) {
+    blockers.push("supplier_basket_cost_unavailable");
+  } else {
+    const wallet = walletResult.data as PurchasingWalletData;
+    const capital = CapitalEngine.reviewPosition({
+      ledgerBalanceGbp: wallet.ledger_balance_gbp,
+      protectedReserveGbp: wallet.protected_reserve_gbp,
+      committedOrdersGbp: wallet.committed_orders_gbp,
+      manualSpendingLimitGbp: wallet.manual_spending_limit_gbp,
+      proposedPurchaseGbp: draftSpend,
+      walletAvailable: true,
+      walletLastUpdated: wallet.wallet_last_updated,
+    });
+    // reserve_override_allowed remains intentionally non-operative until a
+    // separately authorised and audited override workflow exists.
+    if (!capital.affordable || !capital.reserveProtected) {
+      blockers.push("insufficient_reserve_safe_capacity");
+    }
+  }
+
+  return Array.from(new Set(blockers));
+}
 
 type SupplierNameRow = {
   id: string;
@@ -530,6 +636,13 @@ export async function approvePurchaseOrderDraft(input: {
   approvedAt?: string;
 }): Promise<PurchaseOrderApprovalResult> {
   const approvedAt = input.approvedAt ?? new Date().toISOString();
+
+  const blockers = await getCurrentApprovalBlockers(input.purchaseOrderId);
+  if (blockers.length > 0) {
+    throw new Error(`Purchase order approval blocked: ${blockers.map(
+      (reason) => APPROVAL_REASON_LABELS[reason] ?? reason,
+    ).join(" ")}`);
+  }
 
   const transition = await supabaseAdmin
     .from("vault_purchase_orders")

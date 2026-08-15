@@ -7,6 +7,7 @@ export type PurchasingWalletData = {
   manual_spending_limit_gbp: number | null;
   reserve_override_allowed: boolean;
   wallet_last_updated: string | null;
+  wallet_freshness_threshold_minutes?: number | null;
   purchasing_power_state:
     | "healthy"
     | "limited"

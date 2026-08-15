@@ -16,7 +16,8 @@ const OPERATOR_WARNING_REASONS = new Set<TrustedBuyingCandidateRejectionReason>(
   "supplier_minimum_unknown",
   "supplier_minimum_not_evaluated",
   "supplier_minimum_currency_unavailable",
-  "wallet_freshness_policy_missing",
+  "wallet_freshness_unknown",
+  "wallet_stale",
 ]);
 
 const RESOLVED_AT_SUPPLIER_LEVEL = new Set<TrustedBuyingCandidateRejectionReason>([

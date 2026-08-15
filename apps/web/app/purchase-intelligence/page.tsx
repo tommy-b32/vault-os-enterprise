@@ -35,7 +35,7 @@ export default async function PurchaseIntelligencePage() {
   const [catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
     getCatalogueData(),
     InventorySyncRepository.getFreshness(),
-    supabaseAdmin.from("vault_purchasing_wallet").select("ledger_balance_gbp, protected_reserve_gbp, committed_orders_gbp, calculated_purchasing_power_gbp, available_purchasing_power_gbp, manual_spending_limit_gbp, reserve_override_allowed, wallet_last_updated, purchasing_power_state").single(),
+    supabaseAdmin.from("vault_purchasing_wallet").select("ledger_balance_gbp, protected_reserve_gbp, committed_orders_gbp, calculated_purchasing_power_gbp, available_purchasing_power_gbp, manual_spending_limit_gbp, reserve_override_allowed, wallet_last_updated, wallet_freshness_threshold_minutes, purchasing_power_state").single(),
     supabaseAdmin.from("vault_suppliers").select("id, supplier_name, is_active, minimum_order_value, currency_code"),
     supabaseAdmin.from("vault_supplier_purchasing_rules").select("supplier_id, minimum_order_packs"),
   ]);
@@ -67,7 +67,7 @@ export default async function PurchaseIntelligencePage() {
       <main className="purchase-intelligence-page">
         <header className="purchase-intelligence-header">
           <div><p className="vault-eyebrow">TRUSTED PURCHASE INTELLIGENCE</p><h1>Purchase Intelligence</h1><p>Deterministic, supplier-grouped recommendations from canonical live business data.</p></div>
-          <span>{recommendations.length > 0 ? "Trusted recommendations" : "No trusted recommendations"}</span>
+          <span>{recommendations.length > 0 ? "Demand recommendations" : "No demand recommendations"}</span>
         </header>
         <section className="purchase-intelligence-notice"><strong>Read-only intelligence</strong><span>No purchase orders are created and no purchases are approved from this page.</span></section>
         <section className="purchase-intelligence-diagnostics">
@@ -129,19 +129,20 @@ export default async function PurchaseIntelligencePage() {
         </section>
         {recommendations.map((recommendation) => (
           <section className="purchase-intelligence-supplier" key={recommendation.supplier.id}>
-            <div className="purchase-intelligence-supplier-heading"><div><p className="vault-eyebrow">SUPPLIER RECOMMENDATION</p><h2>{recommendation.supplier.name}</h2></div><span>Trusted</span></div>
+            <div className="purchase-intelligence-supplier-heading"><div><p className="vault-eyebrow">SUPPLIER RECOMMENDATION</p><h2>{recommendation.supplier.name}</h2></div><span>{recommendation.confidence === "trusted" ? "Purchase-qualified" : "Advisory"}</span></div>
             <div className="purchase-intelligence-metrics">
               <article><span>Packs</span><strong>{recommendation.packs}</strong></article>
               <article><span>Units</span><strong>{recommendation.units}</strong></article>
-              <article><span>Spend</span><strong>{currency(recommendation.spendGbp)}</strong></article>
-              <article><span>Projected revenue</span><strong>{currency(recommendation.projectedRevenueGbp)}</strong></article>
-              <article><span>Projected profit</span><strong>{currency(recommendation.projectedProfitGbp)}</strong></article>
-              <article><span>Purchasing power after</span><strong>{currency(recommendation.purchasingPowerAfterOrderGbp)}</strong></article>
+              <article><span>Spend</span><strong>{recommendation.spendGbp === null ? "Unavailable" : currency(recommendation.spendGbp)}</strong></article>
+              <article><span>Projected revenue</span><strong>{recommendation.projectedRevenueGbp === null ? "Unavailable" : currency(recommendation.projectedRevenueGbp)}</strong></article>
+              <article><span>Projected profit</span><strong>{recommendation.projectedProfitGbp === null ? "Unavailable" : currency(recommendation.projectedProfitGbp)}</strong></article>
+              <article><span>Purchasing power after</span><strong>{recommendation.purchasingPowerAfterOrderGbp === null ? "Unavailable" : currency(recommendation.purchasingPowerAfterOrderGbp)}</strong></article>
             </div>
             <div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Product</th><th>Stock</th><th>Daily sales</th><th>Days left</th><th>Target</th><th>Recommended quantity</th><th>Quantity basis</th><th>Cost</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>
-              {recommendation.recommendedProducts.map((product) => <tr key={product.styleId}><td><strong>{product.productName}</strong><small>{product.styleId}</small></td><td>{product.currentStock}</td><td>{product.averageDailySales}</td><td>{product.daysOfStockRemaining ?? "—"}</td><td>{product.targetDays}</td><td><strong>Recommended: {product.quantityIntelligence.recommended_packs} {product.quantityIntelligence.recommended_packs === 1 ? "pack" : "packs"} / {product.quantityIntelligence.recommended_units} units</strong></td><td><small>Target stock: {product.quantityIntelligence.target_units} units</small><small>Available: {Math.max(0, product.quantityIntelligence.net_available_stock)}</small><small>Deficit: {product.quantityIntelligence.stock_deficit_units} units</small><small>Coverage: {product.quantityIntelligence.coverage_days} days</small></td><td>{currency(product.expectedSupplierCostGbp)}</td><td>{currency(product.expectedSellingRevenueGbp)}</td><td>{currency(product.expectedGrossProfitGbp)}</td></tr>)}
+              {recommendation.recommendedProducts.map((product) => <tr key={product.styleId}><td><strong>{product.productName}</strong><small>{product.styleId}</small></td><td>{product.currentStock}</td><td>{product.averageDailySales}</td><td>{product.daysOfStockRemaining ?? "—"}</td><td>{product.targetDays}</td><td><strong>Recommended: {product.quantityIntelligence.recommended_packs} {product.quantityIntelligence.recommended_packs === 1 ? "pack" : "packs"} / {product.quantityIntelligence.recommended_units} units</strong></td><td><small>Target stock: {product.quantityIntelligence.target_units} units</small><small>Available: {Math.max(0, product.quantityIntelligence.net_available_stock)}</small><small>Deficit: {product.quantityIntelligence.stock_deficit_units} units</small><small>Coverage: {product.quantityIntelligence.coverage_days} days</small></td><td>{product.expectedSupplierCostGbp === null ? "Unavailable" : currency(product.expectedSupplierCostGbp)}</td><td>{product.expectedSellingRevenueGbp === null ? "Unavailable" : currency(product.expectedSellingRevenueGbp)}</td><td>{product.expectedGrossProfitGbp === null ? "Unavailable" : currency(product.expectedGrossProfitGbp)}</td></tr>)}
             </tbody></table></div>
             <footer><span>Supplier minimum: {recommendation.supplierMinimumStatus}</span><span>Confidence: {recommendation.confidence.replaceAll("_", " ")}</span></footer>
+            {recommendation.purchasingBlockers.length > 0 ? <div className="purchase-intelligence-rejections"><span>Approval blockers</span><ul>{recommendation.purchasingBlockers.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul></div> : null}
           </section>
         ))}
         {recommendations.length === 0 ? <section className="purchase-intelligence-empty"><h2>No supplier recommendation is trusted</h2><p>Vault OS will display a recommendation only when catalogue, inventory, supplier, commercial, wallet and approval evidence are all complete and trusted.</p></section> : null}

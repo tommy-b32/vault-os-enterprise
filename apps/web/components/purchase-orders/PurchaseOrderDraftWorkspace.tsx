@@ -87,6 +87,7 @@ export type SupplierDraftOrder = {
     | null;
 
   minimumSupportedByDemand: boolean;
+  qualificationBlockers: string[];
 
   lines: PurchaseOrderDraftLine[];
 };
@@ -472,6 +473,9 @@ export function PurchaseOrderDraftWorkspace({
 
             minimumSupportedByDemand:
               order.minimumSupportedByDemand,
+
+            qualificationBlockers:
+              order.qualificationBlockers,
           },
 
           lines: lines.map(
@@ -754,6 +758,18 @@ export function PurchaseOrderDraftWorkspace({
                 Saving remains a draft only and
                 does not place an order.
               </p>
+            ) : null}
+
+            {order.qualificationBlockers.length > 0 ? (
+              <div className="purchase-order-source-warning">
+                <strong>Approval blockers</strong>
+                <ul>
+                  {order.qualificationBlockers.map((reason) => (
+                    <li key={reason}>{reason.replaceAll("_", " ")}</li>
+                  ))}
+                </ul>
+                <p>This basket may be saved as preparation, but these gates will be rerun before approval.</p>
+              </div>
             ) : null}
 
             <div className="purchase-order-lines-table">

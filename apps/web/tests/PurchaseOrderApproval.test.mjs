@@ -30,6 +30,18 @@ test("approval is an authenticated, operator-attributed draft-only transition", 
   assert.match(repository, /status: "approved"/);
   assert.match(repository, /approved_by_operator_id: input\.operatorId/);
   assert.match(repository, /approved_at: approvedAt/);
+  assert.match(repository, /getCurrentApprovalBlockers/);
+  assert.match(repository, /PurchaseIntelligenceEngine\.evaluate/);
+});
+
+test("approval reruns current canonical gates instead of trusting the draft snapshot", () => {
+  assert.match(repository, /getCatalogueData\(\)/);
+  assert.match(repository, /InventorySyncRepository\.getFreshness\(\)/);
+  assert.match(repository, /vault_purchasing_wallet/);
+  assert.match(repository, /basket\?\.purchasing_state !== "READY_TO_ORDER"/);
+  assert.match(repository, /CapitalEngine\.reviewPosition/);
+  assert.match(repository, /Purchase order approval blocked/);
+  assert.doesNotMatch(repository, /source_snapshot[^\n]*ready_to_purchase/);
 });
 
 test("invalid IDs and non-draft statuses fail safely while repeats are idempotent", () => {

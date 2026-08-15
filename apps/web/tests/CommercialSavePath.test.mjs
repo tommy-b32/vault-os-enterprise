@@ -110,16 +110,16 @@ test("server action persists source fields and rereads canonical metrics", async
   assert.match(action, /\.eq\("product_id", inputs\.parentProductId\)/);
 });
 
-test("Advisor never converts a missing landed cost to zero", async () => {
-  const advisor = await readFile(
-    new URL("../lib/brain/AdvisorEngine.ts", import.meta.url),
+test("canonical purchasing qualification never converts a missing landed cost to zero", async () => {
+  const classifier = await readFile(
+    new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url),
     "utf8",
   );
 
-  assert.doesNotMatch(advisor, /landed_cost_per_pack_gbp\s*\?\?\s*0/);
-  assert.match(advisor, /invalid_or_missing_commercial_cost/);
-  assert.match(advisor, /cost !== null && Number\.isFinite\(cost\) && cost > 0/);
-  assert.match(advisor, /CommercialOpportunityInput \| null/);
+  assert.doesNotMatch(classifier, /landed_cost_per_pack_gbp\s*\?\?\s*0/);
+  assert.match(classifier, /invalid_or_missing_commercial_cost/);
+  assert.match(classifier, /commercial\.landed_cost_per_pack_gbp === null/);
+  assert.match(classifier, /Number\.isFinite\(commercial\.landed_cost_per_pack_gbp\)/);
 });
 
 test('changed "use server" modules export async actions only', async () => {

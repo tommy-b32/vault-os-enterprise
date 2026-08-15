@@ -227,7 +227,7 @@ test("demand and purchasing policy remain structurally separated", async () => {
   ]);
   assert.doesNotMatch(demand, /CapitalEngine|PurchasingWallet|reorder_approval|minimumOrderValue/);
   assert.match(purchasing, /supplier_minimum_packs_not_satisfied/);
-  assert.match(purchasing, /wallet_freshness_policy_missing/);
+  assert.match(purchasing, /wallet_freshness_unknown/);
   assert.match(diagnostics, /genuineNoReorder/);
   assert.match(diagnostics, /evidenceUnavailable/);
   assert.doesNotMatch(diagnostics, /needsReplenishment === 0 \? "No replenishment/);

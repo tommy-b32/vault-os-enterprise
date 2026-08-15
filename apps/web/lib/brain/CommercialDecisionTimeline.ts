@@ -201,7 +201,8 @@ function monitoringItems(
 ): CommercialDecisionTimelineItem[] {
   const items: CommercialDecisionTimelineItem[] = [];
   const walletPolicyCount = candidates.filter((candidate) =>
-    candidate.rejectionReasons.includes("wallet_freshness_policy_missing")).length;
+    candidate.rejectionReasons.includes("wallet_freshness_unknown") ||
+    candidate.rejectionReasons.includes("wallet_stale")).length;
   const walletTimestamp = candidates.map((candidate) =>
     candidate.capitalEvaluation.walletLastUpdated).find(validDate) ?? null;
 
@@ -212,8 +213,8 @@ function monitoringItems(
       category: "follow_up",
       status: "monitoring",
       priority: "medium",
-      title: "Wallet provenance available; freshness policy unresolved",
-      description: "Capital affordability cannot be called current until a finance freshness policy exists.",
+      title: "Wallet freshness requires attention",
+      description: "Capital affordability cannot be approved while wallet evidence is stale or its freshness is unknown.",
       effectiveAt: walletTimestamp,
       deadlineAt: null,
       predictedAt: null,
@@ -226,7 +227,7 @@ function monitoringItems(
         { label: "Affected styles", value: String(walletPolicyCount) },
         { label: "Wallet last updated", value: walletTimestamp ?? "Unavailable" },
       ],
-      blockerReasons: ["wallet_freshness_policy_missing"],
+      blockerReasons: ["wallet_freshness_unknown"],
     });
   }
 

@@ -5,8 +5,10 @@ import {
   type DemandIntelligenceResult,
 } from "@/lib/brain/DemandIntelligenceEngine";
 import {
+  TrustedBuyingCandidateClassifier,
   TRUSTED_BUYING_MARGIN_PERCENT,
   TRUSTED_BUYING_RETURN_PERCENT,
+  type TrustedBuyingCandidateResult,
 } from "@/lib/brain/TrustedBuyingCandidateClassifier";
 import { SupplierMinimumContract } from "@/lib/supplier/SupplierMinimum";
 import {
@@ -14,6 +16,10 @@ import {
   type SupplierBasketIntelligence,
 } from "@/lib/brain/SupplierBasketIntelligenceEngine";
 import type { CatalogueProduct } from "@/types/catalogue";
+import {
+  WalletFreshness,
+  type WalletFreshnessEvaluation,
+} from "@/lib/brain/WalletFreshness";
 
 export type PurchaseIntelligenceSupplier = {
   id: string;
@@ -34,9 +40,9 @@ export type PurchaseRecommendationProduct = {
   quantityRequired: number;
   packRounding: { unitsPerPack: number; calculatedPacks: number; recommendedPacks: number };
   supplier: { id: string; name: string };
-  expectedSupplierCostGbp: number;
-  expectedSellingRevenueGbp: number;
-  expectedGrossProfitGbp: number;
+  expectedSupplierCostGbp: number | null;
+  expectedSellingRevenueGbp: number | null;
+  expectedGrossProfitGbp: number | null;
   confidence: number;
   demand_score: number;
   demand_level: NonNullable<DemandIntelligenceResult["demand_level"]>;
@@ -63,24 +69,28 @@ export type SupplierPurchasingQualification = {
   state: PurchasingQualificationState;
   blockers: string[];
   purchasingPowerAfterOrderGbp: number | null;
+  walletFreshness: WalletFreshnessEvaluation;
 };
 
 export type SupplierPurchaseRecommendation = {
-  supplier: { id: string; name: string; currency: string };
+  supplier: { id: string; name: string; currency: string | null };
   recommendedProducts: PurchaseRecommendationProduct[];
   packs: number;
   units: number;
-  spendGbp: number;
-  projectedRevenueGbp: number;
-  projectedProfitGbp: number;
-  supplierMinimumStatus: "satisfied";
-  purchasingPowerAfterOrderGbp: number;
-  confidence: "trusted";
+  spendGbp: number | null;
+  projectedRevenueGbp: number | null;
+  projectedProfitGbp: number | null;
+  supplierMinimumStatus: "satisfied" | "not_satisfied" | "unknown";
+  purchasingPowerAfterOrderGbp: number | null;
+  confidence: "trusted" | "advisory";
+  purchasingQualificationState: PurchasingQualificationState;
+  purchasingBlockers: string[];
   operatorWarnings: string[];
 };
 
 export type PurchaseIntelligenceEvaluation = {
   demands: DemandIntelligenceResult[];
+  candidates: TrustedBuyingCandidateResult[];
   qualifications: SupplierPurchasingQualification[];
   recommendations: SupplierPurchaseRecommendation[];
   baskets: SupplierBasketIntelligence[];
@@ -91,7 +101,7 @@ type Input = {
   suppliers: PurchaseIntelligenceSupplier[];
   wallet: PurchasingWalletData | null;
   inventoryTrusted: boolean;
-  walletFreshnessPolicyDefined?: boolean;
+  evaluatedAt?: string;
 };
 
 function money(value: number): number {
@@ -103,7 +113,7 @@ export function evaluatePurchaseIntelligence({
   suppliers,
   wallet,
   inventoryTrusted,
-  walletFreshnessPolicyDefined = false,
+  evaluatedAt,
 }: Input): PurchaseIntelligenceEvaluation {
   const demands = products.map((product) => {
     const demand = DemandIntelligenceEngine.evaluate(product);
@@ -121,6 +131,32 @@ export function evaluatePurchaseIntelligence({
   });
   const productByStyle = new Map(products.map((product) => [product.style_id, product]));
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
+  const walletFreshness = WalletFreshness.evaluate({
+    evidenceTimestamp: wallet?.wallet_last_updated ?? null,
+    thresholdMinutes: wallet?.wallet_freshness_threshold_minutes ?? null,
+    evaluatedAt,
+  });
+  const baskets = suppliers.map((supplier) => SupplierBasketIntelligenceEngine.evaluate({
+    supplier,
+    demands,
+    products,
+  })).sort((left, right) => left.supplier.name.localeCompare(right.supplier.name));
+  const basketBySupplier = new Map(baskets.map((basket) => [basket.supplier.id, basket]));
+  const candidates = products.map((product) => {
+    const supplier = product.supplier_id ? supplierById.get(product.supplier_id) ?? null : null;
+    return TrustedBuyingCandidateClassifier.classify({
+      product,
+      supplier,
+      wallet: wallet
+        ? {
+            available: true,
+            lastUpdated: wallet.wallet_last_updated,
+            freshnessThresholdMinutes: wallet.wallet_freshness_threshold_minutes,
+          }
+        : null,
+      evaluatedAt,
+    });
+  });
   const grouped = new Map<string, DemandIntelligenceResult[]>();
   for (const demand of demands) {
     if (
@@ -135,6 +171,7 @@ export function evaluatePurchaseIntelligence({
   const recommendations: SupplierPurchaseRecommendation[] = [];
   for (const [supplierId, demandProducts] of grouped) {
     const supplier = supplierById.get(supplierId);
+    const basket = basketBySupplier.get(supplierId);
     const blockers: string[] = [];
     const totalDemandPacks = demandProducts.reduce((total, demand) => total + (demand.suggestedPacks ?? 0), 0);
     const totalDemandUnits = demandProducts.reduce((total, demand) => total + (demand.suggestedUnits ?? 0), 0);
@@ -144,7 +181,6 @@ export function evaluatePurchaseIntelligence({
 
     if (!supplier?.active) blockers.push("supplier_inactive_or_unknown");
     if (!supplier?.currency) blockers.push("supplier_currency_missing");
-    else if (supplier.currency !== "GBP") blockers.push("supplier_currency_basket_evaluation_unavailable");
     if (lineProducts.some((product) => product.reorder_approval?.approval_state !== "approved")) {
       blockers.push("reorder_approval_missing");
     }
@@ -174,7 +210,8 @@ export function evaluatePurchaseIntelligence({
       minimumOrderPacks: supplier?.minimumOrderPacks ?? null,
     });
     if (minimum.state === "unknown") blockers.push("supplier_minimum_policy_unknown");
-    if (minimum.minimumOrderPacks !== null && totalDemandPacks < minimum.minimumOrderPacks) {
+    if (minimum.minimumOrderPacks !== null &&
+      (basket?.intelligent_basket_packs ?? totalDemandPacks) < minimum.minimumOrderPacks) {
       blockers.push("supplier_minimum_packs_not_satisfied");
     }
     if (minimum.value !== null && minimum.value > 0) {
@@ -182,7 +219,8 @@ export function evaluatePurchaseIntelligence({
       else if (spendGbp < minimum.value) blockers.push("supplier_minimum_value_not_satisfied");
     }
     if (!wallet) blockers.push("wallet_unavailable");
-    else if (!walletFreshnessPolicyDefined) blockers.push("wallet_freshness_policy_missing");
+    else if (walletFreshness.status === "unknown") blockers.push("wallet_freshness_unknown");
+    else if (walletFreshness.status === "stale") blockers.push("wallet_stale");
 
     const capital = wallet && spendGbp !== null
       ? CapitalEngine.reviewPosition({
@@ -223,10 +261,11 @@ export function evaluatePurchaseIntelligence({
       state,
       blockers: Array.from(new Set(blockers)).sort(),
       purchasingPowerAfterOrderGbp: capital?.remainingPurchasingPowerGbp ?? null,
+      walletFreshness,
     };
     qualifications.push(qualification);
 
-    if (state !== "ready_to_purchase" || !supplier || spendGbp === null || !capital) continue;
+    if (!supplier) continue;
     const recommendedProducts: PurchaseRecommendationProduct[] = demandProducts.map((demand) => {
       const product = productByStyle.get(demand.styleId) as CatalogueProduct;
       const unitsPerPack = demand.unitsPerPack as number;
@@ -243,9 +282,15 @@ export function evaluatePurchaseIntelligence({
         quantityRequired: (demand.calculatedPacks as number) * unitsPerPack,
         packRounding: { unitsPerPack, calculatedPacks: demand.calculatedPacks as number, recommendedPacks: packs },
         supplier: { id: supplier.id, name: supplier.name },
-        expectedSupplierCostGbp: money((product.commercial_cost.landed_cost_per_pack_gbp as number) * packs),
-        expectedSellingRevenueGbp: money((product.commercial_cost.average_selling_price as number) * units),
-        expectedGrossProfitGbp: money((product.commercial_cost.estimated_gross_profit_per_unit as number) * units),
+        expectedSupplierCostGbp: product.commercial_cost.landed_cost_per_pack_gbp === null
+          ? null
+          : money(product.commercial_cost.landed_cost_per_pack_gbp * packs),
+        expectedSellingRevenueGbp: product.commercial_cost.average_selling_price === null
+          ? null
+          : money(product.commercial_cost.average_selling_price * units),
+        expectedGrossProfitGbp: product.commercial_cost.estimated_gross_profit_per_unit === null
+          ? null
+          : money(product.commercial_cost.estimated_gross_profit_per_unit * units),
         confidence: 100,
         demand_score: demand.demand_score as number,
         demand_level: demand.demand_level as NonNullable<DemandIntelligenceResult["demand_level"]>,
@@ -254,28 +299,34 @@ export function evaluatePurchaseIntelligence({
       };
     });
     recommendations.push({
-      supplier: { id: supplier.id, name: supplier.name, currency: supplier.currency as string },
+      supplier: { id: supplier.id, name: supplier.name, currency: supplier.currency },
       recommendedProducts,
       packs: totalDemandPacks,
       units: totalDemandUnits,
       spendGbp,
-      projectedRevenueGbp: money(recommendedProducts.reduce((total, line) => total + line.expectedSellingRevenueGbp, 0)),
-      projectedProfitGbp: money(recommendedProducts.reduce((total, line) => total + line.expectedGrossProfitGbp, 0)),
-      supplierMinimumStatus: "satisfied",
-      purchasingPowerAfterOrderGbp: capital.remainingPurchasingPowerGbp,
-      confidence: "trusted",
-      operatorWarnings: [],
+      projectedRevenueGbp: recommendedProducts.some((line) => line.expectedSellingRevenueGbp === null)
+        ? null
+        : money(recommendedProducts.reduce((total, line) => total + (line.expectedSellingRevenueGbp ?? 0), 0)),
+      projectedProfitGbp: recommendedProducts.some((line) => line.expectedGrossProfitGbp === null)
+        ? null
+        : money(recommendedProducts.reduce((total, line) => total + (line.expectedGrossProfitGbp ?? 0), 0)),
+      supplierMinimumStatus: minimum.state === "unknown"
+        ? "unknown"
+        : blockers.includes("supplier_minimum_packs_not_satisfied") ||
+            blockers.includes("supplier_minimum_value_not_satisfied")
+          ? "not_satisfied"
+          : "satisfied",
+      purchasingPowerAfterOrderGbp: capital?.remainingPurchasingPowerGbp ?? null,
+      confidence: state === "ready_to_purchase" ? "trusted" : "advisory",
+      purchasingQualificationState: state,
+      purchasingBlockers: Array.from(new Set(blockers)).sort(),
+      operatorWarnings: Array.from(new Set(blockers)).sort(),
     });
   }
 
-  const baskets = suppliers.map((supplier) => SupplierBasketIntelligenceEngine.evaluate({
-    supplier,
-    demands,
-    products,
-  })).sort((left, right) => left.supplier.name.localeCompare(right.supplier.name));
-
   return {
     demands,
+    candidates,
     qualifications: qualifications.sort((a, b) => a.supplier.name.localeCompare(b.supplier.name)),
     recommendations: recommendations.sort((a, b) => a.supplier.name.localeCompare(b.supplier.name)),
     baskets,
