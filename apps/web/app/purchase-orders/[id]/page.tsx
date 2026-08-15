@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 type SavedPurchaseOrderLine = {
   id: string;
+  style_id: string;
   product_name: string;
   recommended_packs: number;
   recommended_units: number | null;
@@ -27,7 +28,29 @@ type SavedReceiptLine = {
   id: string;
   purchase_order_line_id: string;
   quantity_received: number;
+  non_sellable_quantity: number;
   discrepancy_note: string | null;
+  vault_purchase_order_receipt_allocations: Array<{
+    id: string;
+    variant_id: string;
+    quantity_received: number;
+  }> | null;
+};
+
+type ReceivingVariant = {
+  id: string;
+  product_id: string;
+  source_variant_id: string;
+  source_inventory_item_id: string;
+  title: string | null;
+  option_1: string | null;
+  option_2: string | null;
+};
+
+type ReceivingLocation = {
+  id: string;
+  name: string;
+  source_location_id: string;
 };
 
 function money(
@@ -101,15 +124,22 @@ export default async function PurchaseOrderDetailPage({
   const receipts = [...(draft.vault_purchase_order_receipts ?? [])]
     .sort((left, right) => left.received_date.localeCompare(right.received_date) || left.created_at.localeCompare(right.created_at));
   const receivedByLine = new Map<string, number>();
+  const nonSellableByLine = new Map<string, number>();
   for (const receipt of receipts) {
     for (const receiptLine of receipt.vault_purchase_order_receipt_lines ?? []) {
       receivedByLine.set(
         receiptLine.purchase_order_line_id,
         (receivedByLine.get(receiptLine.purchase_order_line_id) ?? 0) + receiptLine.quantity_received,
       );
+      nonSellableByLine.set(
+        receiptLine.purchase_order_line_id,
+        (nonSellableByLine.get(receiptLine.purchase_order_line_id) ?? 0) + receiptLine.non_sellable_quantity,
+      );
     }
   }
   const productNameByLine = new Map(lines.map((line) => [line.id, line.product_name]));
+  const receivingVariants = (draft.receiving_variants ?? []) as ReceivingVariant[];
+  const receivingVariantById = new Map(receivingVariants.map((variant) => [variant.id, variant]));
 
   return (
     <VaultAppShell>
@@ -388,25 +418,49 @@ export default async function PurchaseOrderDetailPage({
 
         {["ordered", "part_paid", "paid", "shipped", "received"].includes(draft.status) ? (
           <PurchaseOrderReceiving
-            key={`${draft.id}:${draft.status}:${Array.from(receivedByLine.values()).reduce((sum, value) => sum + value, 0)}`}
+            key={`${draft.id}:${draft.status}:${receipts.length}:${Array.from(receivedByLine.values()).reduce((sum, value) => sum + value, 0)}`}
             lines={lines.map((line) => ({
               id: line.id,
               productName: line.product_name,
               orderedQuantity: line.recommended_units ??
                 (line.units_per_pack === null ? null : line.recommended_packs * line.units_per_pack),
               receivedQuantity: receivedByLine.get(line.id) ?? 0,
+              nonSellableQuantity: nonSellableByLine.get(line.id) ?? 0,
+              variants: receivingVariants
+                .filter((variant) =>
+                  `${variant.product_id}::${variant.option_1?.trim() || "Default"}` === line.style_id)
+                .map((variant) => ({
+                  id: variant.id,
+                  title: variant.title,
+                  size: variant.option_2,
+                  sourceVariantId: variant.source_variant_id,
+                  inventoryItemId: variant.source_inventory_item_id,
+                })),
+            }))}
+            locations={(draft.receiving_locations ?? []).map((location: ReceivingLocation) => ({
+              id: location.id,
+              name: location.name,
+              sourceLocationId: location.source_location_id,
             }))}
             purchaseOrderId={draft.id}
             receipts={receipts.map((receipt) => ({
               id: receipt.id,
               receivedDate: receipt.received_date,
               createdAt: receipt.created_at,
+              locationName: receipt.vault_locations?.name ?? "Unknown Shopify location",
               lines: (receipt.vault_purchase_order_receipt_lines ?? []).map((line: SavedReceiptLine) => ({
                 id: line.id,
                 purchaseOrderLineId: line.purchase_order_line_id,
                 productName: productNameByLine.get(line.purchase_order_line_id) ?? "Unknown PO line",
                 quantityReceived: line.quantity_received,
                 discrepancyNote: line.discrepancy_note,
+                nonSellableQuantity: line.non_sellable_quantity,
+                allocations: (line.vault_purchase_order_receipt_allocations ?? []).map((allocation) => ({
+                  id: allocation.id,
+                  variantId: allocation.variant_id,
+                  size: receivingVariantById.get(allocation.variant_id)?.option_2 ?? "Unknown size",
+                  quantityReceived: allocation.quantity_received,
+                })),
               })),
             }))}
             status={draft.status}

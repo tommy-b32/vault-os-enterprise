@@ -29,6 +29,7 @@ export async function recordReceiptAgainstPurchaseOrder(
     const operator = await requireAuthenticatedOperator();
     const purchaseOrderId = formData.get("purchase_order_id");
     const receivedDate = formData.get("received_date");
+    const receivedLocationId = formData.get("received_location_id");
     const idempotencyKey = formData.get("idempotency_key");
     const parsedReceivedDate = typeof receivedDate === "string"
       ? new Date(`${receivedDate}T00:00:00Z`)
@@ -45,27 +46,61 @@ export async function recordReceiptAgainstPurchaseOrder(
     if (typeof idempotencyKey !== "string" || idempotencyKey.trim().length === 0) {
       return { status: "error", message: "Receipt operation identity is missing." };
     }
+    if (typeof receivedLocationId !== "string" || !UUID_PATTERN.test(receivedLocationId)) {
+      return { status: "error", message: "Select a valid Shopify receiving location." };
+    }
 
-    const lines: Array<{
+    const linesById = new Map<string, {
       purchaseOrderLineId: string;
-      quantityReceived: number;
       discrepancyNote: string | null;
-    }> = [];
+      nonSellableQuantity: number;
+      allocations: Array<{ variantId: string; quantityReceived: number }>;
+    }>();
     for (const [key, value] of formData.entries()) {
-      if (!key.startsWith("quantity:") || typeof value !== "string" || value.trim() === "") continue;
-      const purchaseOrderLineId = key.slice("quantity:".length);
+      if (!key.startsWith("allocation:") || typeof value !== "string" || value.trim() === "") continue;
+      const [purchaseOrderLineId, variantId, extra] = key.slice("allocation:".length).split(":");
       const quantityReceived = Number(value);
-      if (!UUID_PATTERN.test(purchaseOrderLineId) || !Number.isInteger(quantityReceived) || quantityReceived < 0) {
+      if (extra !== undefined || !UUID_PATTERN.test(purchaseOrderLineId) || !UUID_PATTERN.test(variantId) ||
+        !Number.isInteger(quantityReceived) || quantityReceived < 0) {
         return { status: "error", message: "Received quantities must be whole, non-negative units." };
       }
       if (quantityReceived === 0) continue;
       const note = formData.get(`note:${purchaseOrderLineId}`);
-      lines.push({
+      const line = linesById.get(purchaseOrderLineId) ?? {
         purchaseOrderLineId,
-        quantityReceived,
         discrepancyNote: typeof note === "string" && note.trim() ? note.trim() : null,
-      });
+        nonSellableQuantity: 0,
+        allocations: [],
+      };
+      line.allocations.push({ variantId, quantityReceived });
+      linesById.set(purchaseOrderLineId, line);
     }
+    for (const [key, value] of formData.entries()) {
+      if (!key.startsWith("non_sellable:") || typeof value !== "string" || value.trim() === "") continue;
+      const purchaseOrderLineId = key.slice("non_sellable:".length);
+      const parsed = Number(value);
+      if (!UUID_PATTERN.test(purchaseOrderLineId)) {
+        return { status: "error", message: "Invalid purchase-order line identity." };
+      }
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        return { status: "error", message: "Non-sellable quantities must be whole, non-negative units." };
+      }
+      if (parsed === 0) continue;
+      const note = formData.get(`note:${purchaseOrderLineId}`);
+      const discrepancyNote = typeof note === "string" && note.trim() ? note.trim() : null;
+      if (!discrepancyNote) {
+        return { status: "error", message: "Describe damaged, wrong, or otherwise non-sellable units." };
+      }
+      const line = linesById.get(purchaseOrderLineId) ?? {
+        purchaseOrderLineId,
+        discrepancyNote,
+        nonSellableQuantity: 0,
+        allocations: [],
+      };
+      line.nonSellableQuantity = parsed;
+      linesById.set(purchaseOrderLineId, line);
+    }
+    const lines = Array.from(linesById.values());
     if (lines.length === 0) {
       return { status: "error", message: "Enter at least one positive received quantity." };
     }
@@ -74,6 +109,7 @@ export async function recordReceiptAgainstPurchaseOrder(
       purchaseOrderId,
       operatorId: operator.id,
       receivedDate,
+      receivedLocationId,
       idempotencyKey,
       lines,
     });

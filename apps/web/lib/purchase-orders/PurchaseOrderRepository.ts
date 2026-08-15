@@ -634,8 +634,22 @@ export async function getPurchaseOrder(
             id,
             purchase_order_line_id,
             quantity_received,
+            non_sellable_quantity,
             discrepancy_note,
-            created_at
+            created_at,
+            vault_purchase_order_receipt_allocations (
+              id,
+              variant_id,
+              shopify_variant_id_snapshot,
+              shopify_inventory_item_id_snapshot,
+              quantity_received,
+              created_at
+            )
+          ),
+          vault_locations (
+            id,
+            name,
+            source_location_id
           )
         )
       `)
@@ -651,7 +665,12 @@ export async function getPurchaseOrder(
     return null;
   }
 
-  const [supplierNames, approvingOperator, orderingOperator] = await Promise.all([
+  const productIds = Array.from(new Set(
+    (data.vault_purchase_order_lines ?? [])
+      .map((line: { style_id: string }) => line.style_id.split("::")[0])
+      .filter(Boolean),
+  ));
+  const [supplierNames, approvingOperator, orderingOperator, receivingVariants, receivingLocations] = await Promise.all([
     getSupplierNames([data.supplier_id]),
     data.approved_by_operator_id
       ? supabaseAdmin
@@ -667,10 +686,28 @@ export async function getPurchaseOrder(
           .eq("id", data.ordered_by_operator_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    productIds.length
+      ? supabaseAdmin
+          .from("vault_variants")
+          .select("id, product_id, source_variant_id, source_inventory_item_id, title, option_1, option_2")
+          .eq("source", "shopify")
+          .eq("source_active", true)
+          .not("source_variant_id", "is", null)
+          .not("source_inventory_item_id", "is", null)
+          .in("product_id", productIds)
+      : Promise.resolve({ data: [], error: null }),
+    supabaseAdmin
+      .from("vault_locations")
+      .select("id, name, source_location_id")
+      .eq("source", "shopify")
+      .eq("active", true)
+      .order("name", { ascending: true }),
   ]);
 
   if (approvingOperator.error) throw approvingOperator.error;
   if (orderingOperator.error) throw orderingOperator.error;
+  if (receivingVariants.error) throw receivingVariants.error;
+  if (receivingLocations.error) throw receivingLocations.error;
 
   return {
     ...data,
@@ -683,6 +720,8 @@ export async function getPurchaseOrder(
     ],
     approving_operator: approvingOperator.data,
     ordering_operator: orderingOperator.data,
+    receiving_variants: receivingVariants.data ?? [],
+    receiving_locations: receivingLocations.data ?? [],
   };
 }
 
@@ -851,11 +890,16 @@ export async function recordPurchaseOrderReceipt(input: {
   purchaseOrderId: string;
   operatorId: string;
   receivedDate: string;
+  receivedLocationId: string;
   idempotencyKey: string;
   lines: Array<{
     purchaseOrderLineId: string;
-    quantityReceived: number;
     discrepancyNote: string | null;
+    nonSellableQuantity: number;
+    allocations: Array<{
+      variantId: string;
+      quantityReceived: number;
+    }>;
   }>;
 }): Promise<PurchaseOrderReceiptResult> {
   const { data, error } = await supabaseAdmin.rpc(
@@ -864,11 +908,16 @@ export async function recordPurchaseOrderReceipt(input: {
       target_purchase_order_id: input.purchaseOrderId,
       target_operator_id: input.operatorId,
       target_received_date: input.receivedDate,
+      target_received_location_id: input.receivedLocationId,
       target_idempotency_key: input.idempotencyKey,
       target_lines: input.lines.map((line) => ({
         purchase_order_line_id: line.purchaseOrderLineId,
-        quantity_received: line.quantityReceived,
         discrepancy_note: line.discrepancyNote,
+        non_sellable_quantity: line.nonSellableQuantity,
+        allocations: line.allocations.map((allocation) => ({
+          variant_id: allocation.variantId,
+          quantity_received: allocation.quantityReceived,
+        })),
       })),
     },
   );

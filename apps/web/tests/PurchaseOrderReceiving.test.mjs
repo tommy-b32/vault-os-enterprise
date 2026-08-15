@@ -3,14 +3,16 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const migration = await readFile(new URL("../../supabase/migrations/20260823000000_purchase_order_receiving.sql", root), "utf8");
+const baseMigration = await readFile(new URL("../../supabase/migrations/20260823000000_purchase_order_receiving.sql", root), "utf8");
+const allocationMigration = await readFile(new URL("../../supabase/migrations/20260824000000_purchase_order_receipt_variant_allocations.sql", root), "utf8");
+const migration = [baseMigration, allocationMigration].join("\n");
 const repository = await readFile(new URL("lib/purchase-orders/PurchaseOrderRepository.ts", root), "utf8");
 const actions = await readFile(new URL("app/purchase-orders/actions.ts", root), "utf8");
 const page = await readFile(new URL("app/purchase-orders/[id]/page.tsx", root), "utf8");
 const component = await readFile(new URL("components/purchase-orders/PurchaseOrderReceiving.tsx", root), "utf8");
-const receivingFunction = migration.slice(
-  migration.indexOf("create or replace function public.record_vault_purchase_order_receipt"),
-  migration.indexOf("revoke all on function public.record_vault_purchase_order_receipt"),
+const receivingFunction = allocationMigration.slice(
+  allocationMigration.indexOf("create function public.record_vault_purchase_order_receipt"),
+  allocationMigration.indexOf("revoke all on function public.record_vault_purchase_order_receipt", allocationMigration.indexOf("create function public.record_vault_purchase_order_receipt")),
 );
 
 function applyReceipt(ordered, previous, received) {
@@ -50,7 +52,7 @@ test("receiving records true dates, operator evidence and discrepancies", () => 
   assert.match(migration, /created_by_operator_id uuid not null references public\.vault_operators/);
   assert.match(migration, /discrepancy_note text null/);
   assert.match(actions, /requireAuthenticatedOperator\(\)[\s\S]*recordPurchaseOrderReceipt/);
-  assert.match(component, /Count only accepted units/);
+  assert.match(component, /Count only accepted sellable units/);
 });
 
 test("receiving never mutates cash, payments, Shopify inventory, or PO lines", () => {
@@ -68,9 +70,9 @@ test("received unpaid liability remains committed and payable without losing ful
 });
 
 test("receiving UI exposes totals, history, line inputs, receipt date and refresh", () => {
-  assert.match(component, /Ordered.*Received.*Remaining/);
+  assert.match(component, /Ordered[\s\S]*Physically received[\s\S]*Remaining to post/);
   assert.match(component, /Previous receipts/);
-  assert.match(component, /name={`quantity:\$\{line\.id\}`}/);
+  assert.match(component, /name={`allocation:\$\{line\.id\}:\$\{variant\.id\}`}/);
   assert.match(component, /name="received_date"/);
   assert.match(component, /router\.refresh\(\)/);
   assert.match(page, /draft\.received_at/);

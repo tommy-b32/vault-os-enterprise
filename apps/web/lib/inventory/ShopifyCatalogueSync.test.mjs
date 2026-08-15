@@ -52,7 +52,7 @@ test("stale reconciliation cannot run from a truncated Shopify variant connectio
 test("catalogue reconciliation tombstones stale variants and preserves historical rows", async () => {
   const [sync, migration] = await Promise.all([
     readRepositoryFile("supabase/functions/shopify-sync/index.ts"),
-    readRepositoryFile("supabase/migrations/20260818000000_shopify_catalogue_reconciliation.sql"),
+    readRepositoryFile("supabase/migrations/20260819000000_shopify_catalogue_reconciliation.sql"),
   ]);
 
   assert.match(sync, /source_active:\s*false/);
@@ -66,7 +66,7 @@ test("catalogue reconciliation tombstones stale variants and preserves historica
 test("scheduled catalogue completion precedes inventory reconciliation without overlap", async () => {
   const [sync, migration, inventory] = await Promise.all([
     readRepositoryFile("supabase/functions/shopify-sync/index.ts"),
-    readRepositoryFile("supabase/migrations/20260818000000_shopify_catalogue_reconciliation.sql"),
+    readRepositoryFile("supabase/migrations/20260819000000_shopify_catalogue_reconciliation.sql"),
     readRepositoryFile("supabase/functions/shopify-inventory-sync/index.ts"),
   ]);
 
@@ -82,7 +82,7 @@ test("scheduled catalogue completion precedes inventory reconciliation without o
 test("catalogue diagnostics record successful and failed runs", async () => {
   const [sync, migration] = await Promise.all([
     readRepositoryFile("supabase/functions/shopify-sync/index.ts"),
-    readRepositoryFile("supabase/migrations/20260818000000_shopify_catalogue_reconciliation.sql"),
+    readRepositoryFile("supabase/migrations/20260819000000_shopify_catalogue_reconciliation.sql"),
   ]);
 
   for (const field of [
