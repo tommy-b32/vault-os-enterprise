@@ -6,9 +6,53 @@ import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import {
   approvePurchaseOrderDraft,
   createPurchaseOrderDraft,
+  markPurchaseOrderOrdered,
   prepareApprovedPurchaseOrder,
   type CreatePurchaseOrderDraftInput,
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
+
+export type MarkPurchaseOrderOrderedState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export async function markPurchaseOrderAsOrdered(
+  _previousState: MarkPurchaseOrderOrderedState,
+  formData: FormData,
+): Promise<MarkPurchaseOrderOrderedState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    const confirmed = formData.get("placement_confirmed") === "yes";
+
+    if (
+      typeof purchaseOrderId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(purchaseOrderId)
+    ) return { status: "error", message: "Invalid purchase order." };
+    if (!confirmed) {
+      return { status: "error", message: "Confirm that the order was actually placed with the supplier." };
+    }
+
+    const result = await markPurchaseOrderOrdered({
+      purchaseOrderId,
+      operatorId: operator.id,
+    });
+    revalidatePath("/purchase-orders");
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return {
+      status: "success",
+      message: result.transitioned
+        ? "Purchase order marked as ordered."
+        : "Purchase order was already marked as ordered.",
+    };
+  } catch (error) {
+    console.error("Unable to mark purchase order as ordered", error);
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Purchase order could not be marked as ordered.",
+    };
+  }
+}
 
 export type PrepareSupplierOrderState = {
   status: "idle" | "success" | "error";

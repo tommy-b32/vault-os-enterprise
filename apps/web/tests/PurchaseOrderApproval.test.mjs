@@ -60,8 +60,8 @@ test("approval mutates only canonical header approval fields", () => {
   assert.doesNotMatch(updateBody, /line|supplier|total|source_snapshot|recommendation/i);
 });
 
-test("approved orders remain visible and drafts cannot prepare supplier orders", () => {
-  assert.match(repository, /\.in\("status", \["draft", "approved"\]\)/);
+test("approved and ordered orders remain visible and drafts cannot prepare supplier orders", () => {
+  assert.match(repository, /\.in\("status", \["draft", "approved", "ordered"\]\)/);
   assert.match(listPage, /draft\.status\.toUpperCase\(\)/);
   assert.match(detailPage, /draft\.status === "draft"/);
   assert.match(detailPage, /Prepare Supplier Order/);

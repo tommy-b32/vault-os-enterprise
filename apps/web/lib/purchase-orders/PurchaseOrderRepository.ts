@@ -59,6 +59,14 @@ export type PurchaseOrderApprovalResult = {
   transitioned: boolean;
 };
 
+export type PurchaseOrderOrderedResult = {
+  purchaseOrderId: string;
+  status: "ordered";
+  orderedByOperatorId: string;
+  orderedAt: string;
+  transitioned: boolean;
+};
+
 const APPROVAL_REASON_LABELS: Record<string, string> = {
   reorder_approval_missing: "Required product purchasing authorisation is missing.",
   supplier_minimum_packs_not_satisfied: "The supplier minimum pack quantity is not satisfied by current qualified demand.",
@@ -550,7 +558,7 @@ export async function getPurchaseOrders() {
           source_recommendation_type
         )
       `)
-      .in("status", ["draft", "approved"])
+      .in("status", ["draft", "approved", "ordered"])
       .order("created_at", {
         ascending: false,
       });
@@ -591,7 +599,7 @@ export async function getPurchaseOrder(
         )
       `)
       .eq("id", id)
-      .in("status", ["draft", "approved"])
+      .in("status", ["draft", "approved", "ordered"])
       .maybeSingle();
 
   if (error) {
@@ -602,7 +610,7 @@ export async function getPurchaseOrder(
     return null;
   }
 
-  const [supplierNames, approvingOperator] = await Promise.all([
+  const [supplierNames, approvingOperator, orderingOperator] = await Promise.all([
     getSupplierNames([data.supplier_id]),
     data.approved_by_operator_id
       ? supabaseAdmin
@@ -611,11 +619,17 @@ export async function getPurchaseOrder(
           .eq("id", data.approved_by_operator_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    data.ordered_by_operator_id
+      ? supabaseAdmin
+          .from("vault_operators")
+          .select("display_name, email")
+          .eq("id", data.ordered_by_operator_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
-  if (approvingOperator.error) {
-    throw approvingOperator.error;
-  }
+  if (approvingOperator.error) throw approvingOperator.error;
+  if (orderingOperator.error) throw orderingOperator.error;
 
   return {
     ...data,
@@ -627,6 +641,7 @@ export async function getPurchaseOrder(
       },
     ],
     approving_operator: approvingOperator.data,
+    ordering_operator: orderingOperator.data,
   };
 }
 
@@ -703,6 +718,62 @@ export async function approvePurchaseOrderDraft(input: {
   );
 }
 
+export async function markPurchaseOrderOrdered(input: {
+  purchaseOrderId: string;
+  operatorId: string;
+  orderedAt?: string;
+}): Promise<PurchaseOrderOrderedResult> {
+  const orderedAt = input.orderedAt ?? new Date().toISOString();
+  const transition = await supabaseAdmin
+    .from("vault_purchase_orders")
+    .update({
+      status: "ordered",
+      ordered_by_operator_id: input.operatorId,
+      ordered_at: orderedAt,
+    })
+    .eq("id", input.purchaseOrderId)
+    .eq("status", "approved")
+    .select("id, status, ordered_by_operator_id, ordered_at")
+    .maybeSingle();
+
+  if (transition.error) throw transition.error;
+  if (transition.data) {
+    return {
+      purchaseOrderId: transition.data.id,
+      status: "ordered",
+      orderedByOperatorId: transition.data.ordered_by_operator_id,
+      orderedAt: transition.data.ordered_at,
+      transitioned: true,
+    };
+  }
+
+  const current = await supabaseAdmin
+    .from("vault_purchase_orders")
+    .select("id, status, ordered_by_operator_id, ordered_at")
+    .eq("id", input.purchaseOrderId)
+    .maybeSingle();
+
+  if (current.error) throw current.error;
+  if (!current.data) throw new Error("Purchase order was not found.");
+  if (
+    current.data.status === "ordered" &&
+    current.data.ordered_by_operator_id &&
+    current.data.ordered_at
+  ) {
+    return {
+      purchaseOrderId: current.data.id,
+      status: "ordered",
+      orderedByOperatorId: current.data.ordered_by_operator_id,
+      orderedAt: current.data.ordered_at,
+      transitioned: false,
+    };
+  }
+
+  throw new Error(
+    `Purchase order cannot be marked ordered from status '${current.data.status}'.`,
+  );
+}
+
 export async function prepareApprovedPurchaseOrder(
   purchaseOrderId: string,
 ): Promise<PreparedSupplierOrder> {
@@ -734,9 +805,9 @@ export async function prepareApprovedPurchaseOrder(
     throw new Error("Purchase order was not found.");
   }
 
-  if (order.data.status !== "approved") {
+  if (order.data.status !== "approved" && order.data.status !== "ordered") {
     throw new Error(
-      `Supplier order preparation requires APPROVED status; found '${order.data.status}'.`,
+      `Supplier order preparation requires APPROVED or ORDERED status; found '${order.data.status}'.`,
     );
   }
 

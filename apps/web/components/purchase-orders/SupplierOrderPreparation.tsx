@@ -1,10 +1,13 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   prepareSupplierOrder,
   type PrepareSupplierOrderState,
+  markPurchaseOrderAsOrdered,
+  type MarkPurchaseOrderOrderedState,
 } from "@/app/purchase-orders/actions";
 
 const initialState: PrepareSupplierOrderState = {
@@ -13,11 +16,19 @@ const initialState: PrepareSupplierOrderState = {
   preparedOrder: null,
 };
 
+const initialOrderedState: MarkPurchaseOrderOrderedState = {
+  status: "idle",
+  message: "",
+};
+
 export function SupplierOrderPreparation({
   purchaseOrderId,
+  purchaseOrderStatus,
 }: {
   purchaseOrderId: string;
+  purchaseOrderStatus: "approved" | "ordered";
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState(
     prepareSupplierOrder,
     initialState,
@@ -25,6 +36,14 @@ export function SupplierOrderPreparation({
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
+  const [orderedState, orderedAction, orderingPending] = useActionState(
+    markPurchaseOrderAsOrdered,
+    initialOrderedState,
+  );
+
+  useEffect(() => {
+    if (orderedState.status === "success") router.refresh();
+  }, [orderedState.status, router]);
 
   async function copyOrderText() {
     if (!state.preparedOrder) return;
@@ -103,6 +122,25 @@ export function SupplierOrderPreparation({
           </button>
           {copyState === "error" ? (
             <p role="alert">Copy failed. Select and copy the text manually.</p>
+          ) : null}
+
+          {purchaseOrderStatus === "approved" ? (
+            <form action={orderedAction}>
+              <input name="purchase_order_id" type="hidden" value={purchaseOrderId} />
+              <label>
+                <input name="placement_confirmed" required type="checkbox" value="yes" />
+                The operator confirms this purchase order has actually been placed with the supplier.
+              </label>
+              <p>Vault OS has not sent or placed this order automatically.</p>
+              <button disabled={orderingPending} type="submit">
+                {orderingPending ? "Marking as Orderedâ€¦" : "Mark as Ordered"}
+              </button>
+              {orderedState.message ? (
+                <p role={orderedState.status === "error" ? "alert" : "status"}>
+                  {orderedState.message}
+                </p>
+              ) : null}
+            </form>
           ) : null}
         </div>
       ) : null}

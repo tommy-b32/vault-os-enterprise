@@ -151,7 +151,7 @@ export default async function PurchaseOrderDetailPage({
             </strong>
           </article>
 
-          {draft.status === "approved" && draft.approved_at ? (
+          {draft.approved_at ? (
             <article>
               <span>Approved</span>
               <strong>
@@ -165,6 +165,25 @@ export default async function PurchaseOrderDetailPage({
                 {" by "}
                 {draft.approving_operator?.display_name ??
                   draft.approving_operator?.email ??
+                  "Vault operator"}
+              </strong>
+            </article>
+          ) : null}
+
+          {draft.status === "ordered" && draft.ordered_at ? (
+            <article>
+              <span>Ordered</span>
+              <strong>
+                {new Intl.DateTimeFormat("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }).format(new Date(draft.ordered_at))}
+                {" by "}
+                {draft.ordering_operator?.display_name ??
+                  draft.ordering_operator?.email ??
                   "Vault operator"}
               </strong>
             </article>
@@ -312,8 +331,11 @@ export default async function PurchaseOrderDetailPage({
           ) : null}
         </section>
 
-        {draft.status === "approved" ? (
-          <SupplierOrderPreparation purchaseOrderId={draft.id} />
+        {draft.status === "approved" || draft.status === "ordered" ? (
+          <SupplierOrderPreparation
+            purchaseOrderId={draft.id}
+            purchaseOrderStatus={draft.status}
+          />
         ) : null}
 
         <footer className="purchase-order-actions">

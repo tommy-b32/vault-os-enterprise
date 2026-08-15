@@ -135,14 +135,14 @@ test("missing persisted unit evidence is reported rather than guessed", () => {
   assert.match(prepared.orderText, /Total units: Unavailable/);
 });
 
-test("server preparation requires authentication and canonical approved state", async () => {
+test("server preparation requires authentication and canonical approved or ordered state", async () => {
   const [repository, action] = await Promise.all([
     readFile(new URL("../lib/purchase-orders/PurchaseOrderRepository.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/purchase-orders/actions.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(action, /requireAuthenticatedOperator\(\)/);
-  assert.match(repository, /order\.data\.status !== "approved"/);
+  assert.match(repository, /order\.data\.status !== "approved" && order\.data\.status !== "ordered"/);
   assert.match(repository, /vault_purchase_order_lines/);
   assert.match(repository, /vault_supplier_catalogue_review_items/);
   assert.match(repository, /supplier_product_evidence/);
