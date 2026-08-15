@@ -4,11 +4,14 @@ import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  postReceiptInventoryToShopify,
+  type PostReceivedInventoryState,
   recordReceiptAgainstPurchaseOrder,
   type RecordPurchaseOrderReceiptState,
 } from "@/app/purchase-orders/actions";
 
 const initialState: RecordPurchaseOrderReceiptState = { status: "idle", message: "" };
+const initialPostingState: PostReceivedInventoryState = { status: "idle", message: "" };
 
 type ReceivingLine = {
   id: string;
@@ -48,6 +51,8 @@ type ReceiptEvent = {
       variantId: string;
       size: string;
       quantityReceived: number;
+      postedQuantity: number;
+      postingBlocked: boolean;
     }>;
   }>;
 };
@@ -67,13 +72,16 @@ export function PurchaseOrderReceiving({
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(recordReceiptAgainstPurchaseOrder, initialState);
+  const [postingState, postingAction, postingPending] = useActionState(postReceiptInventoryToShopify, initialPostingState);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [postingIdempotencyKey] = useState(() => crypto.randomUUID());
   const [receivedDate, setReceivedDate] = useState(() => new Date().toISOString().slice(0, 10));
   const eligible = status !== "received";
 
   useEffect(() => {
     if (state.status === "success") router.refresh();
-  }, [router, state.status]);
+    if (postingState.status === "success") router.refresh();
+  }, [router, state.status, postingState.status]);
 
   return (
     <section className="purchase-order-supplier-draft">
@@ -87,12 +95,16 @@ export function PurchaseOrderReceiving({
           const remaining = line.orderedQuantity === null
             ? null
             : Math.max(0, line.orderedQuantity - line.receivedQuantity);
+          const posted = receipts.flatMap((receipt) => receipt.lines)
+            .filter((receiptLine) => receiptLine.purchaseOrderLineId === line.id)
+            .flatMap((receiptLine) => receiptLine.allocations)
+            .reduce((sum, allocation) => sum + allocation.postedQuantity, 0);
           return (
             <article key={line.id}>
               <div>
                 <strong>{line.productName}</strong>
                 <span>
-                  Ordered {line.orderedQuantity ?? "Unavailable"} · Physically received {line.receivedQuantity + line.nonSellableQuantity} · Accepted sellable {line.receivedQuantity} · Non-sellable {line.nonSellableQuantity} · Already posted to Shopify unavailable · Remaining to post unavailable · Remaining expected {remaining ?? "Unavailable"}
+                  Ordered {line.orderedQuantity ?? "Unavailable"} · Physically received {line.receivedQuantity + line.nonSellableQuantity} · Accepted sellable {line.receivedQuantity} · Non-sellable {line.nonSellableQuantity} · Already posted to Shopify {posted} · Remaining to post {Math.max(0, line.receivedQuantity - posted)} · Remaining expected {remaining ?? "Unavailable"}
                 </span>
               </div>
             </article>
@@ -113,9 +125,34 @@ export function PurchaseOrderReceiving({
                       {line.productName}: {line.quantityReceived} accepted unit{line.quantityReceived === 1 ? "" : "s"}, {line.nonSellableQuantity} non-sellable at {receipt.locationName}
                       {line.discrepancyNote ? ` — ${line.discrepancyNote}` : ""}
                       {line.allocations.map((allocation) =>
-                        ` · ${allocation.size}: ${allocation.quantityReceived}`)}
+                        ` · ${allocation.size}: physically received ${allocation.quantityReceived}, posted ${allocation.postedQuantity}, remaining ${Math.max(0, allocation.quantityReceived - allocation.postedQuantity)}`)}
                     </span>
                   ))}
+                  {receipt.lines.some((line) => line.allocations.some((allocation) =>
+                    allocation.quantityReceived > allocation.postedQuantity)) ? (
+                    <form action={postingAction}>
+                      <input name="purchase_order_id" type="hidden" value={purchaseOrderId} />
+                      <input name="receipt_id" type="hidden" value={receipt.id} />
+                      <input name="posting_idempotency_key" type="hidden" value={postingIdempotencyKey} />
+                      {receipt.lines.flatMap((line) => line.allocations).map((allocation) => {
+                        const remaining = Math.max(0, allocation.quantityReceived - allocation.postedQuantity);
+                        return remaining > 0 ? (
+                          <label key={allocation.id}>
+                            Post size {allocation.size} to Shopify (maximum {remaining})
+                            <input defaultValue={remaining} disabled={allocation.postingBlocked} max={remaining} min="0"
+                              name={`post_allocation:${allocation.id}`} step="1" type="number" />
+                            {allocation.postingBlocked ? <small>A prior posting outcome is pending or unknown; further posting is blocked.</small> : null}
+                          </label>
+                        ) : null;
+                      })}
+                      <p>This operator action increases Shopify available inventory. It does not post damaged/non-sellable units and does not write Vault inventory tables; Vault is reconciled by the normal Shopify inventory sync.</p>
+                      <button disabled={postingPending || receipt.lines.flatMap((line) => line.allocations).every((allocation) =>
+                        allocation.postingBlocked || allocation.quantityReceived <= allocation.postedQuantity)} type="submit">
+                        {postingPending ? "Posting Received Stock…" : "Post Received Stock to Shopify"}
+                      </button>
+                      {postingState.message ? <p role={postingState.status === "error" ? "alert" : "status"}>{postingState.message}</p> : null}
+                    </form>
+                  ) : null}
                 </div>
               </article>
             ))}
@@ -168,7 +205,6 @@ export function PurchaseOrderReceiving({
           <p>
             This records physical receipt and exact size allocation evidence only. Count only accepted sellable units; describe short, damaged, or wrong items in the note. Vault OS does not alter Shopify inventory automatically.
           </p>
-          <p>Shopify posting is unavailable until this exact allocation evidence has been recorded and a separately audited posting operation is installed. No canonical posting history exists yet, so already-posted and remaining-to-post quantities are unavailable rather than assumed to be zero.</p>
           <button disabled={pending || !idempotencyKey || locations.length === 0 || lines.every((line) => line.orderedQuantity === null || line.receivedQuantity >= line.orderedQuantity || line.variants.length === 0)} type="submit">
             {pending ? "Recording Receipt…" : "Record Receipt"}
           </button>

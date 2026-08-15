@@ -53,6 +53,14 @@ type ReceivingLocation = {
   source_location_id: string;
 };
 
+type InventoryPostingLine = {
+  receipt_allocation_id: string;
+  quantity: number;
+  vault_purchase_order_inventory_postings: {
+    vault_purchase_order_inventory_posting_events: Array<{ event_type: string }>;
+  } | null;
+};
+
 function money(
   value: number | null,
   currency = "GBP",
@@ -140,6 +148,17 @@ export default async function PurchaseOrderDetailPage({
   const productNameByLine = new Map(lines.map((line) => [line.id, line.product_name]));
   const receivingVariants = (draft.receiving_variants ?? []) as ReceivingVariant[];
   const receivingVariantById = new Map(receivingVariants.map((variant) => [variant.id, variant]));
+  const postedByAllocation = new Map<string, number>();
+  const blockedPostingAllocations = new Set<string>();
+  for (const postingLine of (draft.inventory_posting_lines ?? []) as InventoryPostingLine[]) {
+    const events = postingLine.vault_purchase_order_inventory_postings?.vault_purchase_order_inventory_posting_events ?? [];
+    if (events.some((event) => event.event_type === "shopify_succeeded")) {
+      postedByAllocation.set(postingLine.receipt_allocation_id,
+        (postedByAllocation.get(postingLine.receipt_allocation_id) ?? 0) + postingLine.quantity);
+    } else if (!events.some((event) => event.event_type === "shopify_failed")) {
+      blockedPostingAllocations.add(postingLine.receipt_allocation_id);
+    }
+  }
 
   return (
     <VaultAppShell>
@@ -418,7 +437,7 @@ export default async function PurchaseOrderDetailPage({
 
         {["ordered", "part_paid", "paid", "shipped", "received"].includes(draft.status) ? (
           <PurchaseOrderReceiving
-            key={`${draft.id}:${draft.status}:${receipts.length}:${Array.from(receivedByLine.values()).reduce((sum, value) => sum + value, 0)}`}
+            key={`${draft.id}:${draft.status}:${receipts.length}:${Array.from(receivedByLine.values()).reduce((sum, value) => sum + value, 0)}:${Array.from(postedByAllocation.values()).reduce((sum, value) => sum + value, 0)}`}
             lines={lines.map((line) => ({
               id: line.id,
               productName: line.product_name,
@@ -460,6 +479,8 @@ export default async function PurchaseOrderDetailPage({
                   variantId: allocation.variant_id,
                   size: receivingVariantById.get(allocation.variant_id)?.option_2 ?? "Unknown size",
                   quantityReceived: allocation.quantity_received,
+                  postedQuantity: postedByAllocation.get(allocation.id) ?? 0,
+                  postingBlocked: blockedPostingAllocations.has(allocation.id),
                 })),
               })),
             }))}

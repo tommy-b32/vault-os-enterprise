@@ -9,12 +9,54 @@ import {
   createPurchaseOrderDraft,
   markPurchaseOrderOrdered,
   prepareApprovedPurchaseOrder,
+  postReceivedInventory,
   recordPurchaseOrderPayment,
   recordPurchaseOrderReceipt,
   type CreatePurchaseOrderDraftInput,
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export type PostReceivedInventoryState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export async function postReceiptInventoryToShopify(
+  _previousState: PostReceivedInventoryState,
+  formData: FormData,
+): Promise<PostReceivedInventoryState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    const receiptId = formData.get("receipt_id");
+    const idempotencyKey = formData.get("posting_idempotency_key");
+    if (typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId) ||
+      typeof receiptId !== "string" || !UUID_PATTERN.test(receiptId) ||
+      typeof idempotencyKey !== "string" || !idempotencyKey.trim()) {
+      return { status: "error", message: "Exact receipt posting identity is invalid." };
+    }
+    const allocations: Array<{ receiptAllocationId: string; quantity: number }> = [];
+    for (const [key, value] of formData.entries()) {
+      if (!key.startsWith("post_allocation:") || typeof value !== "string") continue;
+      const receiptAllocationId = key.slice("post_allocation:".length);
+      const quantity = Number(value);
+      if (!UUID_PATTERN.test(receiptAllocationId) || !Number.isInteger(quantity) || quantity < 0) {
+        return { status: "error", message: "Posting quantities must be whole, non-negative units." };
+      }
+      if (quantity > 0) allocations.push({ receiptAllocationId, quantity });
+    }
+    if (!allocations.length) return { status: "error", message: "Enter at least one unit to post." };
+    const result = await postReceivedInventory({ purchaseOrderId, receiptId, operatorId: operator.id, idempotencyKey, allocations });
+    if (!result.success) return { status: "error", message: result.error ?? "Shopify inventory posting failed safely." };
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return { status: "success", message: result.transitioned
+      ? `Received stock posted to Shopify.${result.warning ? ` ${result.warning}` : " Inventory reconciliation was requested."}`
+      : "This received-stock posting was already completed." };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Shopify inventory posting failed safely." };
+  }
+}
 
 export type RecordPurchaseOrderReceiptState = {
   status: "idle" | "success" | "error";

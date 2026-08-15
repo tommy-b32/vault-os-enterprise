@@ -17,7 +17,7 @@ The shared provider exchanges `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET` at
 
 Webhook HMAC verification remains separate from API authentication. Configure `SHOPIFY_WEBHOOK_SECRET` from the Dev Dashboard app secret and do not expose it to the GraphQL client.
 
-The Shopify custom app must grant the Admin API scopes used by the enabled synchronisers, including `read_products`, `read_inventory`, `read_locations`, and `read_orders`. Shopify may require protected customer data approval for order fields such as customer name and email.
+The Shopify custom app must grant the Admin API scopes used by the enabled synchronisers, including `read_products`, `read_inventory`, `write_inventory`, `read_locations`, and `read_orders`. `write_inventory` is used only by explicit operator-triggered received-stock posting. Shopify may require protected customer data approval for order fields such as customer name and email.
 
 Shopify Payments synchronization additionally requires the narrow scopes `read_shopify_payments_accounts` for account balances and `read_shopify_payments_payouts` for payout summaries. A Dev Dashboard app version containing both scopes must be released and approved for the installed store before synchronization can succeed.
 

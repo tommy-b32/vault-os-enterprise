@@ -52,10 +52,10 @@ test("non-sellable units are separate, require explanation, and never enter allo
   assert.doesNotMatch(migration.match(/create table if not exists public\.vault_purchase_order_receipt_allocations[\s\S]*?\);/)?.[0] ?? "", /non_sellable/);
 });
 
-test("no Shopify posting action is exposed while historical receipt evidence lacks allocation", () => {
-  assert.doesNotMatch(actions + repository, /inventoryAdjustQuantities|inventorySetQuantities|Post Received Stock/);
-  assert.match(component, /Shopify posting is unavailable/);
-  assert.doesNotMatch(component, />Post Received Stock to Shopify</);
+test("Shopify posting is exposed only against exact receipt allocations", () => {
+  assert.match(actions, /post_allocation:/);
+  assert.match(repository, /shopify-post-received-inventory/);
+  assert.match(component, /Post Received Stock to Shopify/);
 });
 
 test("only canonical inventory sync writes Vault inventory levels and snapshots", () => {

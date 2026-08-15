@@ -152,7 +152,11 @@ test("server preparation requires authentication and canonical approved or order
   assert.match(repository, /parentProductByStyle\.get\(styleId\) !== item\.linked_product_id/);
   assert.match(repository, /supplierImageUrl: _ignoredSupplierImageUrl/);
   assert.doesNotMatch(repository.slice(0, repository.indexOf("function assertDraftInput")), /featured_image_url/);
-  assert.doesNotMatch(action, /PurchaseIntelligence|wallet|inventory|WhatsApp|fetch\(/);
+  const preparationAction = action.slice(
+    action.indexOf("export async function prepareSupplierOrder"),
+    action.indexOf("export type ApprovePurchaseOrderState"),
+  );
+  assert.doesNotMatch(preparationAction, /PurchaseIntelligence|wallet|inventory|WhatsApp|fetch\(/);
   const preparation = repository.slice(
     repository.indexOf("export async function prepareApprovedPurchaseOrder"),
   );

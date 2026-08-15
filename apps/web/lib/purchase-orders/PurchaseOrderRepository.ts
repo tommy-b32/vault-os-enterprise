@@ -87,6 +87,15 @@ export type PurchaseOrderReceiptResult = {
   transitioned: boolean;
 };
 
+export type PurchaseOrderInventoryPostingResult = {
+  success: boolean;
+  postingId: string | null;
+  transitioned?: boolean;
+  inventorySyncRequested?: boolean;
+  warning?: string | null;
+  error?: string;
+};
+
 const APPROVAL_REASON_LABELS: Record<string, string> = {
   reorder_approval_missing: "Required product purchasing authorisation is missing.",
   supplier_minimum_packs_not_satisfied: "The supplier minimum pack quantity is not satisfied by current qualified demand.",
@@ -665,6 +674,21 @@ export async function getPurchaseOrder(
     return null;
   }
 
+  const receiptAllocationIds = (data.vault_purchase_order_receipts ?? []).flatMap(
+    (receipt: { vault_purchase_order_receipt_lines?: Array<{ vault_purchase_order_receipt_allocations?: Array<{ id: string }> }> }) =>
+      (receipt.vault_purchase_order_receipt_lines ?? []).flatMap((line) =>
+        (line.vault_purchase_order_receipt_allocations ?? []).map((allocation) => allocation.id)),
+  );
+  const inventoryPostings = receiptAllocationIds.length
+    ? await supabaseAdmin.from("vault_purchase_order_inventory_posting_lines")
+        .select(`receipt_allocation_id, quantity, vault_purchase_order_inventory_postings (
+          id, idempotency_key, created_at, vault_purchase_order_inventory_posting_events (
+            event_type, shopify_reference, response_payload, created_at
+          )
+        )`).in("receipt_allocation_id", receiptAllocationIds)
+    : { data: [], error: null };
+  if (inventoryPostings.error) throw inventoryPostings.error;
+
   const productIds = Array.from(new Set(
     (data.vault_purchase_order_lines ?? [])
       .map((line: { style_id: string }) => line.style_id.split("::")[0])
@@ -722,7 +746,29 @@ export async function getPurchaseOrder(
     ordering_operator: orderingOperator.data,
     receiving_variants: receivingVariants.data ?? [],
     receiving_locations: receivingLocations.data ?? [],
+    inventory_posting_lines: inventoryPostings.data ?? [],
   };
+}
+
+export async function postReceivedInventory(input: {
+  purchaseOrderId: string;
+  receiptId: string;
+  operatorId: string;
+  idempotencyKey: string;
+  allocations: Array<{ receiptAllocationId: string; quantity: number }>;
+}): Promise<PurchaseOrderInventoryPostingResult> {
+  const { data, error } = await supabaseAdmin.functions.invoke(
+    "shopify-post-received-inventory", { body: input },
+  );
+  if (error) {
+    const response = (error as { context?: Response }).context;
+    if (response) {
+      const payload = await response.clone().json().catch(() => null) as { error?: string } | null;
+      if (payload?.error) throw new Error(payload.error);
+    }
+    throw new Error(error.message);
+  }
+  return data as PurchaseOrderInventoryPostingResult;
 }
 
 export async function approvePurchaseOrderDraft(input: {
