@@ -6,6 +6,7 @@ import { PurchaseOrderApprovalButton } from "@/components/purchase-orders/Purcha
 import { SupplierOrderPreparation } from "@/components/purchase-orders/SupplierOrderPreparation";
 import { PurchaseOrderPayment } from "@/components/purchase-orders/PurchaseOrderPayment";
 import { PurchaseOrderReceiving } from "@/components/purchase-orders/PurchaseOrderReceiving";
+import { PurchaseOrderShipping } from "@/components/purchase-orders/PurchaseOrderShipping";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
 
@@ -261,6 +262,32 @@ export default async function PurchaseOrderDetailPage({
             </article>
           ) : null}
 
+          {draft.shipped_at && draft.dispatch_date ? (
+            <article>
+              <span>Shipped</span>
+              <strong>
+                Dispatched {new Intl.DateTimeFormat("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  timeZone: "UTC",
+                }).format(new Date(draft.dispatch_date + "T00:00:00Z"))}
+                {" · recorded "}
+                {new Intl.DateTimeFormat("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }).format(new Date(draft.shipped_at))}
+                {" by "}
+                {draft.shipping_operator?.display_name ??
+                  draft.shipping_operator?.email ??
+                  "Vault operator"}
+              </strong>
+            </article>
+          ) : null}
+
           {draft.received_at ? (
             <article>
               <span>Fully received</span>
@@ -432,6 +459,17 @@ export default async function PurchaseOrderDetailPage({
             purchaseOrderId={draft.id}
             key={`${draft.id}:${draft.paid_amount_gbp}`}
             status={draft.status}
+          />
+        ) : null}
+
+        {["ordered", "part_paid", "paid", "shipped", "received"].includes(draft.status) ? (
+          <PurchaseOrderShipping
+            carrier={draft.carrier}
+            dispatchDate={draft.dispatch_date}
+            key={draft.id + ":" + draft.status + ":" + (draft.shipped_at ?? "unshipped")}
+            purchaseOrderId={draft.id}
+            status={draft.status}
+            trackingReference={draft.tracking_reference}
           />
         ) : null}
 

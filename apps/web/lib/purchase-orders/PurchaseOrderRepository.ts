@@ -67,6 +67,17 @@ export type PurchaseOrderOrderedResult = {
   transitioned: boolean;
 };
 
+export type PurchaseOrderShippedResult = {
+  purchaseOrderId: string;
+  status: "shipped" | "received";
+  shippedAt: string;
+  dispatchDate: string;
+  carrier: string | null;
+  trackingReference: string | null;
+  shippedByOperatorId: string;
+  transitioned: boolean;
+};
+
 export type PurchaseOrderPaymentResult = {
   paymentId: string;
   purchaseOrderId: string;
@@ -694,7 +705,7 @@ export async function getPurchaseOrder(
       .map((line: { style_id: string }) => line.style_id.split("::")[0])
       .filter(Boolean),
   ));
-  const [supplierNames, approvingOperator, orderingOperator, receivingVariants, receivingLocations] = await Promise.all([
+  const [supplierNames, approvingOperator, orderingOperator, shippingOperator, receivingVariants, receivingLocations] = await Promise.all([
     getSupplierNames([data.supplier_id]),
     data.approved_by_operator_id
       ? supabaseAdmin
@@ -708,6 +719,13 @@ export async function getPurchaseOrder(
           .from("vault_operators")
           .select("display_name, email")
           .eq("id", data.ordered_by_operator_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    data.shipped_by_operator_id
+      ? supabaseAdmin
+          .from("vault_operators")
+          .select("display_name, email")
+          .eq("id", data.shipped_by_operator_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     productIds.length
@@ -730,6 +748,7 @@ export async function getPurchaseOrder(
 
   if (approvingOperator.error) throw approvingOperator.error;
   if (orderingOperator.error) throw orderingOperator.error;
+  if (shippingOperator.error) throw shippingOperator.error;
   if (receivingVariants.error) throw receivingVariants.error;
   if (receivingLocations.error) throw receivingLocations.error;
 
@@ -744,6 +763,7 @@ export async function getPurchaseOrder(
     ],
     approving_operator: approvingOperator.data,
     ordering_operator: orderingOperator.data,
+    shipping_operator: shippingOperator.data,
     receiving_variants: receivingVariants.data ?? [],
     receiving_locations: receivingLocations.data ?? [],
     inventory_posting_lines: inventoryPostings.data ?? [],
@@ -898,6 +918,38 @@ export async function markPurchaseOrderOrdered(input: {
   throw new Error(
     `Purchase order cannot be marked ordered from status '${current.data.status}'.`,
   );
+}
+
+export async function markPurchaseOrderShipped(input: {
+  purchaseOrderId: string;
+  operatorId: string;
+  dispatchDate: string;
+  carrier: string | null;
+  trackingReference: string | null;
+}): Promise<PurchaseOrderShippedResult> {
+  const { data, error } = await supabaseAdmin.rpc(
+    "mark_vault_purchase_order_shipped",
+    {
+      target_purchase_order_id: input.purchaseOrderId,
+      target_operator_id: input.operatorId,
+      target_dispatch_date: input.dispatchDate,
+      target_carrier: input.carrier,
+      target_tracking_reference: input.trackingReference,
+    },
+  );
+  if (error) throw error;
+  const result = data?.[0];
+  if (!result) throw new Error("Purchase-order shipping did not return canonical evidence.");
+  return {
+    purchaseOrderId: result.purchase_order_id,
+    status: result.status,
+    shippedAt: result.shipped_at,
+    dispatchDate: result.dispatch_date,
+    carrier: result.carrier,
+    trackingReference: result.tracking_reference,
+    shippedByOperatorId: result.shipped_by_operator_id,
+    transitioned: result.transitioned,
+  };
 }
 
 export async function recordPurchaseOrderPayment(input: {

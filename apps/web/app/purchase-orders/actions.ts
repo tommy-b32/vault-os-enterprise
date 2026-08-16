@@ -8,6 +8,7 @@ import {
   approvePurchaseOrderDraft,
   createPurchaseOrderDraft,
   markPurchaseOrderOrdered,
+  markPurchaseOrderShipped,
   prepareApprovedPurchaseOrder,
   postReceivedInventory,
   recordPurchaseOrderPayment,
@@ -235,6 +236,66 @@ export type MarkPurchaseOrderOrderedState = {
   status: "idle" | "success" | "error";
   message: string;
 };
+
+export type MarkPurchaseOrderShippedState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export async function markPurchaseOrderAsShipped(
+  _previousState: MarkPurchaseOrderShippedState,
+  formData: FormData,
+): Promise<MarkPurchaseOrderShippedState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    const dispatchDate = formData.get("dispatch_date");
+    const carrier = formData.get("carrier");
+    const trackingReference = formData.get("tracking_reference");
+    const confirmed = formData.get("dispatch_confirmed") === "yes";
+    const parsedDispatchDate = typeof dispatchDate === "string"
+      ? new Date(`${dispatchDate}T00:00:00Z`)
+      : null;
+
+    if (typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId)) {
+      return { status: "error", message: "Invalid purchase order." };
+    }
+    if (typeof dispatchDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dispatchDate) ||
+      !parsedDispatchDate || Number.isNaN(parsedDispatchDate.getTime()) ||
+      parsedDispatchDate.toISOString().slice(0, 10) !== dispatchDate) {
+      return { status: "error", message: "Enter a valid dispatch date." };
+    }
+    if (!confirmed) {
+      return { status: "error", message: "Confirm that the supplier has genuinely dispatched this order." };
+    }
+    if (typeof carrier !== "string" || carrier.trim().length > 200 ||
+      typeof trackingReference !== "string" || trackingReference.trim().length > 200) {
+      return { status: "error", message: "Carrier and tracking reference must each be 200 characters or fewer." };
+    }
+
+    const result = await markPurchaseOrderShipped({
+      purchaseOrderId,
+      operatorId: operator.id,
+      dispatchDate,
+      carrier: carrier.trim() || null,
+      trackingReference: trackingReference.trim() || null,
+    });
+    revalidatePath("/purchase-orders");
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return {
+      status: "success",
+      message: result.transitioned
+        ? "Supplier dispatch recorded. Purchase order marked as shipped."
+        : "Supplier dispatch was already recorded.",
+    };
+  } catch (error) {
+    console.error("Unable to mark purchase order as shipped", error);
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Supplier dispatch could not be recorded.",
+    };
+  }
+}
 
 export async function markPurchaseOrderAsOrdered(
   _previousState: MarkPurchaseOrderOrderedState,
