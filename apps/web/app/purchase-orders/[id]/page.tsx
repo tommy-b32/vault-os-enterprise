@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import VaultAppShell from "@/components/layout/VaultAppShell";
 import { PurchaseOrderApprovalButton } from "@/components/purchase-orders/PurchaseOrderApprovalButton";
+import { PurchaseOrderCancellation } from "@/components/purchase-orders/PurchaseOrderCancellation";
 import { SupplierOrderPreparation } from "@/components/purchase-orders/SupplierOrderPreparation";
 import { PurchaseOrderPayment } from "@/components/purchase-orders/PurchaseOrderPayment";
 import { PurchaseOrderReceiving } from "@/components/purchase-orders/PurchaseOrderReceiving";
@@ -288,6 +289,25 @@ export default async function PurchaseOrderDetailPage({
             </article>
           ) : null}
 
+          {draft.cancelled_at ? (
+            <article>
+              <span>Cancelled</span>
+              <strong>
+                {new Intl.DateTimeFormat("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }).format(new Date(draft.cancelled_at))}
+                {" by "}
+                {draft.cancelling_operator?.display_name ??
+                  draft.cancelling_operator?.email ??
+                  "Vault operator"}
+              </strong>
+            </article>
+          ) : null}
+
           {draft.received_at ? (
             <article>
               <span>Fully received</span>
@@ -442,6 +462,15 @@ export default async function PurchaseOrderDetailPage({
             </p>
           ) : null}
         </section>
+
+        {["draft", "approved", "ordered", "cancelled"].includes(draft.status) ? (
+          <PurchaseOrderCancellation
+            cancellationReason={draft.cancellation_reason}
+            key={draft.id + ":" + draft.status + ":" + (draft.cancelled_at ?? "active")}
+            purchaseOrderId={draft.id}
+            status={draft.status as "draft" | "approved" | "ordered" | "cancelled"}
+          />
+        ) : null}
 
         {["approved", "ordered", "part_paid", "paid", "shipped", "received"].includes(draft.status) ? (
           <SupplierOrderPreparation

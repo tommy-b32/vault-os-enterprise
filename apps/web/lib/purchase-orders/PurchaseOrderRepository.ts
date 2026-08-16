@@ -78,6 +78,15 @@ export type PurchaseOrderShippedResult = {
   transitioned: boolean;
 };
 
+export type PurchaseOrderCancellationResult = {
+  purchaseOrderId: string;
+  status: "cancelled";
+  cancelledAt: string;
+  cancelledByOperatorId: string;
+  cancellationReason: string;
+  transitioned: boolean;
+};
+
 export type PurchaseOrderPaymentResult = {
   paymentId: string;
   purchaseOrderId: string;
@@ -598,7 +607,7 @@ export async function getPurchaseOrders() {
           source_recommendation_type
         )
       `)
-      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received"])
+      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received", "cancelled"])
       .order("created_at", {
         ascending: false,
       });
@@ -674,7 +683,7 @@ export async function getPurchaseOrder(
         )
       `)
       .eq("id", id)
-      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received"])
+      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received", "cancelled"])
       .maybeSingle();
 
   if (error) {
@@ -705,7 +714,7 @@ export async function getPurchaseOrder(
       .map((line: { style_id: string }) => line.style_id.split("::")[0])
       .filter(Boolean),
   ));
-  const [supplierNames, approvingOperator, orderingOperator, shippingOperator, receivingVariants, receivingLocations] = await Promise.all([
+  const [supplierNames, approvingOperator, orderingOperator, shippingOperator, cancellingOperator, receivingVariants, receivingLocations] = await Promise.all([
     getSupplierNames([data.supplier_id]),
     data.approved_by_operator_id
       ? supabaseAdmin
@@ -726,6 +735,13 @@ export async function getPurchaseOrder(
           .from("vault_operators")
           .select("display_name, email")
           .eq("id", data.shipped_by_operator_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    data.cancelled_by_operator_id
+      ? supabaseAdmin
+          .from("vault_operators")
+          .select("display_name, email")
+          .eq("id", data.cancelled_by_operator_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     productIds.length
@@ -749,6 +765,7 @@ export async function getPurchaseOrder(
   if (approvingOperator.error) throw approvingOperator.error;
   if (orderingOperator.error) throw orderingOperator.error;
   if (shippingOperator.error) throw shippingOperator.error;
+  if (cancellingOperator.error) throw cancellingOperator.error;
   if (receivingVariants.error) throw receivingVariants.error;
   if (receivingLocations.error) throw receivingLocations.error;
 
@@ -764,6 +781,7 @@ export async function getPurchaseOrder(
     approving_operator: approvingOperator.data,
     ordering_operator: orderingOperator.data,
     shipping_operator: shippingOperator.data,
+    cancelling_operator: cancellingOperator.data,
     receiving_variants: receivingVariants.data ?? [],
     receiving_locations: receivingLocations.data ?? [],
     inventory_posting_lines: inventoryPostings.data ?? [],
@@ -948,6 +966,32 @@ export async function markPurchaseOrderShipped(input: {
     carrier: result.carrier,
     trackingReference: result.tracking_reference,
     shippedByOperatorId: result.shipped_by_operator_id,
+    transitioned: result.transitioned,
+  };
+}
+
+export async function cancelPurchaseOrder(input: {
+  purchaseOrderId: string;
+  operatorId: string;
+  cancellationReason: string;
+}): Promise<PurchaseOrderCancellationResult> {
+  const { data, error } = await supabaseAdmin.rpc(
+    "cancel_vault_purchase_order",
+    {
+      target_purchase_order_id: input.purchaseOrderId,
+      target_operator_id: input.operatorId,
+      target_cancellation_reason: input.cancellationReason,
+    },
+  );
+  if (error) throw error;
+  const result = data?.[0];
+  if (!result) throw new Error("Purchase-order cancellation did not return canonical evidence.");
+  return {
+    purchaseOrderId: result.purchase_order_id,
+    status: result.status,
+    cancelledAt: result.cancelled_at,
+    cancelledByOperatorId: result.cancelled_by_operator_id,
+    cancellationReason: result.cancellation_reason,
     transitioned: result.transitioned,
   };
 }

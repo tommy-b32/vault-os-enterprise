@@ -6,6 +6,7 @@ import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { parsePositiveAmountToPence, penceToDatabaseAmount } from "@/lib/business/CashLedgerRules";
 import {
   approvePurchaseOrderDraft,
+  cancelPurchaseOrder,
   createPurchaseOrderDraft,
   markPurchaseOrderOrdered,
   markPurchaseOrderShipped,
@@ -17,6 +18,56 @@ import {
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export type CancelPurchaseOrderState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export async function cancelPurchaseOrderAction(
+  _previousState: CancelPurchaseOrderState,
+  formData: FormData,
+): Promise<CancelPurchaseOrderState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    const cancellationReason = formData.get("cancellation_reason");
+    const confirmed = formData.get("cancellation_confirmed") === "yes";
+    if (typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId)) {
+      return { status: "error", message: "Invalid purchase order." };
+    }
+    if (typeof cancellationReason !== "string" || !cancellationReason.trim()) {
+      return { status: "error", message: "Cancellation reason is required." };
+    }
+    if (cancellationReason.trim().length > 1000) {
+      return { status: "error", message: "Cancellation reason must be 1000 characters or fewer." };
+    }
+    if (!confirmed) {
+      return { status: "error", message: "Confirm that this purchase order should be cancelled." };
+    }
+
+    const result = await cancelPurchaseOrder({
+      purchaseOrderId,
+      operatorId: operator.id,
+      cancellationReason: cancellationReason.trim(),
+    });
+    revalidatePath("/commercial");
+    revalidatePath("/purchase-orders");
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return {
+      status: "success",
+      message: result.transitioned
+        ? "Purchase order cancelled."
+        : "Purchase order was already cancelled.",
+    };
+  } catch (error) {
+    console.error("Unable to cancel purchase order", error);
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Purchase order could not be cancelled.",
+    };
+  }
+}
 
 export type PostReceivedInventoryState = {
   status: "idle" | "success" | "error";
