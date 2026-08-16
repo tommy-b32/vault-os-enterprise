@@ -2816,6 +2816,150 @@ input:focus-visible {
   box-shadow: var(--vault-shadow);
 }
 
+.purchase-order-cancellation__form,
+.purchase-order-cancellation__evidence {
+  width: min(100%, 720px);
+  margin-top: 22px;
+}
+
+.purchase-order-cancellation__form {
+  display: grid;
+  gap: 16px;
+}
+
+.purchase-order-cancellation__field {
+  display: grid;
+  gap: 7px;
+}
+
+.purchase-order-cancellation__field > span,
+.purchase-order-cancellation__evidence > span {
+  color: var(--vault-text-soft);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.purchase-order-cancellation__field > small {
+  color: var(--vault-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.purchase-order-cancellation__field textarea {
+  width: 100%;
+  min-height: 126px;
+  resize: vertical;
+  padding: 12px 13px;
+  border: 1px solid #30332f;
+  border-radius: var(--vault-radius-sm);
+  outline: none;
+  color: var(--vault-text);
+  background: #0b0d0c;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.purchase-order-cancellation__field textarea:focus {
+  border-color: var(--vault-gold);
+  box-shadow: 0 0 0 3px rgba(217, 173, 74, 0.08);
+}
+
+.purchase-order-cancellation__confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-sm);
+  color: var(--vault-text-soft);
+  background: rgba(255, 255, 255, 0.018);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.purchase-order-cancellation__confirmation input {
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: var(--vault-error);
+  flex: 0 0 auto;
+}
+
+.purchase-order-cancellation__warning {
+  padding: 14px 15px;
+  border: 1px solid color-mix(in srgb, var(--vault-warning) 24%, var(--vault-border));
+  border-left: 3px solid var(--vault-warning);
+  border-radius: var(--vault-radius-sm);
+  background: color-mix(in srgb, var(--vault-warning) 5%, transparent);
+}
+
+.purchase-order-cancellation__warning strong {
+  color: var(--vault-warning);
+  font-size: 11px;
+}
+
+.purchase-order-cancellation__warning p {
+  max-width: 650px;
+  margin: 6px 0 0;
+  color: var(--vault-text-soft);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.purchase-order-cancellation__button {
+  justify-self: start;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--vault-error) 72%, #ffffff);
+  border-radius: var(--vault-radius-sm);
+  color: #fff5f2;
+  background: color-mix(in srgb, var(--vault-error) 82%, #5c1710);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, opacity 150ms ease;
+}
+
+.purchase-order-cancellation__button:hover:not(:disabled) {
+  border-color: #ff8a78;
+  background: var(--vault-error);
+}
+
+.purchase-order-cancellation__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.purchase-order-cancellation__message,
+.purchase-order-cancellation__evidence p {
+  margin: 0;
+  color: var(--vault-text-soft);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.purchase-order-cancellation__message[role="alert"] {
+  color: var(--vault-error);
+}
+
+.purchase-order-cancellation__evidence {
+  padding: 14px 15px;
+  border: 1px solid var(--vault-border);
+  border-radius: var(--vault-radius-sm);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.purchase-order-cancellation__evidence p {
+  margin-top: 7px;
+}
+
 .purchase-order-section-heading > div > p:last-child {
   margin: 7px 0 0;
   color: var(--vault-muted);
@@ -3174,6 +3318,10 @@ input:focus-visible {
 }
 
 @media (max-width: 650px) {
+  .purchase-order-cancellation__button {
+    width: 100%;
+  }
+
   .purchase-orders-page {
     padding: 18px;
   }
