@@ -5,17 +5,38 @@ const respond = (body: unknown, status = 200) => new Response(
   { status, headers: { "Content-Type": "application/json" } },
 );
 
+function getLegacyJwtRole(apiKey: string): string | null {
+  const payload = apiKey.split(".")[1];
+  if (!payload) return null;
+  try {
+    const base64 = payload.replaceAll("-", "+").replaceAll("_", "/")
+      .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    const claims = JSON.parse(atob(base64)) as { role?: unknown };
+    return typeof claims.role === "string" ? claims.role : null;
+  } catch {
+    return null;
+  }
+}
+
+function isVaultServerInvocation(request: Request): boolean {
+  const apiKey = request.headers.get("apikey");
+  const authorization = request.headers.get("Authorization");
+  if (!apiKey) return false;
+
+  // Supabase's gateway authenticates the key before this verify_jwt=true
+  // function executes. New sb_secret keys are intentionally sent only as an
+  // apikey, never as a bearer token. Legacy service-role JWTs use both headers.
+  if (apiKey.startsWith("sb_secret_")) return true;
+  return authorization === `Bearer ${apiKey}` &&
+    getLegacyJwtRole(apiKey) === "service_role";
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") {
     return respond({ success: false, error: "Method not allowed" }, 405);
   }
 
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-    Deno.env.get("SERVICE_ROLE_KEY");
-  if (!serviceKey) {
-    return respond({ success: false, error: "Supabase service configuration unavailable" }, 500);
-  }
-  if (request.headers.get("Authorization") !== `Bearer ${serviceKey}`) {
+  if (!isVaultServerInvocation(request)) {
     return respond({ success: false, error: "Shopify permission diagnostics require the authenticated Vault server endpoint" }, 403);
   }
 

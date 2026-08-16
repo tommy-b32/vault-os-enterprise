@@ -3,6 +3,22 @@ import { NextResponse } from "next/server";
 import { authorizeApiRequest } from "@/lib/auth/api";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+type ScopeDiagnosticResponse = {
+  requiredScopes: string[];
+  grantedScopes: string[];
+  missingScopes: string[];
+  checkedAt: string;
+};
+
+function isScopeDiagnosticResponse(value: unknown): value is ScopeDiagnosticResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return Array.isArray(candidate.requiredScopes) && candidate.requiredScopes.every((scope) => typeof scope === "string") &&
+    Array.isArray(candidate.grantedScopes) && candidate.grantedScopes.every((scope) => typeof scope === "string") &&
+    Array.isArray(candidate.missingScopes) && candidate.missingScopes.every((scope) => typeof scope === "string") &&
+    typeof candidate.checkedAt === "string";
+}
+
 export async function GET() {
   const denied = await authorizeApiRequest(["owner", "operator"]);
   if (denied) return denied;
@@ -25,5 +41,17 @@ export async function GET() {
     return NextResponse.json({ success: false, error: error.message }, { status: 502 });
   }
 
-  return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
+  if (!isScopeDiagnosticResponse(data)) {
+    return NextResponse.json(
+      { success: false, error: "Shopify permission diagnostic returned an invalid response" },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({
+    requiredScopes: data.requiredScopes,
+    grantedScopes: data.grantedScopes,
+    missingScopes: data.missingScopes,
+    checkedAt: data.checkedAt,
+  }, { headers: { "Cache-Control": "no-store" } });
 }

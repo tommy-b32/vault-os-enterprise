@@ -35,3 +35,24 @@ test("diagnostic is operator protected, live, read-only, and non-persistent", ()
   assert.doesNotMatch(helper + edge + route, /\.from\(|\.rpc\(|insert|update|upsert|delete/i);
   assert.match(panel, /Read-only diagnostic; no inventory was changed/);
 });
+
+test("server invocation accepts the deployed server-only API key without requiring a forbidden bearer copy", () => {
+  assert.match(edge, /request\.headers\.get\("apikey"\)/);
+  assert.match(edge, /if \(apiKey\.startsWith\("sb_secret_"\)\) return true/);
+  assert.match(edge, /getLegacyJwtRole\(apiKey\) === "service_role"/);
+  assert.doesNotMatch(edge, /Authorization.*SERVICE_ROLE_KEY|Bearer \$\{serviceKey\}/s);
+});
+
+test("publishable keys and user bearer tokens cannot bypass the protected server route", () => {
+  assert.match(edge, /authorization === `Bearer \$\{apiKey\}`/);
+  assert.doesNotMatch(edge, /sb_publishable_/);
+  assert.match(route, /authorizeApiRequest\(\["owner", "operator"\]\)/);
+});
+
+test("the Next endpoint returns only the bounded diagnostic contract", () => {
+  assert.match(route, /requiredScopes: data\.requiredScopes/);
+  assert.match(route, /grantedScopes: data\.grantedScopes/);
+  assert.match(route, /missingScopes: data\.missingScopes/);
+  assert.match(route, /checkedAt: data\.checkedAt/);
+  assert.doesNotMatch(route, /accessToken|SHOPIFY_CLIENT_SECRET/);
+});
