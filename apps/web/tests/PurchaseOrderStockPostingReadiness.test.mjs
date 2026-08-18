@@ -3,7 +3,9 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
-const migration = await readFile(new URL("../../supabase/migrations/20260824000000_purchase_order_receipt_variant_allocations.sql", root), "utf8");
+const allocationMigration = await readFile(new URL("../../supabase/migrations/20260824000000_purchase_order_receipt_variant_allocations.sql", root), "utf8");
+const physicalAccountingMigration = await readFile(new URL("../../supabase/migrations/20260829000000_purchase_order_receiving_physical_accounting.sql", root), "utf8");
+const migration = [allocationMigration, physicalAccountingMigration].join("\n");
 const repository = await readFile(new URL("lib/purchase-orders/PurchaseOrderRepository.ts", root), "utf8");
 const actions = await readFile(new URL("app/purchase-orders/actions.ts", root), "utf8");
 const page = await readFile(new URL("app/purchase-orders/[id]/page.tsx", root), "utf8");
@@ -41,7 +43,8 @@ test("database validation prevents cross-style variant leakage", () => {
 
 test("accepted allocations cannot exceed canonical received or ordered quantities", () => {
   assert.match(migration, /sum\(\(allocation->>'quantity_received'\)::integer\)/);
-  assert.match(migration, /already_received \+ target_quantity > ordered_quantity/);
+  assert.match(physicalAccountingMigration, /receipt_line\.quantity_received \+ receipt_line\.non_sellable_quantity/);
+  assert.match(physicalAccountingMigration, /already_physically_accounted \+ target_quantity \+ target_non_sellable_quantity > ordered_quantity/);
   assert.match(migration, /Variant allocation quantities must be positive/);
 });
 
@@ -49,7 +52,7 @@ test("non-sellable units are separate, require explanation, and never enter allo
   assert.match(migration, /non_sellable_quantity integer not null default 0/);
   assert.match(migration, /non_sellable_quantity = 0 or discrepancy_note is not null/);
   assert.match(component, /Damaged, wrong, or otherwise non-sellable units/);
-  assert.doesNotMatch(migration.match(/create table if not exists public\.vault_purchase_order_receipt_allocations[\s\S]*?\);/)?.[0] ?? "", /non_sellable/);
+  assert.doesNotMatch(allocationMigration.match(/create table public\.vault_purchase_order_receipt_allocations[\s\S]*?\);/)?.[0] ?? "", /non_sellable/);
 });
 
 test("Shopify posting is exposed only against exact receipt allocations", () => {

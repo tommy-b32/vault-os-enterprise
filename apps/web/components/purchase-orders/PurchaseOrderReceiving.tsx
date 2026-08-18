@@ -92,9 +92,10 @@ export function PurchaseOrderReceiving({
 
       <div className="purchase-order-preparation-lines">
         {lines.map((line) => {
+          const physicallyAccounted = line.receivedQuantity + line.nonSellableQuantity;
           const remaining = line.orderedQuantity === null
             ? null
-            : Math.max(0, line.orderedQuantity - line.receivedQuantity);
+            : Math.max(0, line.orderedQuantity - physicallyAccounted);
           const posted = receipts.flatMap((receipt) => receipt.lines)
             .filter((receiptLine) => receiptLine.purchaseOrderLineId === line.id)
             .flatMap((receiptLine) => receiptLine.allocations)
@@ -104,7 +105,7 @@ export function PurchaseOrderReceiving({
               <div>
                 <strong>{line.productName}</strong>
                 <span>
-                  Ordered {line.orderedQuantity ?? "Unavailable"} · Physically received {line.receivedQuantity + line.nonSellableQuantity} · Accepted sellable {line.receivedQuantity} · Non-sellable {line.nonSellableQuantity} · Already posted to Shopify {posted} · Remaining to post {Math.max(0, line.receivedQuantity - posted)} · Remaining expected {remaining ?? "Unavailable"}
+                  Ordered {line.orderedQuantity ?? "Unavailable"} · Physically accounted {physicallyAccounted} · Sellable received {line.receivedQuantity} · Non-sellable {line.nonSellableQuantity} · Already posted to Shopify {posted} · Remaining to post {Math.max(0, line.receivedQuantity - posted)} · Remaining expected {remaining ?? "Unavailable"}
                 </span>
               </div>
             </article>
@@ -122,10 +123,10 @@ export function PurchaseOrderReceiving({
                   <strong>Received {receipt.receivedDate}</strong>
                   {receipt.lines.map((line) => (
                     <span key={line.id}>
-                      {line.productName}: {line.quantityReceived} accepted unit{line.quantityReceived === 1 ? "" : "s"}, {line.nonSellableQuantity} non-sellable at {receipt.locationName}
+                      {line.productName}: {line.quantityReceived + line.nonSellableQuantity} physically accounted ({line.quantityReceived} sellable, {line.nonSellableQuantity} non-sellable) at {receipt.locationName}
                       {line.discrepancyNote ? ` — ${line.discrepancyNote}` : ""}
                       {line.allocations.map((allocation) =>
-                        ` · ${allocation.size}: physically received ${allocation.quantityReceived}, posted ${allocation.postedQuantity}, remaining ${Math.max(0, allocation.quantityReceived - allocation.postedQuantity)}`)}
+                        ` · ${allocation.size}: sellable received ${allocation.quantityReceived}, posted ${allocation.postedQuantity}, remaining to post ${Math.max(0, allocation.quantityReceived - allocation.postedQuantity)}`)}
                     </span>
                   ))}
                   {receipt.lines.some((line) => line.allocations.some((allocation) =>
@@ -178,9 +179,10 @@ export function PurchaseOrderReceiving({
             </select>
           </label>
           {lines.map((line) => {
+            const physicallyAccounted = line.receivedQuantity + line.nonSellableQuantity;
             const remaining = line.orderedQuantity === null
               ? null
-              : Math.max(0, line.orderedQuantity - line.receivedQuantity);
+              : Math.max(0, line.orderedQuantity - physicallyAccounted);
             return (
               <fieldset disabled={remaining === null || remaining === 0} key={line.id}>
                 <legend>{line.productName}</legend>
@@ -193,7 +195,7 @@ export function PurchaseOrderReceiving({
                 )) : <p>Exact active Shopify size variants are unavailable. This line cannot be received safely.</p>}
                 <label>
                   Damaged, wrong, or otherwise non-sellable units
-                  <input defaultValue="0" min="0" name={`non_sellable:${line.id}`} required step="1" type="number" />
+                  <input defaultValue="0" max={remaining ?? undefined} min="0" name={`non_sellable:${line.id}`} required step="1" type="number" />
                 </label>
                 <label>
                   Optional discrepancy or damage note
@@ -205,7 +207,7 @@ export function PurchaseOrderReceiving({
           <p>
             This records physical receipt and exact size allocation evidence only. Count only accepted sellable units; describe short, damaged, or wrong items in the note. Vault OS does not alter Shopify inventory automatically.
           </p>
-          <button disabled={pending || !idempotencyKey || locations.length === 0 || lines.every((line) => line.orderedQuantity === null || line.receivedQuantity >= line.orderedQuantity || line.variants.length === 0)} type="submit">
+          <button disabled={pending || !idempotencyKey || locations.length === 0 || lines.every((line) => line.orderedQuantity === null || line.receivedQuantity + line.nonSellableQuantity >= line.orderedQuantity || line.variants.length === 0)} type="submit">
             {pending ? "Recording Receipt…" : "Record Receipt"}
           </button>
           {state.message ? <p role={state.status === "error" ? "alert" : "status"}>{state.message}</p> : null}
