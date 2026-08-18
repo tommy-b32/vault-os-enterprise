@@ -129,12 +129,53 @@ const APPROVAL_REASON_LABELS: Record<string, string> = {
   commercial_data_missing: "Trusted commercial evidence is incomplete.",
 };
 
-async function getCurrentApprovalBlockers(purchaseOrderId: string): Promise<string[]> {
-  const [order, catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
-    supabaseAdmin.from("vault_purchase_orders").select(`
-      id, supplier_id, status, estimated_total_gbp, total_packs,
-      vault_purchase_order_lines(style_id, recommended_packs)
-    `).eq("id", purchaseOrderId).maybeSingle(),
+type CanonicalApprovalQualification = {
+  evaluated_at: string;
+  supplier_id: string;
+  supplier_currency: string | null;
+  supplier_minimum_packs: number | null;
+  supplier_minimum_value: number | null;
+  qualification_state: string;
+  qualification_blockers: string[];
+  basket_state: string;
+  total_packs: number;
+  total_units: number;
+  total_gbp: number;
+  lines: Array<{
+    supplier_id: string;
+    style_id: string;
+    product_name: string;
+    recommended_packs: number;
+    recommended_units: number;
+    units_per_pack: number;
+    pack_cost_gbp: number;
+    line_cost_gbp: number;
+    source_recommendation_type: string;
+  }>;
+};
+
+function approvalMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+async function getCurrentApprovalQualification(
+  purchaseOrderId: string,
+): Promise<CanonicalApprovalQualification | Record<string, never>> {
+  const order = await supabaseAdmin
+    .from("vault_purchase_orders")
+    .select("id, supplier_id, status")
+    .eq("id", purchaseOrderId)
+    .maybeSingle();
+
+  if (order.error) throw order.error;
+  if (!order.data) throw new Error("Purchase order was not found.");
+  if (order.data.status === "approved") return {};
+  if (order.data.status !== "draft") {
+    throw new Error(`Purchase order cannot be approved from status '${order.data.status}'.`);
+  }
+  const orderData = order.data;
+
+  const [catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
     getCatalogueData(),
     InventorySyncRepository.getFreshness(),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
@@ -151,14 +192,8 @@ async function getCurrentApprovalBlockers(purchaseOrderId: string): Promise<stri
     ),
   ]);
 
-  const sourceError = order.error ?? walletResult.error ?? suppliersResult.error ?? rulesResult.error;
+  const sourceError = walletResult.error ?? suppliersResult.error ?? rulesResult.error;
   if (sourceError) throw sourceError;
-  if (!order.data) throw new Error("Purchase order was not found.");
-  const orderData = order.data;
-  if (orderData.status === "approved") return [];
-  if (orderData.status !== "draft") {
-    return [`Purchase order cannot be approved from status '${orderData.status}'.`];
-  }
 
   const minimumPacks = new Map((rulesResult.data ?? []).map((rule) => [rule.supplier_id, rule.minimum_order_packs]));
   const suppliers = (suppliersResult.data ?? []).map((supplier) => ({
@@ -177,33 +212,64 @@ async function getCurrentApprovalBlockers(purchaseOrderId: string): Promise<stri
   });
   const qualification = evaluation.qualifications.find((entry) => entry.supplier.id === orderData.supplier_id);
   const basket = evaluation.baskets.find((entry) => entry.supplier.id === orderData.supplier_id);
+  const canonicalSupplier = suppliers.find((supplier) => supplier.id === orderData.supplier_id);
   const blockers = [...(qualification?.blockers ?? ["Current supplier purchasing qualification is unavailable."])];
 
   if (basket?.purchasing_state !== "READY_TO_ORDER") {
     blockers.push("supplier_minimum_packs_not_satisfied");
   }
 
-  const allowedPacks = new Map([
-    ...(basket?.top_products ?? []),
-    ...(basket?.additional_qualifying_products ?? []),
-  ].map((line) => [line.style_id, line.required_packs]));
-  for (const line of orderData.vault_purchase_order_lines ?? []) {
-    if (allowedPacks.get(line.style_id) !== line.recommended_packs) {
-      blockers.push(`Draft line '${line.style_id}' no longer matches current demand-qualified packs.`);
+  const productByStyle = new Map(catalogue.products.map((product) => [product.style_id, product]));
+  const demandByStyle = new Map(evaluation.demands.map((demand) => [demand.styleId, demand]));
+  const canonicalLines = [
+    ...(basket?.top_products ?? []).map((line) => ({
+      line,
+      sourceRecommendationType: "purchase_intelligence_required",
+    })),
+    ...(basket?.additional_qualifying_products ?? []).map((line) => ({
+      line,
+      sourceRecommendationType: "purchase_intelligence_bring_forward",
+    })),
+  ].map(({ line, sourceRecommendationType }) => {
+    const product = productByStyle.get(line.style_id);
+    const demand = demandByStyle.get(line.style_id);
+    const packCost = product?.commercial_cost.landed_cost_per_pack_gbp ?? null;
+    const unitsPerPack = demand?.unitsPerPack ?? product?.commercial_cost.units_per_pack ?? null;
+    if (packCost === null || unitsPerPack === null || unitsPerPack <= 0) {
+      blockers.push(`Canonical commercial evidence is unavailable for '${line.style_id}'.`);
+      return null;
     }
+    return {
+      supplier_id: orderData.supplier_id,
+      style_id: line.style_id,
+      product_name: line.product_name,
+      recommended_packs: line.required_packs,
+      recommended_units: line.required_units,
+      units_per_pack: unitsPerPack,
+      pack_cost_gbp: approvalMoney(packCost),
+      line_cost_gbp: approvalMoney(packCost * line.required_packs),
+      source_recommendation_type: sourceRecommendationType,
+    };
+  }).filter((line): line is NonNullable<typeof line> => line !== null);
+
+  const totalPacks = canonicalLines.reduce((sum, line) => sum + line.recommended_packs, 0);
+  const totalUnits = canonicalLines.reduce((sum, line) => sum + line.recommended_units, 0);
+  const totalGbp = approvalMoney(canonicalLines.reduce((sum, line) => sum + line.line_cost_gbp, 0));
+
+  if (!basket || totalPacks !== basket.intelligent_basket_packs ||
+    basket.projected_intelligent_basket_spend === null ||
+    totalGbp !== basket.projected_intelligent_basket_spend) {
+    blockers.push("Current canonical basket cannot be represented exactly as persisted PO lines.");
   }
 
-  const draftSpend = orderData.estimated_total_gbp;
-  if (draftSpend === null) {
-    blockers.push("supplier_basket_cost_unavailable");
-  } else {
+  if (totalGbp > 0) {
     const wallet = walletResult.data as PurchasingWalletData;
     const capital = CapitalEngine.reviewPosition({
       ledgerBalanceGbp: wallet.ledger_balance_gbp,
       protectedReserveGbp: wallet.protected_reserve_gbp,
       committedOrdersGbp: wallet.committed_orders_gbp,
       manualSpendingLimitGbp: wallet.manual_spending_limit_gbp,
-      proposedPurchaseGbp: draftSpend,
+      proposedPurchaseGbp: totalGbp,
       walletAvailable: true,
       walletLastUpdated: wallet.wallet_last_updated,
     });
@@ -212,9 +278,31 @@ async function getCurrentApprovalBlockers(purchaseOrderId: string): Promise<stri
     if (!capital.affordable || !capital.reserveProtected) {
       blockers.push("insufficient_reserve_safe_capacity");
     }
+  } else {
+    blockers.push("supplier_basket_cost_unavailable");
   }
 
-  return Array.from(new Set(blockers));
+  const uniqueBlockers = Array.from(new Set(blockers));
+  if (uniqueBlockers.length > 0 || !qualification || !basket || !canonicalSupplier) {
+    throw new Error(`Purchase order approval blocked: ${uniqueBlockers.map(
+      (reason) => APPROVAL_REASON_LABELS[reason] ?? reason,
+    ).join(" ")}`);
+  }
+
+  return {
+    evaluated_at: new Date().toISOString(),
+    supplier_id: orderData.supplier_id,
+    supplier_currency: canonicalSupplier.currency,
+    supplier_minimum_packs: canonicalSupplier.minimumOrderPacks,
+    supplier_minimum_value: canonicalSupplier.minimumOrderValue,
+    qualification_state: qualification.state,
+    qualification_blockers: qualification.blockers,
+    basket_state: basket.purchasing_state,
+    total_packs: totalPacks,
+    total_units: totalUnits,
+    total_gbp: totalGbp,
+    lines: canonicalLines,
+  };
 }
 
 type SupplierNameRow = {
@@ -812,74 +900,32 @@ export async function postReceivedInventory(input: {
 export async function approvePurchaseOrderDraft(input: {
   purchaseOrderId: string;
   operatorId: string;
-  approvedAt?: string;
 }): Promise<PurchaseOrderApprovalResult> {
-  const approvedAt = input.approvedAt ?? new Date().toISOString();
-
-  const blockers = await getCurrentApprovalBlockers(input.purchaseOrderId);
-  if (blockers.length > 0) {
-    throw new Error(`Purchase order approval blocked: ${blockers.map(
-      (reason) => APPROVAL_REASON_LABELS[reason] ?? reason,
-    ).join(" ")}`);
-  }
-
-  const transition = await supabaseAdmin
-    .from("vault_purchase_orders")
-    .update({
-      status: "approved",
-      approved_by_operator_id: input.operatorId,
-      approved_at: approvedAt,
-    })
-    .eq("id", input.purchaseOrderId)
-    .eq("status", "draft")
-    .select("id, status, approved_by_operator_id, approved_at")
-    .maybeSingle();
-
-  if (transition.error) {
-    throw transition.error;
-  }
-
-  if (transition.data) {
-    return {
-      purchaseOrderId: transition.data.id,
-      status: "approved",
-      approvedByOperatorId: transition.data.approved_by_operator_id,
-      approvedAt: transition.data.approved_at,
-      transitioned: true,
-    };
-  }
-
-  const current = await supabaseAdmin
-    .from("vault_purchase_orders")
-    .select("id, status, approved_by_operator_id, approved_at")
-    .eq("id", input.purchaseOrderId)
-    .maybeSingle();
-
-  if (current.error) {
-    throw current.error;
-  }
-
-  if (!current.data) {
-    throw new Error("Purchase order was not found.");
-  }
-
-  if (
-    current.data.status === "approved" &&
-    current.data.approved_by_operator_id &&
-    current.data.approved_at
-  ) {
-    return {
-      purchaseOrderId: current.data.id,
-      status: "approved",
-      approvedByOperatorId: current.data.approved_by_operator_id,
-      approvedAt: current.data.approved_at,
-      transitioned: false,
-    };
-  }
-
-  throw new Error(
-    `Purchase order cannot be approved from status '${current.data.status}'.`,
+  const canonicalQualification = await getCurrentApprovalQualification(
+    input.purchaseOrderId,
   );
+  const { data, error } = await supabaseAdmin.rpc(
+    "approve_vault_purchase_order",
+    {
+      target_purchase_order_id: input.purchaseOrderId,
+      target_operator_id: input.operatorId,
+      canonical_qualification: canonicalQualification,
+    },
+  );
+
+  if (error) throw new Error(error.message);
+  const result = data?.[0];
+  if (!result) {
+    throw new Error("Purchase-order approval did not return canonical evidence.");
+  }
+
+  return {
+    purchaseOrderId: result.purchase_order_id,
+    status: "approved",
+    approvedByOperatorId: result.approved_by_operator_id,
+    approvedAt: result.approved_at,
+    transitioned: result.transitioned,
+  };
 }
 
 export async function markPurchaseOrderOrdered(input: {
