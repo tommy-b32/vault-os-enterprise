@@ -5016,6 +5016,14 @@ grid-template-columns:1fr;
   font-weight: 750;
 }
 .vault-login-form button:disabled { cursor: wait; opacity: 0.55; }
+.vault-login-form .vault-form-success { color: #61d08a; }
+
+.vault-account-page {
+  display: grid;
+  min-height: calc(100vh - 72px);
+  padding: 48px 24px;
+  place-items: start center;
+}
 
 .cash-ledger-add,
 .cash-ledger-save,

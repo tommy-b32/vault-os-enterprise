@@ -144,6 +144,12 @@ export function CommandCentreCockpit({ data }: DataProps) {
         <KpiCard eyebrow="Website Conversion" icon="▽" value={percentValue(data.website.conversionRate)}>
           <span>Sessions {numberValue(data.website.sessions)}</span><span>Funnel data unavailable</span>
         </KpiCard>
+        <KpiCard eyebrow="Add to Cart Today" icon="+" value={numberValue(data.website.addToCartToday)}>
+          <span>Tracked storefront sessions</span><span>Event data unavailable</span>
+        </KpiCard>
+        <KpiCard eyebrow="Abandoned Checkouts" icon="×" value={numberValue(data.website.abandonedCheckouts)}>
+          <span>Distinct checkout sessions</span><span>Checkout data unavailable</span>
+        </KpiCard>
         <KpiCard eyebrow="Website Traffic" icon="⌁" value={numberValue(data.website.estimatedTotalVisitors)}>
           <span className="cc-traffic-label">Estimated total visitors</span>
           <span className="cc-traffic-breakdown">

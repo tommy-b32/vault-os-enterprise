@@ -5,6 +5,7 @@ import { ExecutiveIntelligenceEngine } from "@/lib/brain/ExecutiveIntelligenceEn
 import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecisionTimeline";
 import { getVaultBusinessState } from "@/lib/business/VaultBusinessState";
 import type { FinancePosition } from "@/lib/business/BusinessFinanceRepository";
+import { StorefrontFunnelRepository } from "@/lib/business/StorefrontFunnelRepository";
 import {
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
@@ -33,7 +34,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult] = await Promise.all([
+  const [timeline, walletResult, funnelResult] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -46,6 +47,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       wallet_last_updated,
       purchasing_power_state
     `).single(),
+    StorefrontFunnelRepository.getToday().catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -238,9 +240,14 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       ...websiteTraffic,
       sessions: unavailable(),
       conversionRate: unavailable(),
+      addToCartToday: funnelResult?.addToCartSessions !== null && funnelResult?.addToCartSessions !== undefined
+        ? available(funnelResult.addToCartSessions, funnelResult.latestActivityAt)
+        : unavailable(),
       addToCartRate: unavailable(),
       checkoutRate: unavailable(),
-      abandonedCheckouts: unavailable(),
+      abandonedCheckouts: funnelResult?.abandonedCheckouts !== null && funnelResult?.abandonedCheckouts !== undefined
+        ? available(funnelResult.abandonedCheckouts, funnelResult.latestActivityAt)
+        : unavailable(),
     },
     meta: {
       connection: "not_connected",

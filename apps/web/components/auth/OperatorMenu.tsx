@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -39,6 +40,9 @@ export function OperatorMenu({ fallbackName = "Operator" }: { fallbackName?: str
           {profile?.role ? <span className="vault-app-user-role">{profile.role}</span> : null}
         </span>
       </div>
+      <Link className="vault-app-sign-out" href="/change-password">
+        Change password
+      </Link>
       <button className="vault-app-sign-out" disabled={signingOut} onClick={signOut} type="button">
         {signingOut ? "Signing out…" : "Sign out"}
       </button>

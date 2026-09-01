@@ -285,6 +285,10 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(component, /Live tracked/);
   assert.doesNotMatch(component, /UK share|ukTrafficPercentage/);
   assert.match(loader, /conversionRate: unavailable\(\)/);
+  assert.match(loader, /addToCartToday: funnelResult/);
+  assert.match(loader, /abandonedCheckouts: funnelResult/);
+  assert.match(component, /eyebrow="Add to Cart Today"[\s\S]*data\.website\.addToCartToday/);
+  assert.match(component, /eyebrow="Abandoned Checkouts"[\s\S]*data\.website\.abandonedCheckouts/);
   assert.match(loader, /estimatedPrivacy/);
   assert.doesNotMatch(loader, /estimatedTotal\s*=|tracked\s*\+\s*estimatedPrivacy/);
   assert.doesNotMatch(loader, /estimated total visitors today[\s\S]{0,120}directly tracked/);

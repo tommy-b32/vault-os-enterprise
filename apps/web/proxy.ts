@@ -48,6 +48,10 @@ export async function proxy(request: NextRequest) {
     isAuthorized = hasVaultAccess(operator);
   }
 
+  if (request.nextUrl.pathname === "/auth/recovery") {
+    return response;
+  }
+
   if (request.nextUrl.pathname === "/login") {
     if (isAuthorized) {
       return NextResponse.redirect(

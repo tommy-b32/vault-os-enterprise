@@ -15,6 +15,8 @@ type CollectorPayload = {
   session_id?: string;
   privacy_visit_id?: string;
   shopify_event_id?: string;
+  occurred_at?: string;
+  shopify_checkout_token?: string | null;
 
   page_path?: string;
   page_type?: string;
@@ -68,6 +70,13 @@ function safeInteger(value: unknown): number {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const TRACKED_EVENT_NAMES = new Set([
+  "PAGE_VIEW",
+  "PRODUCT_ADDED_TO_CART",
+  "CHECKOUT_STARTED",
+  "CHECKOUT_COMPLETED",
+]);
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", {
@@ -111,6 +120,13 @@ Deno.serve(async (request: Request) => {
     if (!shopifyEventId || shopifyEventId.length > 150) {
       return jsonResponse(
         { success: false, error: "A valid shopify_event_id is required" },
+        400,
+      );
+    }
+
+    if (!TRACKED_EVENT_NAMES.has(eventName)) {
+      return jsonResponse(
+        { success: false, error: "Unsupported event_name" },
         400,
       );
     }
@@ -206,6 +222,10 @@ Deno.serve(async (request: Request) => {
           },
         });
 
+      if (error?.code === "23505") {
+        return jsonResponse({ success: true, mode: "duplicate_ignored" });
+      }
+
       if (error) {
         throw error;
       }
@@ -230,11 +250,34 @@ Deno.serve(async (request: Request) => {
       );
     }
 
+    const occurredAt = String(
+      payload.occurred_at || payload.metadata?.occurred_at || "",
+    ).trim();
+    const occurredAtTimestamp = Date.parse(occurredAt);
+
+    if (!occurredAt || !Number.isFinite(occurredAtTimestamp)) {
+      return jsonResponse(
+        { success: false, error: "A valid occurred_at timestamp is required" },
+        400,
+      );
+    }
+
+    const checkoutToken = String(payload.shopify_checkout_token || "").trim();
+
+    if (checkoutToken.length > 255) {
+      return jsonResponse(
+        { success: false, error: "shopify_checkout_token is too long" },
+        400,
+      );
+    }
+
     const { error } = await supabase
       .from("vault_events")
       .insert({
         session_id: sessionId,
         shopify_event_id: shopifyEventId,
+        occurred_at: new Date(occurredAtTimestamp).toISOString(),
+        shopify_checkout_token: checkoutToken || null,
         event_name: eventName,
         event_source:
           payload.event_source ||
@@ -306,6 +349,10 @@ Deno.serve(async (request: Request) => {
         metadata:
           payload.metadata || {},
       });
+
+    if (error?.code === "23505") {
+      return jsonResponse({ success: true, mode: "duplicate_ignored" });
+    }
 
     if (error) {
       throw error;

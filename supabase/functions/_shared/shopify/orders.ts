@@ -33,6 +33,7 @@ type ShopifyOrderLine = {
 
 export type ShopifyOrderNode = {
   id: string;
+  checkoutToken: string | null;
   number: number;
   name: string;
   createdAt: string;
@@ -83,6 +84,7 @@ type SingleOrderResponse = {
 
 const ORDER_FIELDS = `
   id
+  checkoutToken
   number
   name
   createdAt
@@ -293,6 +295,7 @@ export async function upsertShopifyOrder(
       {
         source: "shopify",
         shopify_order_id: order.id,
+        shopify_checkout_token: order.checkoutToken,
         order_number: String(order.number),
         order_name: order.name,
         shopify_created_at: order.createdAt,

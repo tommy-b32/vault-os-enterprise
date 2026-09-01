@@ -74,6 +74,7 @@ export type CommandCentreCockpitData = {
     sessions: CockpitValue<number>;
     liveTrackedVisitors: CockpitValue<number>;
     conversionRate: CockpitValue<number>;
+    addToCartToday: CockpitValue<number>;
     addToCartRate: CockpitValue<number>;
     checkoutRate: CockpitValue<number>;
     abandonedCheckouts: CockpitValue<number>;
