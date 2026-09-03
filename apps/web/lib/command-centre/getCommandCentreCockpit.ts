@@ -71,6 +71,20 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     updatedAt: websiteAt,
     stale: websiteStale,
   });
+  const revenueTrend = trading?.sevenDaySummary.days.map((day) => ({
+    label: day.date,
+    value: day.netRevenue,
+  })) ?? [];
+  const orderTrend = trading?.sevenDaySummary.days.map((day) => ({
+    label: day.date,
+    value: day.orderCount,
+  })) ?? [];
+  const visitorTrend = business.websiteAnalytics.data?.sevenDayVisitors
+    .filter((day) => day.visitors.estimatedTotal !== null)
+    .map((day) => ({
+      label: day.date,
+      value: day.visitors.estimatedTotal!,
+    })) ?? [];
   const canonicalTimeline = reconcileTimelineInventoryFreshness({
     timeline,
     syncStatus: inventory?.sync.syncStatus ?? null,
@@ -235,19 +249,30 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       orderComparison: trading?.comparisonOrderCountPercentage !== null && trading?.comparisonOrderCountPercentage !== undefined
         ? available(trading.comparisonOrderCountPercentage, tradingAt, tradingStale)
         : unavailable(),
+      revenueTrend,
+      orderTrend,
     },
     website: {
       ...websiteTraffic,
-      sessions: unavailable(),
-      conversionRate: unavailable(),
+      sessions: funnelResult?.trackedSessions !== null && funnelResult?.trackedSessions !== undefined
+        ? available(funnelResult.trackedSessions, funnelResult.latestActivityAt)
+        : unavailable(),
+      conversionRate: funnelResult?.conversionRate !== null && funnelResult?.conversionRate !== undefined
+        ? available(funnelResult.conversionRate, funnelResult.latestActivityAt)
+        : unavailable(),
       addToCartToday: funnelResult?.addToCartSessions !== null && funnelResult?.addToCartSessions !== undefined
         ? available(funnelResult.addToCartSessions, funnelResult.latestActivityAt)
         : unavailable(),
-      addToCartRate: unavailable(),
-      checkoutRate: unavailable(),
+      addToCartRate: funnelResult?.addToCartRate !== null && funnelResult?.addToCartRate !== undefined
+        ? available(funnelResult.addToCartRate, funnelResult.latestActivityAt)
+        : unavailable(),
+      checkoutRate: funnelResult?.checkoutRate !== null && funnelResult?.checkoutRate !== undefined
+        ? available(funnelResult.checkoutRate, funnelResult.latestActivityAt)
+        : unavailable(),
       abandonedCheckouts: funnelResult?.abandonedCheckouts !== null && funnelResult?.abandonedCheckouts !== undefined
         ? available(funnelResult.abandonedCheckouts, funnelResult.latestActivityAt)
         : unavailable(),
+      visitorTrend,
     },
     meta: {
       connection: "not_connected",

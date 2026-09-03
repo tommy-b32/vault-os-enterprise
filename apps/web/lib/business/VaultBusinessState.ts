@@ -261,6 +261,12 @@ function mapTradingData(
   today: ShopifyTodaySummary,
   sevenDay: ShopifySevenDaySummary,
 ): VaultTradingData {
+  const previousDay = sevenDay.days.at(-2) ?? null;
+  const percentageChange = (current: number, previous: number | undefined): number | null => {
+    if (previous === undefined || previous === 0) return null;
+    return ((current - previous) / previous) * 100;
+  };
+
   return {
     periodStartedAt: today.range.from,
     periodEndedAt: today.range.to,
@@ -272,8 +278,14 @@ function mapTradingData(
     currency: today.currency ?? sevenDay.currency,
     itemsSold: today.itemsSold,
     averageOrderValue: today.averageOrderValue,
-    comparisonOrderCountPercentage: null,
-    comparisonRevenuePercentage: null,
+    comparisonOrderCountPercentage: percentageChange(
+      today.orderCount,
+      previousDay?.orderCount,
+    ),
+    comparisonRevenuePercentage: percentageChange(
+      today.netRevenue,
+      previousDay?.netRevenue,
+    ),
     comparisonProfitPercentage: null,
     sevenDaySummary: {
       periodStartedAt: sevenDay.range.from,
