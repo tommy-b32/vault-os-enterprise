@@ -89,8 +89,8 @@ test("Command Centre typography has an 11px minimum and preserves readable hiera
   assert.ok(sizes.length > 0);
   assert.ok(sizes.every((size) => size >= 11));
   assert.match(component, /font-size:34px/);
-  assert.match(component, /cc-briefing-headline[^}]*font-size:18px/);
-  assert.match(component, /cc-briefing-summary[^}]*font-size:13px/);
+  assert.match(component, /cc-briefing-headline[^}]*font-size:20px/);
+  assert.match(component, /cc-briefing-summary[^}]*font-size:14px/);
 });
 
 test("readability restyle preserves all executive and domain content", async () => {
@@ -284,17 +284,17 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(component, /Estimated untracked/);
   assert.match(component, /Live tracked/);
   assert.doesNotMatch(component, /UK share|ukTrafficPercentage/);
-  assert.match(loader, /conversionRate: funnelResult/);
+  assert.match(loader, /conversionRate: unavailable\(\)/);
   assert.match(loader, /addToCartToday: funnelResult/);
   assert.match(loader, /abandonedCheckouts: funnelResult/);
-  assert.match(component, /eyebrow="Conversion"[\s\S]*data\.website\.addToCartToday/);
-  assert.match(component, /label="Abandoned checkouts" value=\{data\.website\.abandonedCheckouts\}/);
+  assert.match(component, /eyebrow="Add to Cart Today"[\s\S]*data\.website\.addToCartToday/);
+  assert.match(component, /eyebrow="Abandoned Checkouts"[\s\S]*data\.website\.abandonedCheckouts/);
   assert.match(loader, /estimatedPrivacy/);
   assert.doesNotMatch(loader, /estimatedTotal\s*=|tracked\s*\+\s*estimatedPrivacy/);
   assert.doesNotMatch(loader, /estimated total visitors today[\s\S]{0,120}directly tracked/);
   assert.doesNotMatch(component, /CommercialDecisionTimeline/);
   assert.match(component, /comparison && \(comparison\.state === "available" \|\| comparison\.state === "stale"\)/);
-  assert.match(component, /Evidence-led · state-based/);
+  assert.match(component, /State-based · no invented score/);
   assert.match(loader, /Partial visibility/);
   assert.match(loader, /ExecutiveIntelligenceEngine\.build/);
   assert.doesNotMatch(component, /cc-focus-body|executiveSummary/);

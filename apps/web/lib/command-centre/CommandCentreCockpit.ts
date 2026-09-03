@@ -9,11 +9,6 @@ export type CockpitValue<T> =
 
 export type CockpitMoney = { amount: number; currency: string };
 
-export type CockpitTrendPoint = {
-  label: string;
-  value: number;
-};
-
 export type CockpitInsight = {
   id: string;
   tone: "positive" | "warning" | "neutral";
@@ -71,8 +66,6 @@ export type CommandCentreCockpitData = {
     averageOrderValue: CockpitValue<CockpitMoney>;
     revenueComparison: CockpitValue<number>;
     orderComparison: CockpitValue<number>;
-    revenueTrend: CockpitTrendPoint[];
-    orderTrend: CockpitTrendPoint[];
   };
   website: {
     trackedVisitors: CockpitValue<number>;
@@ -85,7 +78,6 @@ export type CommandCentreCockpitData = {
     addToCartRate: CockpitValue<number>;
     checkoutRate: CockpitValue<number>;
     abandonedCheckouts: CockpitValue<number>;
-    visitorTrend: CockpitTrendPoint[];
   };
   meta: {
     connection: "not_connected";

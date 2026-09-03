@@ -78,23 +78,3 @@ test("canonical Shopify orders retain checkout tokens and Command Centre uses th
   assert.match(loader, /funnelResult\.addToCartSessions/);
   assert.match(loader, /funnelResult\.abandonedCheckouts/);
 });
-
-test("Command Centre funnel rates use live consented sessions without inferred behaviour", async () => {
-  const [migration, repository, loader] = await Promise.all([
-    source("supabase/migrations/20260903000000_command_centre_live_funnel_rates.sql"),
-    source("apps/web/lib/business/StorefrontFunnelRepository.ts"),
-    source("apps/web/lib/command-centre/getCommandCentreCockpit.ts"),
-  ]);
-
-  assert.match(migration, /count\(distinct session_id\).*event_name = 'PAGE_VIEW'/s);
-  assert.match(migration, /time zone 'Europe\/London'/);
-  assert.match(migration, /add_to_cart_rate/);
-  assert.match(migration, /checkout_rate/);
-  assert.match(migration, /conversion_rate/);
-  assert.match(migration, /tracked sessions only/i);
-  assert.doesNotMatch(migration, /estimated_privacy_visitors/);
-  assert.match(repository, /tracked_sessions/);
-  assert.match(repository, /conversion_rate/);
-  assert.match(loader, /funnelResult\.trackedSessions/);
-  assert.match(loader, /funnelResult\.conversionRate/);
-});
