@@ -71,6 +71,20 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     updatedAt: websiteAt,
     stale: websiteStale,
   });
+  const revenueTrend = trading?.sevenDaySummary.days.map((day) => ({
+    label: day.date,
+    value: day.netRevenue,
+  })) ?? [];
+  const orderTrend = trading?.sevenDaySummary.days.map((day) => ({
+    label: day.date,
+    value: day.orderCount,
+  })) ?? [];
+  const visitorTrend = business.websiteAnalytics.data?.sevenDayVisitors
+    .filter((day) => day.visitors.estimatedTotal !== null)
+    .map((day) => ({
+      label: day.date,
+      value: day.visitors.estimatedTotal!,
+    })) ?? [];
   const canonicalTimeline = reconcileTimelineInventoryFreshness({
     timeline,
     syncStatus: inventory?.sync.syncStatus ?? null,
@@ -235,6 +249,8 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       orderComparison: trading?.comparisonOrderCountPercentage !== null && trading?.comparisonOrderCountPercentage !== undefined
         ? available(trading.comparisonOrderCountPercentage, tradingAt, tradingStale)
         : unavailable(),
+      revenueTrend,
+      orderTrend,
     },
     website: {
       ...websiteTraffic,
@@ -248,6 +264,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       abandonedCheckouts: funnelResult?.abandonedCheckouts !== null && funnelResult?.abandonedCheckouts !== undefined
         ? available(funnelResult.abandonedCheckouts, funnelResult.latestActivityAt)
         : unavailable(),
+      visitorTrend,
     },
     meta: {
       connection: "not_connected",

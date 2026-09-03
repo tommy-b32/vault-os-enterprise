@@ -111,6 +111,35 @@ test("readability restyle preserves all executive and domain content", async () 
   assert.match(component, /Unavailable/);
 });
 
+test("premium redesign preserves every original KPI and snapshot field", async () => {
+  const component = await readFile(
+    new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url),
+    "utf8",
+  );
+
+  for (const title of [
+    "Revenue Today", "Orders Today", "Website Conversion", "Add to Cart Today",
+    "Abandoned Checkouts", "Website Traffic", "Meta Ads", "Finance Position",
+  ]) {
+    assert.match(component, new RegExp(`eyebrow="${title}"`));
+  }
+
+  for (const label of [
+    "Tracked visitors", "Estimated untracked visitors", "Estimated total visitors", "Sessions",
+    "Add-to-cart rate", "Checkout rate", "Conversion rate", "Abandoned checkouts",
+    "Low-stock styles", "Out-of-stock styles", "Total stock value", "Inventory", "Reorder review",
+    "Awaiting fulfilment", "Dispatched today", "Refunds today", "Supplier issues", "Late deliveries",
+  ]) {
+    assert.match(component, new RegExp(`label="${label}"`));
+  }
+
+  assert.match(component, /Meta marketing metrics are not integrated/);
+  assert.match(component, /<Sparkline points=\{trend\}/);
+  assert.match(component, /Live trend building/);
+  assert.match(component, /role="img"/);
+  assert.match(component, /Seven-day live trend from/);
+});
+
 const timelineItem = (overrides) => ({
   id: "item",
   source: "inventory",
