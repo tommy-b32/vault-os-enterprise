@@ -123,7 +123,7 @@ test("dashboard switches only after cached Shopify aggregates are available", as
   ]);
   assert.match(component, /shopifyAnalyticsAvailable \?/);
   assert.match(component, /Pending Shopify reporting access/);
-  assert.match(component, /Shopify Analytics · Updated/);
+  assert.match(component, /Today · Partial \/ in progress/);
   assert.match(component, /Vault live tracking/);
   assert.match(loader, /shopifyToday\.conversionRate \* 100/);
   assert.doesNotMatch(loader, /completedCheckout\s*\/\s*shopifyToday\.sessions/);

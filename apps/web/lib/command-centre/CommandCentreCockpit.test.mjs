@@ -158,6 +158,44 @@ test("premium redesign preserves every original KPI and snapshot field", async (
   }
 });
 
+test("Website Traffic presents the complete partial Shopify funnel without replacing Vault tracking", async () => {
+  const [component, loader] = await Promise.all([
+    readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./getCommandCentreCockpit.ts", import.meta.url), "utf8"),
+  ]);
+
+  for (const metric of [
+    "shopifyAnalytics.sessions",
+    "shopifyAnalytics.visitors",
+    "shopifyAnalytics.cartAdditions",
+    "shopifyAnalytics.reachedCheckout",
+    "shopifyAnalytics.completedCheckout",
+    "shopifyAnalytics.conversionRate",
+  ]) {
+    assert.match(component, new RegExp(metric.replace(".", "\\.")));
+  }
+  for (const label of [
+    "Shopify sessions", "Online store visitors", "Cart additions",
+    "Reached checkout", "Completed checkout", "Shopify conversion rate",
+  ]) {
+    assert.match(component, new RegExp(label));
+  }
+  assert.match(component, /Today · Partial \/ in progress/);
+  assert.match(component, /availability === "live" \? "Live" : "Stale"/);
+  assert.match(component, /cc-shopify-status strong\.is-stale/);
+  assert.match(component, /reportingTimezone/);
+  assert.match(component, /shopifyAnalytics\.sessionTrend/);
+  assert.match(component, /Pending Shopify reporting access/);
+  assert.match(component, /Shopify Analytics unavailable/);
+  assert.match(component, /shopifyAnalyticsAvailable \?/);
+  assert.match(component, /Vault live tracking/);
+  assert.match(component, /Consented sessions/);
+  assert.match(component, /Abandoned-checkout evidence/);
+  assert.match(loader, /value === null \|\| value === undefined/);
+  assert.doesNotMatch(loader, /!value/);
+  assert.doesNotMatch(component, /shopifyAnalytics\.(?:sessions|visitors|cartAdditions|reachedCheckout|completedCheckout|conversionRate)\.value\s*\|\|/);
+});
+
 const timelineItem = (overrides) => ({
   id: "item",
   source: "inventory",
@@ -330,7 +368,7 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(component, /Estimated total visitors/);
   assert.match(component, /Estimated untracked/);
   assert.doesNotMatch(component, /eyebrow="Website Conversion"/);
-  assert.match(component, /eyebrow="Website Traffic"[^>]*shopifyAnalyticsAvailable[^>]*"Shopify sessions"[^>]*"Shopify visitors"[^>]*"Shopify conversion"/);
+  assert.match(component, /eyebrow="Website Traffic"[^>]*shopifyAnalyticsAvailable[^>]*"Shopify sessions"[^>]*"Online store visitors"[^>]*"Shopify conversion rate"/);
   assert.match(component, /Pending Shopify reporting access/);
   assert.match(component, /Live tracked/);
   assert.doesNotMatch(component, /UK share|ukTrafficPercentage/);
