@@ -19,6 +19,8 @@ Webhook HMAC verification remains separate from API authentication. Configure `S
 
 The Shopify custom app must grant the Admin API scopes used by the enabled synchronisers, including `read_products`, `read_inventory`, `write_inventory`, `read_locations`, and `read_orders`. `write_inventory` is used only by explicit operator-triggered received-stock posting. Shopify may require protected customer data approval for order fields such as customer name and email.
 
+Command Centre Shopify Analytics additionally requires `read_reports` and Level 2 protected-customer-data access. This app is configured through the Shopify Dev Dashboard rather than a repository `shopify.app.toml`: add `read_reports` to a new app version, complete the protected-customer-data request, release the version, and have the merchant approve the new scope. The analytics synchroniser stores only daily aggregates and refreshes every 15 minutes; it never stores customer or individual-session data.
+
 Shopify Payments synchronization additionally requires the narrow scopes `read_shopify_payments_accounts` for account balances and `read_shopify_payments_payouts` for payout summaries. A Dev Dashboard app version containing both scopes must be released and approved for the installed store before synchronization can succeed.
 
 The webhook endpoint must be registered for the required topics (`orders/create`, `orders/updated`, `orders/cancelled`, and `refunds/create`). The order webhook has Supabase JWT verification disabled because Shopify signs requests with HMAC; the function verifies that signature before processing the payload. The reconciliation endpoint retains Supabase JWT verification and also requires `VAULT_ORDER_SYNC_SECRET`.

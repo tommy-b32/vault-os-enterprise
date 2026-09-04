@@ -88,6 +88,17 @@ export type CommandCentreCockpitData = {
     checkoutRate: CockpitValue<number>;
     abandonedCheckouts: CockpitValue<number>;
     visitorTrend: CockpitTrendPoint[];
+    shopifyAnalytics: {
+      availability: "live" | "stale" | "unavailable" | "pending_permission";
+      reportingTimezone: string | null;
+      sessions: CockpitValue<number>;
+      visitors: CockpitValue<number>;
+      cartAdditions: CockpitValue<number>;
+      reachedCheckout: CockpitValue<number>;
+      completedCheckout: CockpitValue<number>;
+      conversionRate: CockpitValue<number>;
+      sessionTrend: CockpitTrendPoint[];
+    };
   };
   meta: {
     connection: "not_connected";

@@ -125,13 +125,15 @@ test("premium redesign preserves every original KPI and snapshot field", async (
   }
 
   for (const label of [
-    "Tracked visitors", "Estimated untracked visitors", "Estimated total visitors", "Sessions",
-    "Checkout-started sessions", "Completed-checkout sessions",
+    "Tracked visitors", "Estimated untracked visitors", "Estimated total visitors",
     "Add-to-cart rate", "Checkout rate", "Conversion rate", "Abandoned checkouts",
     "Low-stock styles", "Out-of-stock styles", "Total stock value", "Inventory", "Reorder review",
     "Awaiting fulfilment", "Dispatched today", "Refunds today", "Supplier issues", "Late deliveries",
   ]) {
     assert.match(component, new RegExp(`label="${label}"`));
+  }
+  for (const label of ["Shopify sessions", "Shopify checkout sessions", "Shopify completed-checkout sessions"]) {
+    assert.match(component, new RegExp(label));
   }
 
   assert.match(component, /Meta marketing metrics are not integrated/);
@@ -328,7 +330,8 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(component, /Estimated total visitors/);
   assert.match(component, /Estimated untracked/);
   assert.doesNotMatch(component, /eyebrow="Website Conversion"/);
-  assert.match(component, /eyebrow="Website Traffic"[^>]*valueLabel="Estimated visitors"[^>]*secondaryValue=\{numberValue\(data\.website\.sessions\)\} secondaryLabel="Tracked sessions" tertiaryValue=\{percentValue\(data\.website\.conversionRate\)\} tertiaryLabel="Tracked conversion"/);
+  assert.match(component, /eyebrow="Website Traffic"[^>]*shopifyAnalyticsAvailable[^>]*"Shopify sessions"[^>]*"Shopify visitors"[^>]*"Shopify conversion"/);
+  assert.match(component, /Pending Shopify reporting access/);
   assert.match(component, /Live tracked/);
   assert.doesNotMatch(component, /UK share|ukTrafficPercentage/);
   assert.match(loader, /conversionRate: funnelResult/);

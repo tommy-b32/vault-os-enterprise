@@ -19,6 +19,9 @@ verify_jwt = true
 [functions.shopify-inventory-sync]
 verify_jwt = true
 
+[functions.shopify-analytics-sync]
+verify_jwt = true
+
 [functions.shopify-inventory-scope-diagnostic]
 verify_jwt = true
 

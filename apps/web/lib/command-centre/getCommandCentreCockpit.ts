@@ -7,6 +7,7 @@ import { getVaultBusinessState } from "@/lib/business/VaultBusinessState";
 import type { FinancePosition } from "@/lib/business/BusinessFinanceRepository";
 import { StorefrontFunnelRepository } from "@/lib/business/StorefrontFunnelRepository";
 import { ShopifyTradingRepository } from "@/lib/business/ShopifyTradingRepository";
+import { ShopifyAnalyticsRepository } from "@/lib/business/ShopifyAnalyticsRepository";
 import {
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
@@ -35,7 +36,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -50,6 +51,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     `).single(),
     StorefrontFunnelRepository.getToday().catch(() => null),
     ShopifyTradingRepository.getOperationsSnapshot().catch(() => null),
+    ShopifyAnalyticsRepository.getSnapshot().catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -87,6 +89,13 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       label: day.date,
       value: day.visitors.estimatedTotal!,
     })) ?? [];
+  const shopifyToday = shopifyAnalytics?.today ?? null;
+  const shopifyValue = (value: number | null | undefined): CockpitValue<number> =>
+    value === null || value === undefined || !shopifyAnalytics
+      ? shopifyAnalytics?.availability === "pending_permission"
+        ? { state: "pending", value: null, updatedAt: null }
+        : unavailable()
+      : available(value, shopifyAnalytics.fetchedAt, shopifyAnalytics.availability === "stale");
   const canonicalTimeline = reconcileTimelineInventoryFreshness({
     timeline,
     syncStatus: inventory?.sync.syncStatus ?? null,
@@ -281,6 +290,17 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
         ? available(funnelResult.abandonedCheckouts, funnelResult.latestActivityAt, funnelResult.stale)
         : unavailable(),
       visitorTrend,
+      shopifyAnalytics: {
+        availability: shopifyAnalytics?.availability ?? "unavailable",
+        reportingTimezone: shopifyAnalytics?.reportingTimezone ?? null,
+        sessions: shopifyValue(shopifyToday?.sessions),
+        visitors: shopifyValue(shopifyToday?.visitors),
+        cartAdditions: shopifyValue(shopifyToday?.cartAdditions),
+        reachedCheckout: shopifyValue(shopifyToday?.reachedCheckout),
+        completedCheckout: shopifyValue(shopifyToday?.completedCheckout),
+        conversionRate: shopifyValue(shopifyToday ? shopifyToday.conversionRate * 100 : null),
+        sessionTrend: shopifyAnalytics?.sessionTrend ?? [],
+      },
     },
     meta: {
       connection: "not_connected",

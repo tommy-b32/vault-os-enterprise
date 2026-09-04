@@ -171,6 +171,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
   const moneyValue = (value: CockpitValue<CockpitMoney>) => display(value, formatMoney);
   const numberValue = (value: CockpitValue<number>) => display(value, (entry) => entry.toLocaleString("en-GB"));
   const percentValue = (value: CockpitValue<number>) => display(value, (entry) => `${entry.toLocaleString("en-GB", { maximumFractionDigits: 1 })}%`);
+  const shopifyAnalyticsAvailable = data.website.shopifyAnalytics.sessions.state === "available" || data.website.shopifyAnalytics.sessions.state === "stale";
 
   return (
     <div className="cc-page">
@@ -196,10 +197,8 @@ export function CommandCentreCockpit({ data }: DataProps) {
         <KpiCard eyebrow="Abandoned Checkouts" icon="orders" accent="pink" value={numberValue(data.website.abandonedCheckouts)}>
           <span>Distinct checkout sessions</span><span>{sourceStateLabel(data.website.abandonedCheckouts)}</span>
         </KpiCard>
-        <KpiCard eyebrow="Website Traffic" icon="analytics" accent="violet" value={numberValue(data.website.estimatedTotalVisitors)} valueLabel="Estimated visitors" trend={data.website.visitorTrend} secondaryValue={numberValue(data.website.sessions)} secondaryLabel="Tracked sessions" tertiaryValue={percentValue(data.website.conversionRate)} tertiaryLabel="Tracked conversion">
-          <span className="cc-traffic-breakdown">
-            Tracked {numberValue(data.website.trackedVisitors)} · Estimated untracked {numberValue(data.website.estimatedUntrackedVisitors)} · Live tracked {numberValue(data.website.liveTrackedVisitors)}
-          </span>
+        <KpiCard eyebrow="Website Traffic" icon="analytics" accent="violet" value={numberValue(shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.sessions : data.website.estimatedTotalVisitors)} valueLabel={shopifyAnalyticsAvailable ? "Shopify sessions" : "Estimated visitors"} trend={shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.sessionTrend : data.website.visitorTrend} secondaryValue={numberValue(shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.visitors : data.website.sessions)} secondaryLabel={shopifyAnalyticsAvailable ? "Shopify visitors" : "Tracked sessions"} tertiaryValue={percentValue(shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.conversionRate : data.website.conversionRate)} tertiaryLabel={shopifyAnalyticsAvailable ? "Shopify conversion" : "Tracked conversion"}>
+          {shopifyAnalyticsAvailable ? <><span>Shopify Analytics · Updated {data.website.shopifyAnalytics.sessions.updatedAt ? relativeTime(data.website.shopifyAnalytics.sessions.updatedAt, data.generatedAt) : "Unavailable"}</span><span>Vault live tracking: {numberValue(data.website.liveTrackedVisitors)}</span></> : <><span className="cc-traffic-breakdown">Tracked {numberValue(data.website.trackedVisitors)} · Estimated untracked {numberValue(data.website.estimatedUntrackedVisitors)} · Live tracked {numberValue(data.website.liveTrackedVisitors)}</span><span>{data.website.shopifyAnalytics.availability === "pending_permission" ? "Pending Shopify reporting access" : "Shopify Analytics unavailable"}</span></>}
         </KpiCard>
         <KpiCard eyebrow="Meta Ads" icon="target" accent="pink" value="Not connected">
           <span>Meta marketing data is not integrated.</span>
@@ -254,9 +253,9 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <MetricRow label="Tracked visitors" value={data.website.trackedVisitors} />
           <MetricRow label="Estimated untracked visitors" value={data.website.estimatedUntrackedVisitors} />
           <MetricRow label="Estimated total visitors" value={data.website.estimatedTotalVisitors} />
-          <MetricRow label="Sessions" value={data.website.sessions} />
-          <MetricRow label="Checkout-started sessions" value={data.website.checkoutStartedToday} />
-          <MetricRow label="Completed-checkout sessions" value={data.website.checkoutCompletedToday} />
+          <MetricRow label={shopifyAnalyticsAvailable ? "Shopify sessions" : "Vault tracked sessions"} value={shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.sessions : data.website.sessions} />
+          <MetricRow label={shopifyAnalyticsAvailable ? "Shopify checkout sessions" : "Vault checkout-started sessions"} value={shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.reachedCheckout : data.website.checkoutStartedToday} />
+          <MetricRow label={shopifyAnalyticsAvailable ? "Shopify completed-checkout sessions" : "Vault completed-checkout sessions"} value={shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.completedCheckout : data.website.checkoutCompletedToday} />
           <MetricRow label="Add-to-cart rate" value={data.website.addToCartRate} formatter={(v) => `${v}%`} />
           <MetricRow label="Checkout rate" value={data.website.checkoutRate} formatter={(v) => `${v}%`} />
           <MetricRow label="Conversion rate" value={data.website.conversionRate} formatter={(v) => `${v}%`} />
