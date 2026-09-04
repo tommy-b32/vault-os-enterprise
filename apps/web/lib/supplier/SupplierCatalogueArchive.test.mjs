@@ -75,7 +75,7 @@ test("resume uses the existing archive identity and bounded persisted source evi
   const sourceMethod = repository.slice(repository.indexOf("async getSourcePages"), repository.indexOf("async markFailed"));
   assert.match(sourceMethod, /uniquePageNumbers\.length > 3/);
   assert.match(sourceMethod, /\.in\("page_number", uniquePageNumbers\)/);
-  assert.match(sourceMethod, /select\("page_number, parsed_evidence"\)/);
+  assert.match(sourceMethod, /select\("page_number, source_objects"\)/);
 });
 
 test("resume restores durable previews lazily through the canonical analysis panel", async () => {
@@ -87,7 +87,7 @@ test("resume restores durable previews lazily through the canonical analysis pan
   ]);
   assert.match(workspace, /<CatalogueBatchAnalysisPanel/);
   assert.match(workspace, /sourceAvailablePageNumbers=/);
-  assert.match(repository, /\.not\("parsed_evidence->sourcePage", "is", null\)/);
+  assert.match(repository, /\.neq\("source_objects", \[\]\)/);
   assert.match(panel, /IntersectionObserver/);
   assert.match(panel, /loadSourcePages\(\[pageNumber\]\)/);
   assert.match(panel, /loadedSourcePages\[page\.pageNumber\]\?\.images\[0\]/);
@@ -166,7 +166,7 @@ test("resumed checkpoints preserve terminal pages and review decisions", async (
 test("archive queues are isolated and reload from the server", async () => {
   const repository = await readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts");
   assert.match(repository, /\.eq\("archive_id", archiveId\)\.eq\("review_status", "pending"\)/);
-  assert.match(repository, /review_payload as CatalogueReviewQueueItem/);
+  assert.match(repository, /restoreStoredImages\(row\.review_payload\)/);
   assert.match(repository, /\.eq\("archive_id", input\.archiveId\)\.eq\("review_item_id", input\.reviewItemId\)/);
 });
 
@@ -179,7 +179,9 @@ test("rendered source pages are persisted in bounded batches after metadata-only
   assert.doesNotMatch(createBody, /\bpages\s*:/);
   assert.match(workspace, /SOURCE_PAGE_BATCH_SIZE = 2/);
   assert.match(workspace, /batches\(extractionResult\.pages, SOURCE_PAGE_BATCH_SIZE\)/);
-  assert.match(repository, /sourcePage: page/);
+  assert.match(repository, /storeEmbeddedImages\(page, input\.archiveId\)/);
+  assert.doesNotMatch(repository, /sourcePage: page/);
+  assert.match(repository, /source_objects: storedPages\[index\]/);
   assert.match(repository, /onConflict: "archive_id,page_number", ignoreDuplicates: true/);
 });
 
@@ -279,7 +281,7 @@ test("summary state query excludes parsed evidence except one resumability probe
     repository.indexOf("async markFailed"),
   );
   assert.match(summary, /select\("analysis_state"/);
-  assert.match(summary, /select\("parsed_evidence"\).*\.limit\(1\)/s);
+  assert.match(summary, /select\("source_objects"\).*\.limit\(1\)/s);
   assert.doesNotMatch(summary, /select\("analysis_state, parsed_evidence"/);
 });
 
@@ -428,4 +430,35 @@ test("supplier and purchasing intelligence engines are untouched by archive code
     readWeb("lib/brain/SupplierBasketIntelligenceEngine.ts"),
   ]);
   for (const contents of files) assert.doesNotMatch(contents, /SupplierCatalogueArchiveRepository/);
+});
+
+test("catalogue replacement activates only a fully completed archive atomically", async () => {
+  const sql = await readFile(new URL("supabase/migrations/20260904000000_storage_safe_inventory_and_supplier_catalogue_lifecycle.sql", repoRoot), "utf8");
+  assert.match(sql, /status in \('uploading',[\s\S]*'superseded',[\s\S]*'failed'\)/);
+  assert.match(sql, /where is_active/);
+  assert.match(sql, /pg_advisory_xact_lock/);
+  assert.match(sql, /terminal_page_count = expected_page_count/);
+  assert.match(sql, /set status = 'superseded', is_active = false/);
+  assert.match(sql, /status = 'completed', is_active = true/);
+  assert.ok(sql.indexOf("set status = 'superseded'") < sql.indexOf("status = 'completed', is_active = true"));
+  assert.match(sql, /when status = 'failed' then 'failed'/);
+});
+
+test("catalogue persistence rejects embedded binaries and uses expiring object storage", async () => {
+  const [sql, repository, cleanup] = await Promise.all([
+    readFile(new URL("supabase/migrations/20260904000000_storage_safe_inventory_and_supplier_catalogue_lifecycle.sql", repoRoot), "utf8"),
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+    readFile(new URL("supabase/functions/supplier-catalogue-artifact-cleanup/index.ts", repoRoot), "utf8"),
+  ]);
+  assert.match(sql, /not \(parsed_evidence \? 'sourcePage'\)/);
+  assert.match(sql, /vault_supplier_catalogue_pages_no_embedded_binary/);
+  assert.match(sql, /vault_supplier_catalogue_review_no_embedded_binary/);
+  assert.match(repository, /supplier-catalogue-temporary/);
+  assert.match(repository, /createSignedUrl\(objectPath, 10 \* 60\)/);
+  assert.match(repository, /purgeTemporarySourceObjects/);
+  assert.doesNotMatch(repository, /parsed_evidence:\s*\{[^}]*sourcePage/s);
+  assert.match(cleanup, /status", \["completed", "superseded"\]/);
+  assert.match(cleanup, /7 \* 24 \* 60 \* 60 \* 1000/);
+  assert.match(cleanup, /request\.headers\.get\("authorization"\)/);
+  assert.match(sql, /vault-supplier-catalogue-artifact-retention/);
 });

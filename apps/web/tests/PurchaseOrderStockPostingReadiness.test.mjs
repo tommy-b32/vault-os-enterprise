@@ -63,7 +63,7 @@ test("Shopify posting is exposed only against exact receipt allocations", () => 
 
 test("only canonical inventory sync writes Vault inventory levels and snapshots", () => {
   assert.match(inventorySync, /from\(\s*"vault_inventory_levels"[\s\S]*\.upsert/);
-  assert.match(inventorySync, /from\("vault_inventory_level_snapshots"\)[\s\S]*\.upsert/);
+  assert.match(inventorySync, /rpc\([\s\S]*"record_inventory_level_history"/);
   assert.doesNotMatch(migration + actions + repository + component, /(?:insert into|update|upsert)[\s\S]{0,120}vault_inventory_levels/i);
   assert.doesNotMatch(migration + actions + repository + component, /vault_inventory_level_snapshots/);
 });

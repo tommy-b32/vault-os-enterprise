@@ -463,19 +463,24 @@ Deno.serve(async (request: Request) => {
     }
 
     /*
-     * Append the exact observations used above. The run/variant/location
-     * uniqueness contract makes an exact-run retry idempotent. A run is not
-     * marked current until every snapshot batch has succeeded.
+     * Persist only quantity transitions plus one Europe/London daily baseline.
+     * The database function serialises overlapping writers and remains
+     * idempotent for retries. Current inventory and sync freshness are still
+     * updated on every successful Shopify refresh above.
      */
+    let historyRowsInserted = 0;
     for (const snapshotBatch of chunk(snapshotRows, DATABASE_WRITE_SIZE)) {
-      const { error: snapshotError } = await supabase
-        .from("vault_inventory_level_snapshots")
-        .upsert(snapshotBatch, {
-          onConflict: "inventory_sync_run_id,variant_id,location_id",
-          ignoreDuplicates: true,
-        });
+      const { data: inserted, error: snapshotError } = await supabase.rpc(
+        "record_inventory_level_history",
+        {
+          target_sync_run_id: run.id,
+          target_observed_at: syncedAt,
+          observations: snapshotBatch,
+        },
+      );
 
       if (snapshotError) throw snapshotError;
+      historyRowsInserted += Number(inserted ?? 0);
     }
 
     /*
@@ -552,6 +557,8 @@ Deno.serve(async (request: Request) => {
         locationNames.size,
       inventory_levels_synced:
         inventoryRows.length,
+      inventory_history_rows_inserted:
+        historyRowsInserted,
       inventory_mappings_unavailable:
         orphanedVariantIds.length,
       sync_status: "current",

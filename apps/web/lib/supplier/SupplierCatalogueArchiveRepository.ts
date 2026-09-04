@@ -5,7 +5,71 @@ import type { CatalogueReviewQueueDetails, CatalogueReviewQueueItem } from "@/li
 import type { CatalogueAnalysisSession } from "@/lib/supplier/catalogue-analysis-types";
 import type { SupplierDocumentPage } from "@/lib/supplier/types";
 
-export type SupplierCatalogueArchiveStatus = "uploading" | "processing" | "ready_for_review" | "in_review" | "completed" | "failed";
+const TEMPORARY_SOURCE_BUCKET = "supplier-catalogue-temporary";
+const STORED_OBJECT_PREFIX = "vault-object://";
+
+function embeddedImage(value: string): { mimeType: string; bytes: Uint8Array } | null {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(value);
+  if (!match) return null;
+  return { mimeType: match[1], bytes: Uint8Array.from(atob(match[2]), (character) => character.charCodeAt(0)) };
+}
+
+async function storeEmbeddedImages(value: unknown, archiveId: string): Promise<unknown> {
+  if (typeof value === "string") {
+    const image = embeddedImage(value);
+    if (!image) return value;
+    const digestInput = new Uint8Array(image.bytes.byteLength);
+    digestInput.set(image.bytes);
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", digestInput)))
+      .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const extension = image.mimeType === "image/jpeg" ? "jpg" : image.mimeType.split("/")[1];
+    const objectPath = `${archiveId}/${digest}.${extension}`;
+    const { error } = await supabaseAdmin.storage.from(TEMPORARY_SOURCE_BUCKET)
+      .upload(objectPath, image.bytes, { contentType: image.mimeType, upsert: true });
+    if (error) throw new Error("Catalogue source image could not be stored safely.");
+    return `${STORED_OBJECT_PREFIX}${objectPath}`;
+  }
+  if (Array.isArray(value)) return Promise.all(value.map((entry) => storeEmbeddedImages(entry, archiveId)));
+  if (value && typeof value === "object") {
+    const entries = await Promise.all(Object.entries(value).map(async ([key, entry]) =>
+      [key, await storeEmbeddedImages(entry, archiveId)] as const));
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+async function restoreStoredImages(value: unknown): Promise<unknown> {
+  if (typeof value === "string" && value.startsWith(STORED_OBJECT_PREFIX)) {
+    const objectPath = value.slice(STORED_OBJECT_PREFIX.length);
+    const { data, error } = await supabaseAdmin.storage.from(TEMPORARY_SOURCE_BUCKET)
+      .createSignedUrl(objectPath, 10 * 60);
+    if (error || !data?.signedUrl) throw new Error("Catalogue source image is unavailable.");
+    return data.signedUrl;
+  }
+  if (Array.isArray(value)) return Promise.all(value.map(restoreStoredImages));
+  if (value && typeof value === "object") {
+    const entries = await Promise.all(Object.entries(value).map(async ([key, entry]) =>
+      [key, await restoreStoredImages(entry)] as const));
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+async function purgeTemporarySourceObjects(archiveId: string): Promise<void> {
+  const { data, error } = await supabaseAdmin.storage.from(TEMPORARY_SOURCE_BUCKET)
+    .list(archiveId, { limit: 1000 });
+  if (error) throw new Error("Completed catalogue source objects could not be listed for expiry.");
+  const paths = (data ?? []).filter((entry) => entry.id).map((entry) => `${archiveId}/${entry.name}`);
+  if (paths.length > 0) {
+    const { error: removeError } = await supabaseAdmin.storage.from(TEMPORARY_SOURCE_BUCKET).remove(paths);
+    if (removeError) throw new Error("Completed catalogue source objects could not be expired.");
+  }
+  const { error: clearError } = await supabaseAdmin.from("vault_supplier_catalogue_pages")
+    .update({ source_objects: [] }).eq("archive_id", archiveId);
+  if (clearError) throw new Error("Completed catalogue source references could not be cleared.");
+}
+
+export type SupplierCatalogueArchiveStatus = "uploading" | "processing" | "ready_for_review" | "in_review" | "completed" | "superseded" | "failed";
 export type SupplierCatalogueArchive = {
   id: string; supplierId: string; supplierName: string; originalFilename: string; displayName: string;
   status: SupplierCatalogueArchiveStatus; pageCount: number; detectedProductCount: number;
@@ -55,7 +119,8 @@ export const SupplierCatalogueArchiveRepository = {
 
   async saveSourcePages(input: { archiveId: string; pages: SupplierDocumentPage[] }) {
     if (input.pages.length === 0 || input.pages.length > 3) throw new Error("Catalogue source pages must be saved in batches of one to three pages.");
-    const pageRows = input.pages.map((page) => ({
+    const storedPages = await Promise.all(input.pages.map((page) => storeEmbeddedImages(page, input.archiveId)));
+    const pageRows = input.pages.map((page, index) => ({
       archive_id: input.archiveId,
       page_number: page.pageNumber,
       analysis_state: "pending",
@@ -66,8 +131,8 @@ export const SupplierCatalogueArchiveRepository = {
         error: null,
         attempts: 0,
         analysedAt: null,
-        sourcePage: page,
       },
+      source_objects: storedPages[index],
       error_message: null,
       analysed_at: null,
     }));
@@ -81,9 +146,12 @@ export const SupplierCatalogueArchiveRepository = {
 
   async saveReviewItems(input: { archiveId: string; items: CatalogueReviewQueueItem[] }) {
     if (input.items.length > 5) throw new Error("Catalogue review items must be saved in batches of at most five.");
-    const items = input.items.map((item) => ({
+    const storedItems = await Promise.all(input.items.map((item) => storeEmbeddedImages(item, input.archiveId)));
+    const items = input.items.map((item, index) => ({
       archive_id: input.archiveId, review_item_id: item.card.id, source_page_number: item.card.pageNumber,
-      supplier_product_evidence: item.card, proposed_match: item.match, review_payload: item,
+      supplier_product_evidence: (storedItems[index] as CatalogueReviewQueueItem).card,
+      proposed_match: (storedItems[index] as CatalogueReviewQueueItem).match,
+      review_payload: storedItems[index],
       review_status: "pending", linked_product_id: null, decided_at: null, decided_by_operator_id: null, decision_metadata: {},
     }));
     if (items.length > 0) {
@@ -99,7 +167,7 @@ export const SupplierCatalogueArchiveRepository = {
       ? { data: [], error: null }
       : await supabaseAdmin
           .from("vault_supplier_catalogue_pages")
-          .select("page_number, analysis_state, parsed_evidence")
+          .select("page_number, analysis_state")
           .eq("archive_id", input.archiveId)
           .in("page_number", pageNumbers);
     if (existingError) throw new Error("Existing catalogue page state could not be loaded.");
@@ -108,14 +176,13 @@ export const SupplierCatalogueArchiveRepository = {
     const pages = incomingPages.map((page) => {
       const existing = existingByPage.get(page.pageNumber);
       const preserveTerminal = existing && terminalStates.has(existing.analysis_state) && !terminalStates.has(page.status);
-      const sourcePage = existing?.parsed_evidence?.sourcePage ?? null;
       return preserveTerminal
         ? null
         : {
             archive_id: input.archiveId,
             page_number: page.pageNumber,
             analysis_state: page.status,
-            parsed_evidence: { ...page, sourcePage },
+            parsed_evidence: page,
             error_message: page.error,
             analysed_at: page.analysedAt,
           };
@@ -134,7 +201,7 @@ export const SupplierCatalogueArchiveRepository = {
   async getPageSummary(archiveId: string) {
     const [{ data: pages, error: pageError }, { data: resumablePage, error: resumableError }, { count: reviewItemCount, error: reviewError }, { count: pendingReviewItemCount, error: pendingReviewError }, { data: archive, error: archiveError }] = await Promise.all([
       supabaseAdmin.from("vault_supplier_catalogue_pages").select("analysis_state", { count: "exact" }).eq("archive_id", archiveId),
-      supabaseAdmin.from("vault_supplier_catalogue_pages").select("parsed_evidence").eq("archive_id", archiveId).in("analysis_state", ["pending", "failed"]).limit(1).maybeSingle(),
+      supabaseAdmin.from("vault_supplier_catalogue_pages").select("source_objects").eq("archive_id", archiveId).in("analysis_state", ["pending", "failed"]).limit(1).maybeSingle(),
       supabaseAdmin.from("vault_supplier_catalogue_review_items").select("id", { count: "exact", head: true }).eq("archive_id", archiveId),
       supabaseAdmin.from("vault_supplier_catalogue_review_items").select("id", { count: "exact", head: true }).eq("archive_id", archiveId).eq("review_status", "pending"),
       supabaseAdmin.from("vault_supplier_catalogue_archives").select("page_count").eq("id", archiveId).maybeSingle(),
@@ -143,8 +210,8 @@ export const SupplierCatalogueArchiveRepository = {
     const states = (pages ?? []).map((page) => page.analysis_state);
     const expectedTotal = archive?.page_count ?? states.length;
     const missingPages = Math.max(0, expectedTotal - states.length);
-    const sourcePage = resumablePage?.parsed_evidence?.sourcePage;
-    const resumable = sourcePage && Array.isArray(sourcePage.images) && sourcePage.images.some((image: { dataUrl?: unknown }) => typeof image.dataUrl === "string" && image.dataUrl.startsWith("data:image/")) ? 1 : 0;
+    const sourcePage = resumablePage?.source_objects;
+    const resumable = sourcePage && Array.isArray(sourcePage.images) && sourcePage.images.some((image: { dataUrl?: unknown }) => typeof image.dataUrl === "string" && image.dataUrl.startsWith(STORED_OBJECT_PREFIX)) ? 1 : 0;
     return {
       total: expectedTotal,
       persistedPages: states.length,
@@ -161,7 +228,7 @@ export const SupplierCatalogueArchiveRepository = {
   async getPageStates(archiveId: string): Promise<SupplierCataloguePageState[]> {
     const [{ data, error }, { data: sourcePages, error: sourceError }] = await Promise.all([
       supabaseAdmin.from("vault_supplier_catalogue_pages").select("page_number, analysis_state, error_message, analysed_at").eq("archive_id", archiveId).order("page_number", { ascending: true }),
-      supabaseAdmin.from("vault_supplier_catalogue_pages").select("page_number").eq("archive_id", archiveId).not("parsed_evidence->sourcePage", "is", null),
+      supabaseAdmin.from("vault_supplier_catalogue_pages").select("page_number").eq("archive_id", archiveId).neq("source_objects", []),
     ]);
     if (error || sourceError) throw new Error("Catalogue page states could not be loaded.");
     const sourcePageNumbers = new Set((sourcePages ?? []).map((page) => page.page_number));
@@ -173,13 +240,13 @@ export const SupplierCatalogueArchiveRepository = {
     if (uniquePageNumbers.length === 0 || uniquePageNumbers.length > 3) throw new Error("Load between one and three catalogue source pages at a time.");
     const { data, error } = await supabaseAdmin
       .from("vault_supplier_catalogue_pages")
-      .select("page_number, parsed_evidence")
+      .select("page_number, source_objects")
       .eq("archive_id", archiveId)
       .in("page_number", uniquePageNumbers)
       .order("page_number", { ascending: true });
     if (error) throw new Error("Catalogue source page evidence could not be loaded.");
-    return (data ?? [])
-      .map((page) => page.parsed_evidence?.sourcePage as SupplierDocumentPage)
+    return (await Promise.all((data ?? [])
+      .map((page) => restoreStoredImages(page.source_objects) as Promise<SupplierDocumentPage>)))
       .filter((page) => page && Array.isArray(page.images) && page.images.some((image) =>
         typeof image.dataUrl === "string" && (image.dataUrl.startsWith("data:image/") || image.dataUrl.startsWith("https://")),
       ));
@@ -222,7 +289,7 @@ export const SupplierCatalogueArchiveRepository = {
   async getPendingReviewItems(archiveId: string): Promise<CatalogueReviewQueueItem[]> {
     const { data, error } = await supabaseAdmin.from("vault_supplier_catalogue_review_items").select("review_payload").eq("archive_id", archiveId).eq("review_status", "pending").order("source_page_number", { ascending: true }).order("review_item_id", { ascending: true });
     if (error) throw new Error("Catalogue review queue could not be loaded.");
-    return (data ?? []).map((row) => row.review_payload as CatalogueReviewQueueItem);
+    return Promise.all((data ?? []).map((row) => restoreStoredImages(row.review_payload) as Promise<CatalogueReviewQueueItem>));
   },
 
   async getReviewItemCount(archiveId: string): Promise<number> {
@@ -241,5 +308,17 @@ export const SupplierCatalogueArchiveRepository = {
     if (!data) throw new Error("This catalogue item was already resolved or does not belong to this archive.");
     const { error: refreshError } = await supabaseAdmin.rpc("refresh_supplier_catalogue_archive", { target_archive_id: input.archiveId });
     if (refreshError) throw new Error("The review decision was saved but archive counts could not be refreshed.");
+    const { data: completed } = await supabaseAdmin.from("vault_supplier_catalogue_archives")
+      .select("id").eq("id", input.archiveId).eq("status", "completed").maybeSingle();
+    if (completed) {
+      try {
+        await purgeTemporarySourceObjects(input.archiveId);
+      } catch (error) {
+        console.warn("Completed catalogue temporary-source cleanup is pending.", {
+          archiveId: input.archiveId,
+          reason: error instanceof Error ? error.message : "Unknown cleanup error",
+        });
+      }
+    }
   },
 } as const;
