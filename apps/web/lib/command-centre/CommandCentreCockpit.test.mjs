@@ -327,6 +327,7 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.doesNotMatch(component, /comparison\.value.*\?\?\s*0/);
   assert.match(component, /Estimated total visitors/);
   assert.match(component, /Estimated untracked/);
+  assert.match(component, /Website Conversion[\s\S]*Estimated untracked visitors: \{numberValue\(data\.website\.estimatedUntrackedVisitors\)\}/);
   assert.match(component, /Live tracked/);
   assert.doesNotMatch(component, /UK share|ukTrafficPercentage/);
   assert.match(loader, /conversionRate: funnelResult/);

@@ -175,7 +175,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <span>Units {numberValue(data.trading.units)}</span><span>AOV {moneyValue(data.trading.averageOrderValue)}</span>
         </KpiCard>
         <KpiCard eyebrow="Website Conversion" icon="trend" accent="blue" value={percentValue(data.website.conversionRate)}>
-          <span>Sessions {numberValue(data.website.sessions)}</span><span>{sourceStateLabel(data.website.conversionRate)}</span>
+          <span>Sessions {numberValue(data.website.sessions)}<br />Estimated untracked visitors: {numberValue(data.website.estimatedUntrackedVisitors)}</span><span>{sourceStateLabel(data.website.conversionRate)}</span>
         </KpiCard>
         <KpiCard eyebrow="Add to Cart Today" icon="target" accent="blue" value={numberValue(data.website.addToCartToday)}>
           <span>Tracked storefront sessions</span><span>{sourceStateLabel(data.website.addToCartToday)}</span>
