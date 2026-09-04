@@ -118,7 +118,7 @@ test("premium redesign preserves every original KPI and snapshot field", async (
   );
 
   for (const title of [
-    "Revenue Today", "Orders Today", "Website Conversion", "Add to Cart Today",
+    "Revenue Today", "Orders Today", "Add to Cart Today",
     "Abandoned Checkouts", "Website Traffic", "Meta Ads", "Finance Position",
   ]) {
     assert.match(component, new RegExp(`eyebrow="${title}"`));
@@ -327,7 +327,8 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.doesNotMatch(component, /comparison\.value.*\?\?\s*0/);
   assert.match(component, /Estimated total visitors/);
   assert.match(component, /Estimated untracked/);
-  assert.match(component, /Website Conversion[\s\S]*Estimated untracked visitors: \{numberValue\(data\.website\.estimatedUntrackedVisitors\)\}/);
+  assert.doesNotMatch(component, /eyebrow="Website Conversion"/);
+  assert.match(component, /eyebrow="Website Traffic"[^>]*secondaryValue=\{percentValue\(data\.website\.conversionRate\)\} secondaryLabel="Conversion"/);
   assert.match(component, /Live tracked/);
   assert.doesNotMatch(component, /UK share|ukTrafficPercentage/);
   assert.match(loader, /conversionRate: funnelResult/);
