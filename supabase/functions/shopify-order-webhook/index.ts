@@ -5,71 +5,15 @@ import {
   upsertShopifyOrder,
 } from "../_shared/shopify/orders.ts";
 import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
+import { cleanShopDomain, SUPPORTED_ORDER_WEBHOOK_TOPICS, verifyShopifyWebhookHmac } from "../_shared/shopify/webhook-verification.ts";
 
-const SUPPORTED_TOPICS = new Set([
-  "orders/create",
-  "orders/updated",
-  "orders/cancelled",
-  "refunds/create",
-]);
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
 function respond(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-function cleanStoreDomain(domain: string): string {
-  return domain
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/\/+$/, "")
-    .toLowerCase();
-}
-
-function decodeBase64(value: string): Uint8Array | null {
-  try {
-    return Uint8Array.from(atob(value), (character) =>
-      character.charCodeAt(0)
-    );
-  } catch {
-    return null;
-  }
-}
-
-function constantTimeEqual(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  let difference = 0;
-
-  for (let index = 0; index < left.length; index += 1) {
-    difference |= left[index] ^ right[index];
-  }
-
-  return difference === 0;
-}
-
-async function verifyShopifyHmac(
-  rawBody: Uint8Array,
-  providedHmac: string,
-  secret: string,
-): Promise<boolean> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const calculated = new Uint8Array(
-    await crypto.subtle.sign("HMAC", key, rawBody as Uint8Array<ArrayBuffer>),
-  );
-  const provided = decodeBase64(providedHmac);
-
-  return provided !== null && constantTimeEqual(calculated, provided);
 }
 
 function getOrderId(payload: unknown, topic: string): string | null {
@@ -109,12 +53,12 @@ Deno.serve(async (request: Request) => {
 
   if (
     !providedHmac ||
-    !(await verifyShopifyHmac(rawBody, providedHmac, webhookSecret))
+    !(await verifyShopifyWebhookHmac(rawBody, providedHmac, webhookSecret))
   ) {
     return respond({ success: false, error: "Invalid webhook signature" }, 401);
   }
 
-  if (!topic || !SUPPORTED_TOPICS.has(topic)) {
+  if (!topic || !SUPPORTED_ORDER_WEBHOOK_TOPICS.has(topic)) {
     return respond({ success: false, error: "Unsupported webhook topic" }, 400);
   }
 
@@ -122,7 +66,7 @@ Deno.serve(async (request: Request) => {
     return respond({ success: false, error: "Required Shopify headers missing" }, 400);
   }
 
-  if (cleanStoreDomain(shopDomain) !== cleanStoreDomain(configuredDomain)) {
+  if (cleanShopDomain(shopDomain) !== cleanShopDomain(configuredDomain)) {
     return respond({ success: false, error: "Unexpected Shopify store" }, 403);
   }
 
@@ -142,39 +86,24 @@ Deno.serve(async (request: Request) => {
     },
   });
 
-  try {
-    const { data: existing, error: existingError } = await supabase
+  const { error: deliveryError } = await supabase
       .from("vault_shopify_webhook_deliveries")
-      .select("status")
-      .eq("shopify_webhook_id", webhookId)
-      .maybeSingle();
-
-    if (existingError) {
-      throw existingError;
-    }
-
-    if (existing?.status === "complete") {
-      return respond({ success: true, duplicate: true });
-    }
-
-    const { error: deliveryError } = await supabase
-      .from("vault_shopify_webhook_deliveries")
-      .upsert(
+      .insert(
         {
           shopify_webhook_id: webhookId,
           topic,
-          shop_domain: cleanStoreDomain(shopDomain),
+          shop_domain: cleanShopDomain(shopDomain),
           status: "processing",
           error_message: null,
           processed_at: null,
         },
-        { onConflict: "shopify_webhook_id" },
       );
 
-    if (deliveryError) {
-      throw deliveryError;
-    }
+  if (deliveryError?.code === "23505") return respond({ success: true, duplicate: true });
+  if (deliveryError) return respond({ success: false, error: "Webhook delivery could not be accepted" }, 503);
 
+  const processing = (async () => {
+    try {
     const payload = JSON.parse(new TextDecoder().decode(rawBody)) as unknown;
     const orderId = getOrderId(payload, topic);
 
@@ -240,13 +169,8 @@ Deno.serve(async (request: Request) => {
       });
     }
 
-    return respond({ success: true });
-  } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : "Unexpected webhook processing error";
-
-    console.error("[Vault Shopify Order Webhook]", message);
+    } catch {
+    console.error("[Vault Shopify Order Webhook] Processing failed");
 
     await supabase
       .from("vault_shopify_webhook_deliveries")
@@ -254,14 +178,16 @@ Deno.serve(async (request: Request) => {
         {
           shopify_webhook_id: webhookId,
           topic,
-          shop_domain: cleanStoreDomain(shopDomain),
+          shop_domain: cleanShopDomain(shopDomain),
           status: "error",
-          error_message: message.slice(0, 500),
+          error_message: "Authenticated webhook reconciliation failed",
           processed_at: new Date().toISOString(),
         },
         { onConflict: "shopify_webhook_id" },
       );
 
-    return respond({ success: false, error: message }, 500);
-  }
+    }
+  })();
+  EdgeRuntime.waitUntil(processing);
+  return respond({ success: true, accepted: true }, 202);
 });
