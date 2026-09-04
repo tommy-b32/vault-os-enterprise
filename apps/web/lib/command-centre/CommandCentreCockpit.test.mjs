@@ -126,6 +126,7 @@ test("premium redesign preserves every original KPI and snapshot field", async (
 
   for (const label of [
     "Tracked visitors", "Estimated untracked visitors", "Estimated total visitors", "Sessions",
+    "Checkout-started sessions", "Completed-checkout sessions",
     "Add-to-cart rate", "Checkout rate", "Conversion rate", "Abandoned checkouts",
     "Low-stock styles", "Out-of-stock styles", "Total stock value", "Inventory", "Reorder review",
     "Awaiting fulfilment", "Dispatched today", "Refunds today", "Supplier issues", "Late deliveries",
@@ -138,6 +139,21 @@ test("premium redesign preserves every original KPI and snapshot field", async (
   assert.match(component, /Live trend building/);
   assert.match(component, /role="img"/);
   assert.match(component, /Seven-day live trend from/);
+  for (const preserved of [
+    "Business Pulse", "Executive Intelligence", "Going well",
+    "Limiting the business", "Supporting evidence", "Today&apos;s Focus",
+    "Unlocks", "Needs Your Attention", "Latest Business Activity",
+    "Sales Funnel", "Inventory Snapshot", "Marketing Snapshot",
+    "Operations Snapshot", "CommandCentreLiveRefresh", "Sources current",
+  ]) {
+    assert.match(component, new RegExp(preserved));
+  }
+  for (const destination of ["/missions", "/orders", "/inventory"]) {
+    assert.match(component, new RegExp(destination));
+  }
+  for (const breakpoint of ["1500", "1050", "820", "600"]) {
+    assert.match(component, new RegExp(`max-width:${breakpoint}px`));
+  }
 });
 
 const timelineItem = (overrides) => ({
@@ -313,7 +329,7 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(component, /Estimated untracked/);
   assert.match(component, /Live tracked/);
   assert.doesNotMatch(component, /UK share|ukTrafficPercentage/);
-  assert.match(loader, /conversionRate: unavailable\(\)/);
+  assert.match(loader, /conversionRate: funnelResult/);
   assert.match(loader, /addToCartToday: funnelResult/);
   assert.match(loader, /abandonedCheckouts: funnelResult/);
   assert.match(component, /eyebrow="Add to Cart Today"[\s\S]*data\.website\.addToCartToday/);

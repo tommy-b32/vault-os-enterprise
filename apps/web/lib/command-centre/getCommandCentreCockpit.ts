@@ -6,6 +6,7 @@ import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecision
 import { getVaultBusinessState } from "@/lib/business/VaultBusinessState";
 import type { FinancePosition } from "@/lib/business/BusinessFinanceRepository";
 import { StorefrontFunnelRepository } from "@/lib/business/StorefrontFunnelRepository";
+import { ShopifyTradingRepository } from "@/lib/business/ShopifyTradingRepository";
 import {
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
@@ -34,7 +35,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -48,6 +49,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       purchasing_power_state
     `).single(),
     StorefrontFunnelRepository.getToday().catch(() => null),
+    ShopifyTradingRepository.getOperationsSnapshot().catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -254,15 +256,29 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     },
     website: {
       ...websiteTraffic,
-      sessions: unavailable(),
-      conversionRate: unavailable(),
-      addToCartToday: funnelResult?.addToCartSessions !== null && funnelResult?.addToCartSessions !== undefined
-        ? available(funnelResult.addToCartSessions, funnelResult.latestActivityAt)
+      sessions: funnelResult?.trackedSessions !== null && funnelResult?.trackedSessions !== undefined
+        ? available(funnelResult.trackedSessions, funnelResult.latestActivityAt, funnelResult.stale)
         : unavailable(),
-      addToCartRate: unavailable(),
-      checkoutRate: unavailable(),
+      conversionRate: funnelResult?.conversionRate !== null && funnelResult?.conversionRate !== undefined
+        ? available(funnelResult.conversionRate, funnelResult.latestActivityAt, funnelResult.stale)
+        : unavailable(),
+      addToCartToday: funnelResult?.addToCartSessions !== null && funnelResult?.addToCartSessions !== undefined
+        ? available(funnelResult.addToCartSessions, funnelResult.latestActivityAt, funnelResult.stale)
+        : unavailable(),
+      checkoutStartedToday: funnelResult?.checkoutStartedSessions !== null && funnelResult?.checkoutStartedSessions !== undefined
+        ? available(funnelResult.checkoutStartedSessions, funnelResult.latestActivityAt, funnelResult.stale)
+        : unavailable(),
+      checkoutCompletedToday: funnelResult?.checkoutCompletedSessions !== null && funnelResult?.checkoutCompletedSessions !== undefined
+        ? available(funnelResult.checkoutCompletedSessions, funnelResult.latestActivityAt, funnelResult.stale)
+        : unavailable(),
+      addToCartRate: funnelResult?.addToCartRate !== null && funnelResult?.addToCartRate !== undefined
+        ? available(funnelResult.addToCartRate, funnelResult.latestActivityAt, funnelResult.stale)
+        : unavailable(),
+      checkoutRate: funnelResult?.checkoutRate !== null && funnelResult?.checkoutRate !== undefined
+        ? available(funnelResult.checkoutRate, funnelResult.latestActivityAt, funnelResult.stale)
+        : unavailable(),
       abandonedCheckouts: funnelResult?.abandonedCheckouts !== null && funnelResult?.abandonedCheckouts !== undefined
-        ? available(funnelResult.abandonedCheckouts, funnelResult.latestActivityAt)
+        ? available(funnelResult.abandonedCheckouts, funnelResult.latestActivityAt, funnelResult.stale)
         : unavailable(),
       visitorTrend,
     },
@@ -302,7 +318,9 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       reorderReview: inventory ? available(inventory.productsRequiringAttention, inventoryAt, inventoryStale) : unavailable(),
     },
     operations: {
-      awaitingFulfilment: unavailable(),
+      awaitingFulfilment: operationsResult
+        ? available(operationsResult.awaitingFulfilment, operationsResult.updatedAt, tradingStale)
+        : unavailable(),
       dispatchedToday: unavailable(),
       refundsToday: unavailable(),
       supplierIssues: unavailable(),

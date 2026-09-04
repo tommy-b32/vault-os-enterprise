@@ -36,6 +36,12 @@ function stateLabel(value: CockpitValue<unknown>): string | null {
   return value.state === "stale" ? "Stale" : null;
 }
 
+function sourceStateLabel(value: CockpitValue<unknown>): string {
+  if (value.state === "available") return "Live consented events";
+  if (value.state === "stale") return "Stale consented events";
+  return display(value);
+}
+
 function KpiCard({
   eyebrow,
   icon,
@@ -169,13 +175,13 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <span>Units {numberValue(data.trading.units)}</span><span>AOV {moneyValue(data.trading.averageOrderValue)}</span>
         </KpiCard>
         <KpiCard eyebrow="Website Conversion" icon="trend" accent="blue" value={percentValue(data.website.conversionRate)}>
-          <span>Sessions {numberValue(data.website.sessions)}</span><span>Funnel data unavailable</span>
+          <span>Sessions {numberValue(data.website.sessions)}</span><span>{sourceStateLabel(data.website.conversionRate)}</span>
         </KpiCard>
         <KpiCard eyebrow="Add to Cart Today" icon="target" accent="blue" value={numberValue(data.website.addToCartToday)}>
-          <span>Tracked storefront sessions</span><span>Event data unavailable</span>
+          <span>Tracked storefront sessions</span><span>{sourceStateLabel(data.website.addToCartToday)}</span>
         </KpiCard>
         <KpiCard eyebrow="Abandoned Checkouts" icon="orders" accent="pink" value={numberValue(data.website.abandonedCheckouts)}>
-          <span>Distinct checkout sessions</span><span>Checkout data unavailable</span>
+          <span>Distinct checkout sessions</span><span>{sourceStateLabel(data.website.abandonedCheckouts)}</span>
         </KpiCard>
         <KpiCard eyebrow="Website Traffic" icon="analytics" accent="violet" value={numberValue(data.website.estimatedTotalVisitors)} trend={data.website.visitorTrend}>
           <span className="cc-traffic-label">Estimated total visitors</span>
@@ -237,6 +243,8 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <MetricRow label="Estimated untracked visitors" value={data.website.estimatedUntrackedVisitors} />
           <MetricRow label="Estimated total visitors" value={data.website.estimatedTotalVisitors} />
           <MetricRow label="Sessions" value={data.website.sessions} />
+          <MetricRow label="Checkout-started sessions" value={data.website.checkoutStartedToday} />
+          <MetricRow label="Completed-checkout sessions" value={data.website.checkoutCompletedToday} />
           <MetricRow label="Add-to-cart rate" value={data.website.addToCartRate} formatter={(v) => `${v}%`} />
           <MetricRow label="Checkout rate" value={data.website.checkoutRate} formatter={(v) => `${v}%`} />
           <MetricRow label="Conversion rate" value={data.website.conversionRate} formatter={(v) => `${v}%`} />

@@ -50,6 +50,11 @@ export type ShopifySevenDaySummary = {
   days: ShopifyTradingDay[];
 };
 
+export type ShopifyOperationsSnapshot = {
+  awaitingFulfilment: number;
+  updatedAt: string;
+};
+
 export type ShopifyTopProduct = {
   productId: string;
   title: string;
@@ -226,7 +231,8 @@ async function getOrdersInRange(
     `)
     .gte("shopify_created_at", range.from)
     .lt("shopify_created_at", range.to)
-    .is("cancelled_at", null);
+    .is("cancelled_at", null)
+    .eq("metadata->>test", false);
 
   if (error) {
     throw new Error(`Unable to read canonical Shopify orders: ${error.message}`);
@@ -318,6 +324,36 @@ export const ShopifyTradingRepository = {
     };
   },
 
+  async getOperationsSnapshot(): Promise<ShopifyOperationsSnapshot | null> {
+    const [ordersResult, latestSyncAt] = await Promise.all([
+      supabaseAdmin
+        .from("vault_shopify_orders")
+        .select("id", { count: "exact", head: true })
+        .is("cancelled_at", null)
+        .eq("metadata->>test", false)
+        .in("fulfilment_status", [
+          "UNFULFILLED",
+          "PARTIALLY_FULFILLED",
+          "ON_HOLD",
+          "SCHEDULED",
+        ]),
+      this.getLatestSyncAt(),
+    ]);
+
+    if (ordersResult.error) {
+      throw new Error(
+        `Unable to read canonical Shopify fulfilment state: ${ordersResult.error.message}`,
+      );
+    }
+
+    if (ordersResult.count === null || latestSyncAt === null) return null;
+
+    return {
+      awaitingFulfilment: ordersResult.count,
+      updatedAt: latestSyncAt,
+    };
+  },
+
   async getRecentOrders(limit = 10): Promise<ShopifyRecentOrder[]> {
     const safeLimit = Math.max(1, Math.min(50, Math.trunc(limit)));
     const { data, error } = await supabaseAdmin
@@ -334,6 +370,7 @@ export const ShopifyTradingRepository = {
         net_revenue,
         customer_name
       `)
+      .eq("metadata->>test", false)
       .order("created_at", { ascending: false })
       .limit(safeLimit);
 
@@ -421,7 +458,8 @@ export const ShopifyTradingRepository = {
       `)
       .gte("order.shopify_created_at", range.from)
       .lt("order.shopify_created_at", range.to)
-      .is("order.cancelled_at", null);
+      .is("order.cancelled_at", null)
+      .eq("order.metadata->>test", false);
 
     if (error) {
       throw new Error(`Unable to aggregate Shopify product sales: ${error.message}`);
