@@ -12,9 +12,14 @@ function date(value: string) {
 }
 
 function operationalStatus(archive: SupplierCatalogueArchiveWithProgress) {
-  if (archive.analysis.catalogueComplete) return "ANALYSED / COMPLETE";
-  if (archive.analysis.pendingReviewItems > 0) return "REVIEW REQUIRED";
-  return "ANALYSIS IN PROGRESS";
+  switch (archive.status) {
+    case "completed": return archive.isActive ? "ACTIVE" : "COMPLETED";
+    case "ready_for_review":
+    case "in_review": return "REVIEW REQUIRED";
+    case "uploading": return "UPLOAD IN PROGRESS";
+    case "processing": return "ANALYSIS IN PROGRESS";
+    default: return "UNAVAILABLE";
+  }
 }
 
 export default async function SupplierCataloguePage() {
@@ -29,11 +34,13 @@ export default async function SupplierCataloguePage() {
   }
   if (!loaded || loadError) return <VaultAppShell systemStatusLabel="Supplier archive unavailable"><main className="catalogue-error"><h1>Supplier catalogue unavailable</h1><p>{loadError}</p></main></VaultAppShell>;
 
+  const activeArchives = archives.filter((archive) => archive.status === "completed" && archive.isActive);
+  const replacementWorkflows = archives.filter((archive) => ["uploading", "processing", "ready_for_review", "in_review"].includes(archive.status));
   const stats = {
-    archives: archives.length,
-    pages: archives.reduce((sum, archive) => sum + archive.pageCount, 0),
-    matched: archives.reduce((sum, archive) => sum + archive.matchedProductCount, 0),
-    pending: archives.reduce((sum, archive) => sum + archive.analysis.pendingReviewItems, 0),
+    archives: activeArchives.length,
+    pages: activeArchives.reduce((sum, archive) => sum + archive.pageCount, 0),
+    matched: activeArchives.reduce((sum, archive) => sum + archive.matchedProductCount, 0),
+    pending: replacementWorkflows.reduce((sum, archive) => sum + archive.analysis.pendingReviewItems, 0),
   };
   return <VaultAppShell searchPlaceholder="Search supplier catalogues..." systemStatusLabel="Canonical supplier archives available"><main className="supplier-catalogue-page">
     <header className="supplier-catalogue-hero"><div><p className="vault-eyebrow">SUPPLIER CATALOGUE INTELLIGENCE</p><h1>Supplier Catalogue</h1><p>Durable supplier imports, product evidence and resumable catalogue analysis.</p></div></header>

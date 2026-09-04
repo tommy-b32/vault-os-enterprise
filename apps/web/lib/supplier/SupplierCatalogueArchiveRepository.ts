@@ -72,13 +72,14 @@ async function purgeTemporarySourceObjects(archiveId: string): Promise<void> {
 export type SupplierCatalogueArchiveStatus = "uploading" | "processing" | "ready_for_review" | "in_review" | "completed" | "superseded" | "failed";
 export type SupplierCatalogueArchive = {
   id: string; supplierId: string; supplierName: string; originalFilename: string; displayName: string;
-  status: SupplierCatalogueArchiveStatus; pageCount: number; detectedProductCount: number;
+  status: SupplierCatalogueArchiveStatus; isActive: boolean; pageCount: number; detectedProductCount: number;
   matchedProductCount: number; unmatchedProductCount: number; catalogueType: "products" | "footwear" | "accessories";
   leadTimeDays: number | null; sourceDocumentId: string; createdAt: string; updatedAt: string;
 };
 
 type ArchiveRow = {
   id: string; supplier_id: string; original_filename: string; display_name: string; status: SupplierCatalogueArchiveStatus;
+  is_active: boolean;
   page_count: number; detected_product_count: number; matched_product_count: number; unmatched_product_count: number;
   catalogue_type: "products" | "footwear" | "accessories"; lead_time_days: number | null; source_metadata: { document_id?: string } | null;
   created_at: string; updated_at: string; supplier: { supplier_name: string } | Array<{ supplier_name: string }> | null;
@@ -86,10 +87,10 @@ type ArchiveRow = {
 
 function mapArchive(row: ArchiveRow): SupplierCatalogueArchive {
   const supplier = Array.isArray(row.supplier) ? row.supplier[0] : row.supplier;
-  return { id: row.id, supplierId: row.supplier_id, supplierName: supplier?.supplier_name ?? "Unknown supplier", originalFilename: row.original_filename, displayName: row.display_name, status: row.status, pageCount: row.page_count, detectedProductCount: row.detected_product_count, matchedProductCount: row.matched_product_count, unmatchedProductCount: row.unmatched_product_count, catalogueType: row.catalogue_type, leadTimeDays: row.lead_time_days, sourceDocumentId: row.source_metadata?.document_id ?? row.id, createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, supplierId: row.supplier_id, supplierName: supplier?.supplier_name ?? "Unknown supplier", originalFilename: row.original_filename, displayName: row.display_name, status: row.status, isActive: row.is_active, pageCount: row.page_count, detectedProductCount: row.detected_product_count, matchedProductCount: row.matched_product_count, unmatchedProductCount: row.unmatched_product_count, catalogueType: row.catalogue_type, leadTimeDays: row.lead_time_days, sourceDocumentId: row.source_metadata?.document_id ?? row.id, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
-const ARCHIVE_SELECT = `id, supplier_id, original_filename, display_name, status, page_count, detected_product_count, matched_product_count, unmatched_product_count, catalogue_type, lead_time_days, source_metadata, created_at, updated_at, supplier:vault_suppliers(supplier_name)`;
+const ARCHIVE_SELECT = `id, supplier_id, original_filename, display_name, status, is_active, page_count, detected_product_count, matched_product_count, unmatched_product_count, catalogue_type, lead_time_days, source_metadata, created_at, updated_at, supplier:vault_suppliers(supplier_name)`;
 
 export type SupplierCataloguePageState = {
   pageNumber: number;
@@ -258,7 +259,9 @@ export const SupplierCatalogueArchiveRepository = {
   },
 
   async list(): Promise<SupplierCatalogueArchive[]> {
-    const { data, error } = await supabaseAdmin.from("vault_supplier_catalogue_archives").select(ARCHIVE_SELECT).order("created_at", { ascending: false });
+    const { data, error } = await supabaseAdmin.from("vault_supplier_catalogue_archives").select(ARCHIVE_SELECT)
+      .or("and(status.eq.completed,is_active.eq.true),status.in.(uploading,processing,ready_for_review,in_review)")
+      .order("created_at", { ascending: false });
     if (error) throw new Error("Supplier catalogue archives could not be loaded.");
     return ((data ?? []) as ArchiveRow[]).map(mapArchive);
   },

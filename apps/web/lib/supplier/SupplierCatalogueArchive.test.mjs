@@ -31,9 +31,9 @@ test("review completion and catalogue analysis completion are independent", asyn
   ]);
   assert.match(repository, /pendingReviewItems/);
   assert.match(repository, /catalogueComplete: states\.length === expectedTotal[\s\S]*states\.every/);
-  assert.match(listPage, /archive\.analysis\.catalogueComplete/);
+  assert.match(listPage, /switch \(archive\.status\)/);
   assert.match(listPage, /archive\.analysis\.pendingReviewItems/);
-  assert.doesNotMatch(listPage, /status\(archive\.status\)/);
+  assert.doesNotMatch(listPage, /if \(archive\.analysis\.catalogueComplete\) return/);
   assert.match(detailPage, /All currently detected review items have been resolved/);
   assert.match(detailPage, /All persisted catalogue pages have been analysed or skipped/);
 });
@@ -402,6 +402,23 @@ test("archive cards and review routes use explicit archive identity", async () =
   assert.match(page, /`\/supplier-catalogue\/\$\{archive\.id\}`/);
   assert.doesNotMatch(page, /const supplierCatalogues|const catalogueStats/);
   await access(new URL("app/supplier-catalogue/[catalogueId]/review/page.tsx", webRoot));
+});
+
+test("catalogue dashboard follows active and replacement lifecycle visibility", async () => {
+  const [repository, page] = await Promise.all([
+    readWeb("lib/supplier/SupplierCatalogueArchiveRepository.ts"),
+    readWeb("app/supplier-catalogue/page.tsx"),
+  ]);
+  assert.match(repository, /is_active/);
+  assert.match(repository, /and\(status\.eq\.completed,is_active\.eq\.true\),status\.in\.\(uploading,processing,ready_for_review,in_review\)/);
+  assert.doesNotMatch(repository, /status\.in\.\([^)]*(?:failed|superseded)/);
+  assert.match(page, /case "completed": return archive\.isActive \? "ACTIVE"/);
+  assert.match(page, /case "uploading": return "UPLOAD IN PROGRESS"/);
+  assert.match(page, /case "processing": return "ANALYSIS IN PROGRESS"/);
+  assert.match(page, /case "ready_for_review":[\s\S]*case "in_review": return "REVIEW REQUIRED"/);
+  assert.match(page, /activeArchives\.reduce[\s\S]*archive\.pageCount/);
+  assert.match(page, /activeArchives\.reduce[\s\S]*archive\.matchedProductCount/);
+  assert.match(page, /replacementWorkflows\.reduce[\s\S]*pendingReviewItems/);
 });
 
 test("IndexedDB is not used by the canonical import or review routes", async () => {
