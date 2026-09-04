@@ -1,3 +1,4 @@
+import { getShopifyAccessToken } from "./auth.ts";
 import { shopifyGraphQL } from "./graphql.ts";
 
 export const SHOPIFY_ANALYTICS_QUERY = `FROM sessions
@@ -13,6 +14,32 @@ type Response = {
   shop: { id: string; ianaTimezone: string };
   shopifyqlQuery: { tableData: { columns: Column[]; rows: unknown } | null; parseErrors: string[] } | null;
 };
+
+type ShopifyAnalyticsAccess = {
+  shop: { id: string; ianaTimezone: string };
+  currentAppInstallation: { accessScopes: Array<{ handle: string }> };
+};
+
+async function queryShopifyAnalyticsAccess(): Promise<ShopifyAnalyticsAccess> {
+  return await shopifyGraphQL<ShopifyAnalyticsAccess>(`query VaultShopifyAnalyticsAccess {
+    shop { id ianaTimezone }
+    currentAppInstallation { accessScopes { handle } }
+  }`);
+}
+
+export async function checkShopifyAnalyticsAccess(
+  queryAccess: () => Promise<ShopifyAnalyticsAccess> = queryShopifyAnalyticsAccess,
+  refreshAccessToken: () => Promise<unknown> = () =>
+    getShopifyAccessToken({ forceRefresh: true }),
+): Promise<ShopifyAnalyticsAccess> {
+  const cachedAccess = await queryAccess();
+  if (cachedAccess.currentAppInstallation.accessScopes.some(({ handle }) => handle === "read_reports")) {
+    return cachedAccess;
+  }
+
+  await refreshAccessToken();
+  return await queryAccess();
+}
 
 export type ShopifyAnalyticsDay = {
   reportingDate: string;
@@ -54,13 +81,7 @@ export function parseShopifyAnalyticsTable(table: { columns: Column[]; rows: unk
 }
 
 export async function fetchShopifyAnalytics() {
-  const access = await shopifyGraphQL<{
-    shop: { id: string; ianaTimezone: string };
-    currentAppInstallation: { accessScopes: Array<{ handle: string }> };
-  }>(`query VaultShopifyAnalyticsAccess {
-    shop { id ianaTimezone }
-    currentAppInstallation { accessScopes { handle } }
-  }`);
+  const access = await checkShopifyAnalyticsAccess();
   if (!access.currentAppInstallation.accessScopes.some(({ handle }) => handle === "read_reports")) {
     return { availability: "pending_permission" as const, shopId: access.shop.id, reportingTimezone: access.shop.ianaTimezone, days: [] };
   }

@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { parseShopifyAnalyticsTable, SHOPIFY_ANALYTICS_QUERY } from "../../../supabase/functions/_shared/shopify/analytics.ts";
+import { checkShopifyAnalyticsAccess, parseShopifyAnalyticsTable, SHOPIFY_ANALYTICS_QUERY } from "../../../supabase/functions/_shared/shopify/analytics.ts";
 
 const root = new URL("../../../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 const columns = ["day", "sessions", "online_store_visitors", "sessions_with_cart_additions", "sessions_that_reached_checkout", "sessions_that_completed_checkout", "conversion_rate"].map((name) => ({ name, dataType: name === "day" ? "DATE" : "NUMBER" }));
+const analyticsAccess = (...handles) => ({
+  shop: { id: "shop", ianaTimezone: "Europe/London" },
+  currentAppInstallation: { accessScopes: handles.map((handle) => ({ handle })) },
+});
 
 test("ShopifyQL requests seven daily human-session aggregates and Shopify conversion", () => {
   assert.match(SHOPIFY_ANALYTICS_QUERY, /FROM sessions/);
@@ -25,6 +29,74 @@ test("parser preserves zero, partial current-day values, and Shopify-provided co
   assert.equal(days[0].sessions, 0);
   assert.equal(days[1].visitors, null);
   assert.equal(days[1].conversionRate, 0.0147);
+});
+
+test("Analytics access accepts cached read_reports without refreshing", async () => {
+  let queries = 0;
+  let refreshes = 0;
+  const access = await checkShopifyAnalyticsAccess(
+    async () => {
+      queries += 1;
+      return analyticsAccess("read_reports");
+    },
+    async () => {
+      refreshes += 1;
+    },
+  );
+  assert.equal(access.currentAppInstallation.accessScopes[0].handle, "read_reports");
+  assert.equal(queries, 1);
+  assert.equal(refreshes, 0);
+});
+
+test("Analytics access refreshes once when cached token lacks read_reports", async () => {
+  let queries = 0;
+  let refreshes = 0;
+  const access = await checkShopifyAnalyticsAccess(
+    async () => analyticsAccess(...(++queries === 1 ? [] : ["read_reports"])),
+    async () => {
+      refreshes += 1;
+    },
+  );
+  assert.equal(access.currentAppInstallation.accessScopes[0].handle, "read_reports");
+  assert.equal(queries, 2);
+  assert.equal(refreshes, 1);
+});
+
+test("Analytics access stops after one refresh when read_reports remains absent", async () => {
+  let queries = 0;
+  let refreshes = 0;
+  const access = await checkShopifyAnalyticsAccess(
+    async () => {
+      queries += 1;
+      return analyticsAccess("read_products");
+    },
+    async () => {
+      refreshes += 1;
+    },
+  );
+  assert.equal(access.currentAppInstallation.accessScopes.some(({ handle }) => handle === "read_reports"), false);
+  assert.equal(queries, 2);
+  assert.equal(refreshes, 1);
+});
+
+test("Analytics access safely propagates a one-time token refresh failure", async () => {
+  let queries = 0;
+  let refreshes = 0;
+  await assert.rejects(
+    checkShopifyAnalyticsAccess(
+      async () => {
+        queries += 1;
+        return analyticsAccess();
+      },
+      async () => {
+        refreshes += 1;
+        throw new Error("token refresh failed");
+      },
+    ),
+    /token refresh failed/,
+  );
+  assert.equal(queries, 1);
+  assert.equal(refreshes, 1);
 });
 
 test("cache is aggregate-only, idempotent, stale-aware, and permission-safe", async () => {

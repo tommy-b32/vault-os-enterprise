@@ -12,6 +12,10 @@ type CachedShopifyAuth = ShopifyAuth & {
   expiresAt: number;
 };
 
+type ShopifyAccessTokenOptions = {
+  forceRefresh?: boolean;
+};
+
 let cachedAuth: CachedShopifyAuth | null = null;
 let refreshPromise: Promise<CachedShopifyAuth> | null = null;
 
@@ -108,15 +112,18 @@ async function requestShopifyAccessToken(): Promise<CachedShopifyAuth> {
   };
 }
 
-export async function getShopifyAccessToken(): Promise<ShopifyAuth> {
+export async function getShopifyAccessToken(
+  options: ShopifyAccessTokenOptions = {},
+): Promise<ShopifyAuth> {
   if (
+    !options.forceRefresh &&
     cachedAuth &&
     Date.now() < cachedAuth.expiresAt - TOKEN_REFRESH_BUFFER_MS
   ) {
     return cachedAuth;
   }
 
-  if (!refreshPromise) {
+  if (options.forceRefresh || !refreshPromise) {
     refreshPromise = requestShopifyAccessToken()
       .then((auth) => {
         cachedAuth = auth;
