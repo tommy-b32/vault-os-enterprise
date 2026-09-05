@@ -181,7 +181,15 @@ export function CommandCentreCockpit({ data }: DataProps) {
 
       <section className="cc-kpi-grid" aria-label="Headline business metrics">
         <KpiCard eyebrow="Revenue Today" icon="analytics" accent="green" value={moneyValue(data.trading.revenue)} trend={data.trading.revenueTrend} comparison={data.trading.revenueComparison} comparisonMeaning="versus yesterday">
-          <span>Net Shopify revenue</span><span>{stateLabel(data.trading.revenue) ?? "Today"}</span>
+          <div className="cc-revenue-support">
+            <div className="cc-revenue-today"><span>Net Shopify revenue</span><span>{stateLabel(data.trading.revenue) ?? "Today"}</span></div>
+            <div className="cc-calendar-revenue" aria-label="Calendar net Shopify revenue">
+              <MetricRow label="This week" value={data.trading.calendarRevenue.week} formatter={(v) => formatMoney(v as CockpitMoney)} />
+              <MetricRow label="This month" value={data.trading.calendarRevenue.month} formatter={(v) => formatMoney(v as CockpitMoney)} />
+              <MetricRow label="This year" value={data.trading.calendarRevenue.year} formatter={(v) => formatMoney(v as CockpitMoney)} />
+              <p>Europe/London · Partial / in progress</p>
+            </div>
+          </div>
         </KpiCard>
         <KpiCard eyebrow="Orders Today" icon="orders" accent="gold" value={numberValue(data.trading.orders)} trend={data.trading.orderTrend} comparison={data.trading.orderComparison} comparisonMeaning="versus yesterday">
           <span>Units {numberValue(data.trading.units)}</span><span>AOV {moneyValue(data.trading.averageOrderValue)}</span>
@@ -298,6 +306,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 
 function CommandCentreCockpitStyles() {
   return <style>{`
+    .cc-revenue-support{display:grid;width:100%;min-width:0;gap:10px}.cc-revenue-today{display:flex;justify-content:space-between;gap:8px}.cc-calendar-revenue{min-width:0;border-top:1px solid rgba(255,255,255,.07);padding-top:3px}.cc-calendar-revenue .cc-metric-row{align-items:baseline;flex-wrap:wrap;gap:4px 12px;padding:6px 0;font-size:12px}.cc-calendar-revenue .cc-metric-row strong{margin-left:auto;overflow-wrap:anywhere}.cc-calendar-revenue p{margin:7px 0 0;color:#9fa7a4;font-size:11px;line-height:1.35}
     .cc-page{--cc-text-xs:11px;--cc-text-sm:12px;--cc-text-md:14px;--cc-text-lg:16px;--cc-card-padding:18px;--cc-panel-gap:14px;--cc-row-space:11px;min-width:0;min-height:calc(100vh - 72px);padding:26px 30px 20px;color:#f4f2ec;background:radial-gradient(circle at 48% -10%,rgba(75,124,148,.075),transparent 38%),radial-gradient(circle at 70% 26%,rgba(164,83,222,.035),transparent 31%)}
     .cc-page-header{display:flex;align-items:end;justify-content:space-between;margin-bottom:18px}.cc-page-header p,.cc-panel-heading p,.cc-feed header p{display:flex;align-items:center;gap:8px;margin:0 0 5px;color:#f0bd36;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.cc-page-header h1{margin:0;font-size:34px;line-height:1.08}.cc-page-header>div>span{color:#b3b8b7;font-size:14px}.cc-pulse{min-width:220px;padding:14px 18px;border:1px solid rgba(222,176,57,.28);border-radius:10px;background:linear-gradient(145deg,#121716,#0a0e0d);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}.cc-pulse>span,.cc-pulse small{display:block;color:#9da39f;font-size:12px}.cc-pulse strong{display:block;margin:4px 0;color:#fff;font-size:22px}.cc-pulse.is-critical strong{color:#ff7474}.cc-pulse.is-attention strong,.cc-pulse.is-watch strong{color:#e3b43e}.cc-pulse.is-healthy strong{color:#58d27d}
     .cc-card{border:1px solid rgba(150,166,162,.16);border-radius:10px;background:linear-gradient(145deg,rgba(19,25,25,.98),rgba(10,14,14,.99));box-shadow:0 12px 30px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.018)}

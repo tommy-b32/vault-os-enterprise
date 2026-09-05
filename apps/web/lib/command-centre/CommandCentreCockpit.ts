@@ -2,6 +2,7 @@ import type { BusinessActivityEvent } from "@/lib/business/BusinessActivityRepos
 import type { CommercialDecisionTimelineResult } from "@/lib/brain/CommercialDecisionTimeline";
 import type { ExecutiveBriefing } from "@/lib/brain/ExecutiveIntelligenceEngine";
 import type { InventorySyncStatus } from "@/lib/inventory/InventoryFreshness";
+import type { ShopifyCalendarRevenue } from "@/lib/business/ShopifyTradingRepository";
 
 export type CockpitValue<T> =
   | { state: "available" | "stale"; value: T; updatedAt: string | null }
@@ -66,6 +67,7 @@ export type CommandCentreCockpitData = {
   executiveBriefing: ExecutiveBriefing;
   trading: {
     revenue: CockpitValue<CockpitMoney>;
+    calendarRevenue: Record<"week" | "month" | "year", CockpitValue<CockpitMoney>>;
     orders: CockpitValue<number>;
     units: CockpitValue<number>;
     averageOrderValue: CockpitValue<CockpitMoney>;
@@ -140,6 +142,26 @@ export const unavailable = <T>(): CockpitValue<T> => ({
   value: null,
   updatedAt: null,
 });
+
+export function createCalendarRevenueValues(
+  summary: ShopifyCalendarRevenue | null,
+  updatedAt: string | null,
+  stale: boolean,
+  fallbackCurrency: string | null,
+): CommandCentreCockpitData["trading"]["calendarRevenue"] {
+  const currency = fallbackCurrency ?? summary?.year?.currency ?? summary?.month?.currency ?? null;
+  const value = (period: "week" | "month" | "year"): CockpitValue<CockpitMoney> => {
+    const total = summary?.[period];
+    const periodCurrency = total?.currency ?? currency;
+    if (!total || !updatedAt || !periodCurrency || !Number.isFinite(total.netRevenue)) return unavailable();
+    return {
+      state: stale ? "stale" : "available",
+      value: { amount: total.netRevenue, currency: periodCurrency },
+      updatedAt,
+    };
+  };
+  return { week: value("week"), month: value("month"), year: value("year") };
+}
 
 export const notConnected = <T>(): CockpitValue<T> => ({
   state: "not_connected",

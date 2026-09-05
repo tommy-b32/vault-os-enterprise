@@ -11,6 +11,12 @@ export type ShopifyTradingRange = {
   to: string;
 };
 
+export type ShopifyCalendarRevenue = Record<"week" | "month" | "year", {
+  range: ShopifyTradingRange;
+  netRevenue: number;
+  currency: string | null;
+} | null>;
+
 export type ShopifyTodaySummary = {
   range: ShopifyTradingRange;
   currency: string | null;
@@ -185,6 +191,19 @@ function getSevenDayRange(now = new Date()): ShopifyTradingRange {
   };
 }
 
+export function getCalendarRevenueRanges(now = new Date()) {
+  const today = getZonedParts(now);
+  const weekday = new Date(Date.UTC(today.year, today.month - 1, today.day)).getUTCDay();
+  const monday = shiftCalendarDay(today, -((weekday + 6) % 7));
+  const to = now.toISOString();
+
+  return {
+    week: { from: getZonedMidnight(monday.year, monday.month, monday.day).toISOString(), to },
+    month: { from: getZonedMidnight(today.year, today.month, 1).toISOString(), to },
+    year: { from: getZonedMidnight(today.year, 1, 1).toISOString(), to },
+  };
+}
+
 function getCurrency(rows: Array<{ currency: string }>): string | null {
   const currencies = new Set(rows.map((row) => row.currency));
 
@@ -218,8 +237,9 @@ function formatCalendarDate(parts: {
 
 async function getOrdersInRange(
   range: ShopifyTradingRange,
+  page?: { offset: number; size: number },
 ): Promise<OrderSummaryRow[]> {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("vault_shopify_orders")
     .select(`
       id,
@@ -234,14 +254,52 @@ async function getOrdersInRange(
     .is("cancelled_at", null)
     .eq("metadata->>test", false);
 
+  if (page) {
+    query = query.order("shopify_created_at").order("id")
+      .range(page.offset, page.offset + page.size - 1);
+  }
+  const { data, error } = await query;
+
   if (error) {
     throw new Error(`Unable to read canonical Shopify orders: ${error.message}`);
+  }
+
+  if (page && data === null) {
+    throw new Error("Canonical Shopify order data is unavailable");
   }
 
   return (data ?? []) as OrderSummaryRow[];
 }
 
 export const ShopifyTradingRepository = {
+  async getCalendarRevenue(now = new Date()): Promise<ShopifyCalendarRevenue> {
+    const ranges = getCalendarRevenueRanges(now);
+    const summary = async (range: ShopifyTradingRange) => {
+      // Page every period: a year can exceed the database API's row limit.
+      const orders: OrderSummaryRow[] = [];
+      const size = 500;
+      for (let offset = 0; ; offset += size) {
+        const page = await getOrdersInRange(range, { offset, size });
+        orders.push(...page);
+        if (page.length < size) break;
+      }
+      const netRevenue = orders.reduce((total, order) => {
+        if (order.net_revenue === null || order.net_revenue === undefined || order.net_revenue === "") {
+          throw new Error("Canonical Shopify net revenue is unavailable");
+        }
+        // Stored net revenue already reflects refunds, exactly as in today's summary.
+        return total + numberFromDatabase(order.net_revenue);
+      }, 0);
+      return { range, netRevenue, currency: getCurrency(orders) };
+    };
+    const [week, month, year] = await Promise.all([
+      summary(ranges.week).catch(() => null),
+      summary(ranges.month).catch(() => null),
+      summary(ranges.year).catch(() => null),
+    ]);
+    return { week, month, year };
+  },
+
   async getLatestSyncAt(): Promise<string | null> {
     const { data: syncRun, error: syncRunError } = await supabaseAdmin
       .from("vault_shopify_order_sync_runs")

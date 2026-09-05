@@ -9,6 +9,7 @@ import { StorefrontFunnelRepository } from "@/lib/business/StorefrontFunnelRepos
 import { ShopifyTradingRepository } from "@/lib/business/ShopifyTradingRepository";
 import { ShopifyAnalyticsRepository } from "@/lib/business/ShopifyAnalyticsRepository";
 import {
+  createCalendarRevenueValues,
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
   limitFeed,
@@ -36,7 +37,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, calendarRevenue] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -52,6 +53,9 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     StorefrontFunnelRepository.getToday().catch(() => null),
     ShopifyTradingRepository.getOperationsSnapshot().catch(() => null),
     ShopifyAnalyticsRepository.getSnapshot().catch(() => null),
+    business.trading.data
+      ? ShopifyTradingRepository.getCalendarRevenue(new Date(business.generatedAt)).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const trading = business.trading.data;
@@ -251,6 +255,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     executiveBriefing,
     trading: {
       revenue: trading ? tradingMoney(trading.netRevenue) : unavailableMoney,
+      calendarRevenue: createCalendarRevenueValues(calendarRevenue, tradingAt, tradingStale, tradingCurrency),
       orders: trading ? available(trading.orderCount, tradingAt, tradingStale) : unavailable(),
       units: trading ? available(trading.itemsSold, tradingAt, tradingStale) : unavailable(),
       averageOrderValue: trading ? tradingMoney(trading.averageOrderValue) : unavailableMoney,
