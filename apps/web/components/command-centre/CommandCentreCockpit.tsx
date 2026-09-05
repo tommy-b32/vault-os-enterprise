@@ -36,12 +36,6 @@ function stateLabel(value: CockpitValue<unknown>): string | null {
   return value.state === "stale" ? "Stale" : null;
 }
 
-function sourceStateLabel(value: CockpitValue<unknown>): string {
-  if (value.state === "available") return "Live consented events";
-  if (value.state === "stale") return "Stale consented events";
-  return display(value);
-}
-
 function KpiCard({
   eyebrow,
   icon,
@@ -191,12 +185,6 @@ export function CommandCentreCockpit({ data }: DataProps) {
         </KpiCard>
         <KpiCard eyebrow="Orders Today" icon="orders" accent="gold" value={numberValue(data.trading.orders)} trend={data.trading.orderTrend} comparison={data.trading.orderComparison} comparisonMeaning="versus yesterday">
           <span>Units {numberValue(data.trading.units)}</span><span>AOV {moneyValue(data.trading.averageOrderValue)}</span>
-        </KpiCard>
-        <KpiCard eyebrow="Add to Cart Today" icon="target" accent="blue" value={numberValue(data.website.addToCartToday)}>
-          <span>Tracked storefront sessions</span><span>{sourceStateLabel(data.website.addToCartToday)}</span>
-        </KpiCard>
-        <KpiCard eyebrow="Abandoned Checkouts" icon="orders" accent="pink" value={numberValue(data.website.abandonedCheckouts)}>
-          <span>Distinct checkout sessions</span><span>{sourceStateLabel(data.website.abandonedCheckouts)}</span>
         </KpiCard>
         <KpiCard eyebrow="Website Traffic" icon="analytics" accent="violet" value={numberValue(shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.sessions : data.website.estimatedTotalVisitors)} valueLabel={shopifyAnalyticsAvailable ? "Human Shopify sessions" : "Estimated visitors"} trend={shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.sessionTrend : data.website.visitorTrend} secondaryValue={numberValue(shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.visitors : data.website.sessions)} secondaryLabel={shopifyAnalyticsAvailable ? "Online store visitors" : "Tracked sessions"} tertiaryValue={percentValue(shopifyAnalyticsAvailable ? data.website.shopifyAnalytics.conversionRate : data.website.conversionRate)} tertiaryLabel={shopifyAnalyticsAvailable ? "Human-session conversion" : "Tracked conversion"}>
           {shopifyAnalyticsAvailable ? <div className="cc-shopify-analytics">
