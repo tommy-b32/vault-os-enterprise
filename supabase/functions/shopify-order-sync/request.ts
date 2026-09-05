@@ -17,6 +17,9 @@ function timestamp(value: unknown, field: string): string {
   ) {
     throw new Error(`${field} must be a valid ISO-8601 timestamp`);
   }
+  if (new Date(`${value.slice(0, 10)}T00:00:00Z`).toISOString().slice(0, 10) !== value.slice(0, 10) || Number(value.slice(11, 13)) > 23) {
+    throw new Error(`${field} must use a valid calendar date and hour`);
+  }
 
   return value;
 }
@@ -39,6 +42,12 @@ export function parseOrderSyncRequest(value: unknown): OrderSyncRequest {
   const createdBefore = timestamp(body.created_before, "created_before");
   if (Date.parse(createdFrom) >= Date.parse(createdBefore)) {
     throw new Error("created_from must be earlier than created_before");
+  }
+  if (Date.parse(createdBefore) - Date.parse(createdFrom) > 7 * 24 * 60 * 60 * 1000) {
+    throw new Error("Historical requests must span at most seven days");
+  }
+  if (Date.parse(createdBefore) > Date.now()) {
+    throw new Error("Historical created_before cannot be in the future");
   }
 
   return { mode: "historical_backfill", createdFrom, createdBefore };
