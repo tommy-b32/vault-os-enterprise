@@ -87,7 +87,7 @@ export const CashLedgerRepository = {
       .eq("account_id", account.id)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
-      .limit(7);
+      .limit(9);
     if (error || data === null) throw new Error("Cash ledger unavailable");
     return {
       currency: "GBP",

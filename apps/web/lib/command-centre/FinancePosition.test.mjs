@@ -50,17 +50,17 @@ function ledger(entries = [], fail = false) {
   return { ...compile(ledgerSource, { "server-only": {}, "@/lib/supabase-admin": { supabaseAdmin: client }, "@/lib/business/CashLedgerRules": rules }), calls };
 }
 
-test("cash ledger requests latest seven additions by created time, excludes other accounts, and preserves signed pence", async () => {
-  const entries = Array.from({ length: 8 }, (_,i) => ({ id: String(i), account_id: "business", description: "Entry " + i,
-    created_at: new Date(Date.UTC(2026,8,5,i)).toISOString(), transaction_date: "2026-01-01", amount_gbp: i === 7 ? "70.00" : i === 6 ? "-125.36" : "0" }));
-  const { CashLedgerRepository: repo, calls } = ledger([...entries, { ...entries[7], id: "other", account_id: "other" }]);
+test("cash ledger requests latest nine additions by created time, excludes other accounts, and preserves signed pence", async () => {
+  const entries = Array.from({ length: 10 }, (_,i) => ({ id: String(i), account_id: "business", description: "Entry " + i,
+    created_at: new Date(Date.UTC(2026,8,5,i)).toISOString(), transaction_date: "2026-01-01", amount_gbp: i === 9 ? "70.00" : i === 8 ? "-125.36" : "0" }));
+  const { CashLedgerRepository: repo, calls } = ledger([...entries, { ...entries[9], id: "other", account_id: "other" }]);
   const result = await repo.getRecentEntries();
-  assert.deepEqual(result.transactions.map(e=>e.id), ["7","6","5","4","3","2","1"]);
+  assert.deepEqual(result.transactions.map(e=>e.id), ["9","8","7","6","5","4","3","2","1"]);
   assert.equal(result.currency, "GBP");
   assert.equal(result.transactions[0].amountPence, 7000);
   assert.equal(result.transactions[1].amountPence, -12536);
   assert.equal(result.transactions[2].amountPence, 0);
-  assert.equal(calls[1].limit, 7);
+  assert.equal(calls[1].limit, 9);
   assert.deepEqual(calls[1].sorting, [["created_at", false], ["id", false]]);
   assert.deepEqual((await ledger().CashLedgerRepository.getRecentEntries()).transactions, []);
   assert.equal((await ledger(entries.slice(0,2)).CashLedgerRepository.getRecentEntries()).transactions.length, 2);
@@ -112,7 +112,7 @@ test("existing Payments API reader uses net DEPOSIT data and fails closed on inc
   await assert.rejects(failure.fetchShopifyPaymentsSnapshot(),/ACCESS_DENIED/);
 });
 
-test("Finance card keeps metrics and renders seven signed ledger rows with graceful states", () => {
+test("Finance card keeps metrics and renders nine signed ledger rows with graceful states", () => {
   const { CommandCentreCockpit } = compile(componentSource, {
     "next/link": ({ children, ...props }) =>
       React.createElement("a", props, children),
@@ -201,7 +201,7 @@ test("Finance card keeps metrics and renders seven signed ledger rows with grace
     ledgerCash:value(3343.65), purchasingPower:value(100), protectedReserve:value(200), committedPurchaseOrders:value(300),
     todayPayout:createTodayPayoutValue(payout("SCHEDULED"),sourceStatus,now),
   };
-  const rows = Array.from({length:8},(_,i)=>({id:String(i),description:"Ledger entry " + i,amountPence:i===0?7000:i===1?-12536:0,createdAt:i===0?"2026-09-07T10:00:00Z":"2026-09-04T00:00:00Z"}));
+  const rows = Array.from({length:10},(_,i)=>({id:String(i),description:"Ledger entry " + i,amountPence:i===0?7000:i===1?-12536:0,createdAt:i===0?"2026-09-07T10:00:00Z":"2026-09-04T00:00:00Z"}));
   for (const [state,transactions,message] of [["available",rows,null],["available",rows.slice(0,2),null],["stale",rows,"Stale"],["available",[],"No recent ledger entries"],["unavailable",null,"Cash ledger unavailable"]]) {
     data.finance.recentLedger = { state,value:transactions?{currency:"GBP",transactions}:null,updatedAt:at };
     const html=renderToStaticMarkup(React.createElement(CommandCentreCockpit,{data}));
@@ -211,8 +211,8 @@ test("Finance card keeps metrics and renders seven signed ledger rows with grace
     for(const amount of ["100","200","300"]) assert.ok(card.includes("\u00a3"+amount));
     assert.ok(card.includes("Expected today"));assert.ok(card.includes("\u00a3612.40"));
     if(message) assert.ok(card.includes(message));
-    assert.equal((card.match(/<li>/g)??[]).length,Math.min(transactions?.length??0,7));
-    assert.ok(!card.includes("Ledger entry 7"));
+    assert.equal((card.match(/<li>/g)??[]).length,Math.min(transactions?.length??0,9));
+    assert.ok(!card.includes("Ledger entry 9"));
     if(transactions?.length) {
       assert.ok(card.includes('class="is-positive">+\u00a370.00'));
       assert.ok(card.includes('class="is-negative">-\u00a3125.36'));
