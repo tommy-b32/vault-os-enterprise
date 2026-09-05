@@ -117,7 +117,9 @@ Deno.serve(async (request: Request) => {
     let linesSynced = 0;
 
     for (const order of orders) {
-      const result = await upsertShopifyOrder(supabase, order);
+      const result = await upsertShopifyOrder(supabase, order, {
+        omitCustomerData: requestInput.mode === "historical_backfill",
+      });
       linesSynced += result.linesSynced;
     }
 

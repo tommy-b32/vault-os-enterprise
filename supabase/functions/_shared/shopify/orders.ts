@@ -49,8 +49,8 @@ export type ShopifyOrderNode = {
   totalRefundedSet: MoneyBag;
   totalPriceSet: MoneyBag;
   currentTotalPriceSet: MoneyBag;
-  email: string | null;
-  customer: {
+  email?: string | null;
+  customer?: {
     id: string;
     displayName: string;
   } | null;
@@ -100,8 +100,6 @@ const ORDER_FIELDS = `
   totalRefundedSet { shopMoney { amount currencyCode } }
   totalPriceSet { shopMoney { amount currencyCode } }
   currentTotalPriceSet { shopMoney { amount currencyCode } }
-  email
-  customer { id displayName }
   test
   tags
   lineItems(first: 250) {
@@ -147,10 +145,10 @@ function money(value: MoneyBag | null): number {
   return amount;
 }
 
-function assertCompleteOrder(order: ShopifyOrderNode): void {
+function assertCompleteOrder(order: ShopifyOrderNode, historical = false): void {
   if (order.lineItems.pageInfo.hasNextPage) {
     throw new Error(
-      `Shopify order ${order.name} exceeds the supported 250 line-item limit`,
+      `Shopify order exceeds the supported ${historical ? 50 : 250} line-item limit`,
     );
   }
 
@@ -160,7 +158,7 @@ function assertCompleteOrder(order: ShopifyOrderNode): void {
     )
   ) {
     throw new Error(
-      `Shopify order ${order.name} has a refund exceeding the supported 100 line-item limit`,
+      `Shopify order has a refund exceeding the supported ${historical ? 25 : 100} line-item limit`,
     );
   }
 }
@@ -206,21 +204,37 @@ export async function fetchHistoricalShopifyOrders(
   createdBefore: string,
 ): Promise<ShopifyOrderNode[]> {
   return fetchShopifyOrders({
-    query: `created_at:>=${createdFrom} created_at:<${createdBefore}`,
+    query: `created_at:>='${createdFrom}' created_at:<'${createdBefore}'`,
     sortKey: "CREATED_AT",
+    historical: true,
   });
 }
 
 async function fetchShopifyOrders({
   query,
   sortKey,
+  historical = false,
 }: {
   query: string;
   sortKey: "UPDATED_AT" | "CREATED_AT";
+  historical?: boolean;
 }): Promise<ShopifyOrderNode[]> {
   const orders: ShopifyOrderNode[] = [];
   let cursor: string | null = null;
   let page = 0;
+  const deadline = historical ? Date.now() + 60_000 : undefined;
+  const seenCursors = new Set<string>();
+
+  if (historical) {
+    const access = await shopifyGraphQL<{ currentAppInstallation: { accessScopes: Array<{ handle: string }> } }>(
+      "query VaultHistoricalAccess { currentAppInstallation { accessScopes { handle } } }",
+      {}, deadline,
+    );
+    const scopes = access.currentAppInstallation.accessScopes.map((scope) => scope.handle);
+    if (!scopes.includes("read_orders") || !scopes.includes("read_all_orders")) {
+      throw new Error("Historical Shopify access requires read_orders and read_all_orders on the active token");
+    }
+  }
 
   while (true) {
     const data: OrderConnection =
@@ -232,19 +246,20 @@ async function fetchShopifyOrders({
             query: $query
             sortKey: $sortKey
           ) {
-            nodes { ${ORDER_FIELDS} }
+            nodes { ${historical ? ORDER_FIELDS.replace("lineItems(first: 250)", "lineItems(first: 50)").replace("refundLineItems(first: 100)", "refundLineItems(first: 25)") : ORDER_FIELDS} ${historical ? "" : "email customer { id displayName }"} }
             pageInfo { hasNextPage endCursor }
           }
         }`,
         {
-          first: ORDER_PAGE_SIZE,
+          first: historical ? 1 : ORDER_PAGE_SIZE,
           after: cursor,
           query,
           sortKey,
         },
+        deadline,
       );
 
-    data.orders.nodes.forEach(assertCompleteOrder);
+    data.orders.nodes.forEach((order) => assertCompleteOrder(order, historical));
     orders.push(...data.orders.nodes);
     page += 1;
 
@@ -252,13 +267,14 @@ async function fetchShopifyOrders({
       return orders;
     }
 
-    if (page >= MAX_ORDER_PAGES || !data.orders.pageInfo.endCursor) {
+    if (page >= MAX_ORDER_PAGES || !data.orders.pageInfo.endCursor || seenCursors.has(data.orders.pageInfo.endCursor)) {
       throw new Error(
         "Shopify order pagination exceeded its safety limit",
       );
     }
 
     cursor = data.orders.pageInfo.endCursor;
+    seenCursors.add(cursor);
   }
 }
 
@@ -270,7 +286,7 @@ export async function fetchShopifyOrderById(
     : `gid://shopify/Order/${shopifyOrderId}`;
   const data = await shopifyGraphQL<SingleOrderResponse>(
     `query VaultOrder($id: ID!) {
-      order(id: $id) { ${ORDER_FIELDS} }
+      order(id: $id) { ${ORDER_FIELDS} email customer { id displayName } }
     }`,
     { id },
   );
@@ -285,6 +301,7 @@ export async function fetchShopifyOrderById(
 export async function upsertShopifyOrder(
   supabase: SupabaseClient,
   order: ShopifyOrderNode,
+  options: { omitCustomerData?: boolean } = {},
 ): Promise<{ orderId: string; linesSynced: number }> {
   assertCompleteOrder(order);
 
@@ -311,9 +328,11 @@ export async function upsertShopifyOrder(
         refunds: money(order.totalRefundedSet),
         gross_total: money(order.totalPriceSet),
         net_revenue: money(order.currentTotalPriceSet),
-        shopify_customer_id: order.customer?.id ?? null,
-        customer_name: order.customer?.displayName ?? null,
-        customer_email: order.email,
+        ...(options.omitCustomerData ? {} : {
+          shopify_customer_id: order.customer?.id ?? null,
+          customer_name: order.customer?.displayName ?? null,
+          customer_email: order.email ?? null,
+        }),
         metadata: {
           test: order.test,
           tags: order.tags,
