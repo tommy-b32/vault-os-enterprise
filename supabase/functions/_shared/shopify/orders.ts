@@ -204,7 +204,7 @@ export async function fetchHistoricalShopifyOrders(
   createdBefore: string,
 ): Promise<ShopifyOrderNode[]> {
   return fetchShopifyOrders({
-    query: `created_at:>=${createdFrom} created_at:<${createdBefore}`,
+    query: `created_at:>='${createdFrom}' created_at:<'${createdBefore}'`,
     sortKey: "CREATED_AT",
     historical: true,
   });

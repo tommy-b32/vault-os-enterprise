@@ -39,7 +39,7 @@ test("historical mode accepts a complete ISO-8601 range", () => {
 
 test("historical query uses an exclusive created-before boundary and CREATED_AT sorting", async () => {
   const source = await readFile(ordersUrl, "utf8");
-  assert.match(source, /`created_at:>=\$\{createdFrom\} created_at:<\$\{createdBefore\}`/);
+  assert.match(source, /`created_at:>='\$\{createdFrom\}' created_at:<'\$\{createdBefore\}'`/);
   assert.match(source, /sortKey: "CREATED_AT"/);
 });
 
@@ -120,7 +120,7 @@ test("historical pages are small, follow cursors, preserve bounds and exclude cu
   assert.match(calls[0].query, /lineItems\(first: 50\)/);
   assert.match(calls[0].query, /refundLineItems\(first: 25\)/);
   assert.equal(calls[1].variables.after, "cursor-1");
-  assert.equal(calls[0].variables.query, "created_at:>=2026-05-01T00:00:00Z created_at:<2026-05-08T00:00:00Z");
+  assert.equal(calls[0].variables.query, "created_at:>='2026-05-01T00:00:00Z' created_at:<'2026-05-08T00:00:00Z'");
   assert.equal(calls[0].deadline, calls[1].deadline);
   assert.doesNotMatch(calls[0].query, /\bemail\b|\bcustomer\b/);
   await orders.fetchRecentShopifyOrders("2026-08-01T00:00:00Z");
