@@ -139,6 +139,14 @@ function Snapshot({ title, subtitle, icon, href, children }: {
   );
 }
 
+function FulfilmentDot({ status }: { status: string | null }) {
+  const completed = status === "FULFILLED";
+  const awaiting = status !== null && ["UNFULFILLED", "PARTIALLY_FULFILLED", "ON_HOLD", "SCHEDULED"].includes(status);
+  const tone = completed ? "completed" : awaiting ? "awaiting" : "unknown";
+  const label = completed ? "Completed" : awaiting ? "Awaiting fulfilment" : "Fulfilment status unknown";
+  return <span className={`cc-fulfilment-dot is-${tone}`} role="img" aria-label={label} title={label} />;
+}
+
 function relativeTime(value: string, now: string): string {
   const minutes = Math.max(0, Math.floor((Date.parse(now) - Date.parse(value)) / 60_000));
   if (!Number.isFinite(minutes)) return "Time unavailable";
@@ -201,7 +209,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
               {data.trading.recentOrders?.value ? data.trading.recentOrders.value.length ? (
                 <ul>{data.trading.recentOrders.value.slice(0, 3).map((order) => (
                   <li key={order.id}>
-                    <Link href={order.destination}>{order.displayName}</Link>
+                    <Link href={order.destination}><FulfilmentDot status={order.fulfilmentStatus} />{order.displayName}</Link>
                     <span>{order.quantity === null ? "Items unavailable" : `${order.quantity} ${order.quantity === 1 ? "item" : "items"}`}</span>
                     <strong>{formatMoney({ amount: order.netRevenue, currency: order.currency })}</strong>
                     <time dateTime={order.createdAt}>{relativeTime(order.createdAt, data.generatedAt)}</time>
@@ -323,6 +331,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 
 function CommandCentreCockpitStyles() {
   return <style>{`
+    .cc-fulfilment-dot{display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;vertical-align:middle;background:#69716e}.cc-fulfilment-dot.is-completed{background:#48da7d}.cc-fulfilment-dot.is-awaiting{background:#54c8f3}
     .cc-orders-support{display:grid;width:100%;min-width:0;gap:10px}.cc-orders-today{display:flex;justify-content:space-between;gap:8px}.cc-recent-orders{border-top:1px solid rgba(255,255,255,.07);padding-top:10px;min-width:0}.cc-recent-orders h3{display:flex;justify-content:space-between;margin:0 0 7px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#9fa7a4}.cc-recent-orders h3 small{font-size:10px;font-weight:400}.cc-recent-orders ul{list-style:none;padding:0;margin:0;display:grid;gap:7px}.cc-recent-orders li{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:8px;align-items:baseline;font-size:11px}.cc-recent-orders a{color:#d8dcda;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-recent-orders strong{color:#d8dcda;font-weight:600}.cc-recent-orders time{text-align:right;white-space:nowrap}.cc-recent-orders p{margin:0}
     .cc-revenue-support{display:grid;width:100%;min-width:0;gap:10px}.cc-revenue-today{display:flex;justify-content:space-between;gap:8px}.cc-calendar-revenue{min-width:0;border-top:1px solid rgba(255,255,255,.07);padding-top:3px}.cc-calendar-revenue .cc-metric-row{align-items:baseline;flex-wrap:wrap;gap:4px 12px;padding:6px 0;font-size:12px}.cc-calendar-revenue .cc-metric-row strong{margin-left:auto;overflow-wrap:anywhere}.cc-calendar-revenue p{margin:7px 0 0;color:#9fa7a4;font-size:11px;line-height:1.35}
     .cc-page{--cc-text-xs:11px;--cc-text-sm:12px;--cc-text-md:14px;--cc-text-lg:16px;--cc-card-padding:18px;--cc-panel-gap:14px;--cc-row-space:11px;min-width:0;min-height:calc(100vh - 72px);padding:26px 30px 20px;color:#f4f2ec;background:radial-gradient(circle at 48% -10%,rgba(75,124,148,.075),transparent 38%),radial-gradient(circle at 70% 26%,rgba(164,83,222,.035),transparent 31%)}

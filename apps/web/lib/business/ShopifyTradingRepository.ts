@@ -32,6 +32,7 @@ export type ShopifyTodaySummary = {
 export type ShopifyRecentOrderSummary = {
   id: string;
   displayName: string;
+  fulfilmentStatus: string | null;
   quantity: number | null;
   netRevenue: number;
   currency: string;
@@ -435,7 +436,7 @@ export const ShopifyTradingRepository = {
   async getRecentOrderSummaries(): Promise<ShopifyRecentOrderSummary[]> {
     const { data: orders, error } = await supabaseAdmin
       .from("vault_shopify_orders")
-      .select("id, order_name, order_number, net_revenue, currency, shopify_created_at")
+      .select("id, order_name, order_number, net_revenue, currency, shopify_created_at, fulfilment_status")
       .eq("source", "shopify")
       .eq("metadata->>test", false)
       .is("cancelled_at", null)
@@ -469,6 +470,7 @@ export const ShopifyTradingRepository = {
       return {
         id: order.id,
         displayName: order.order_name || (order.order_number ? "#" + order.order_number : "Order"),
+        fulfilmentStatus: order.fulfilment_status,
         quantity: quantities.get(order.id) ?? null,
         netRevenue: numberFromDatabase(order.net_revenue),
         currency: order.currency,

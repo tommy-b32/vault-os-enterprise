@@ -59,7 +59,7 @@ function repository(orders = [], lines = [], failTable = null) {
 }
 const order = (id, overrides = {}) => ({ id, source: "shopify", order_name: "#" + id, order_number: id,
   net_revenue: "70", refunds: "30", currency: "GBP", shopify_created_at: "2026-09-05T03:00:00Z",
-  cancelled_at: null, "metadata->>test": false, ...overrides });
+  fulfilment_status: null, cancelled_at: null, "metadata->>test": false, ...overrides });
 
 test("latest three eligible orders use Shopify creation time, canonical net revenue and summed units", async () => {
   const { ShopifyTradingRepository: repo, calls } = repository([
@@ -188,6 +188,25 @@ test("recent orders render inside Orders Today with links, units, money, time an
     destination: "/orders/" + id, quantity: index === 1 ? 1 : 2, netRevenue: 70, currency: "GBP",
     createdAt: index === 0 ? "2026-09-05T03:00:00Z" : "2026-09-04T00:00:00Z" }));
   const render = () => renderToStaticMarkup(React.createElement(CommandCentreCockpit, { data }));
+  for (const [status, tone, label] of [
+    ["FULFILLED", "completed", "Completed"],
+    ["UNFULFILLED", "awaiting", "Awaiting fulfilment"],
+    ["PARTIALLY_FULFILLED", "awaiting", "Awaiting fulfilment"],
+    ["ON_HOLD", "awaiting", "Awaiting fulfilment"],
+    ["SCHEDULED", "awaiting", "Awaiting fulfilment"],
+    [null, "unknown", "Fulfilment status unknown"],
+    ["UNEXPECTED", "unknown", "Fulfilment status unknown"],
+    ["", "unknown", "Fulfilment status unknown"],
+  ]) {
+    data.trading.recentOrders = { state: "available", value: [{ ...recent[0], fulfilmentStatus: status }], updatedAt: at };
+    const html = render();
+    assert.ok(html.includes(`class="cc-fulfilment-dot is-${tone}" role="img" aria-label="${label}" title="${label}"`));
+    assert.ok(html.includes('href="/orders/1250"'));
+    assert.ok(html.includes("#1250"));
+  }
+  assert.match(componentSource, /\.cc-fulfilment-dot\.is-completed\{background:#48da7d\}/);
+  assert.match(componentSource, /\.cc-fulfilment-dot\.is-awaiting\{background:#54c8f3\}/);
+  assert.match(componentSource, /\.cc-fulfilment-dot\{[^}]*background:#69716e/);
   for (const [state, rows, message] of [["available", recent, null], ["stale", recent, "Stale"], ["available", [], "No recent orders"], ["unavailable", null, "Recent orders unavailable"]]) {
     data.trading.recentOrders = { state, value: rows, updatedAt: at };
     const html = render();
@@ -213,4 +232,14 @@ test("loader isolates recent-order failures and links use the existing canonical
   assert.ok(loader.includes('destination: `/orders/${encodeURIComponent(order.id)}`'));
   const route = await readFile(new URL("../../app/orders/[id]/page.tsx", import.meta.url), "utf8");
   assert.match(route, /OrdersRepository.getById\(id\)/);
+});
+
+
+test("recent summaries select and preserve canonical fulfilment status unchanged", async () => {
+  for (const status of ["FULFILLED", "UNFULFILLED", "PARTIALLY_FULFILLED", "ON_HOLD", "SCHEDULED", null, "UNEXPECTED"]) {
+    const { ShopifyTradingRepository: repo, calls } = repository([order("1250", { fulfilment_status: status })]);
+    const [result] = await repo.getRecentOrderSummaries();
+    assert.equal(result.fulfilmentStatus, status);
+    assert.match(calls[0].fields, /\bfulfilment_status\b/);
+  }
 });
