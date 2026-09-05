@@ -20,7 +20,7 @@ type PaymentsResponse = {
     activated: boolean;
     defaultCurrency: string;
     balance: Money[];
-    payouts: { nodes: PayoutNode[] };
+    payouts: { nodes: PayoutNode[]; pageInfo: { hasNextPage: boolean } };
   } | null;
 };
 
@@ -41,7 +41,7 @@ export type SafeShopifyPaymentsSnapshot = {
   synchronizedAt: string;
 };
 
-const PAYMENTS_QUERY = `#graphql
+const PAYMENTS_QUERY = `
   query VaultShopifyPayments {
     shopifyPaymentsAccount {
       activated
@@ -51,6 +51,7 @@ const PAYMENTS_QUERY = `#graphql
         currencyCode
       }
       payouts(first: 20, reverse: true, sortKey: ISSUED_AT) {
+        pageInfo { hasNextPage }
         nodes {
           id
           issuedAt
@@ -97,11 +98,17 @@ function safePayout(payout: PayoutNode): SafeShopifyPayout {
 export async function fetchShopifyPaymentsSnapshot(
   now = new Date(),
 ): Promise<SafeShopifyPaymentsSnapshot> {
-  const data = await shopifyGraphQL<PaymentsResponse>(PAYMENTS_QUERY);
+  const data = await shopifyGraphQL<PaymentsResponse>(PAYMENTS_QUERY, {}, Date.now() + 30_000);
   const account = data.shopifyPaymentsAccount;
 
   if (!account) {
     throw new Error("Shopify Payments is unavailable for this store");
+  }
+
+  // Fail closed if the bounded page cannot establish complete coverage of today.
+  const oldest = account.payouts.nodes.at(-1);
+  if (account.payouts.pageInfo.hasNextPage && (!oldest || londonDate(oldest.issuedAt) >= londonDate(now))) {
+    throw new Error("Shopify Payments today coverage exceeds the bounded page");
   }
 
   const payouts = account.payouts.nodes

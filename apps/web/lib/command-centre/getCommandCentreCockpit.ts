@@ -1,5 +1,7 @@
 import "server-only";
 
+import { CashLedgerRepository } from "@/lib/business/CashLedgerRepository";
+
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import { ExecutiveIntelligenceEngine } from "@/lib/brain/ExecutiveIntelligenceEngine";
 import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecisionTimeline";
@@ -10,6 +12,7 @@ import { ShopifyTradingRepository } from "@/lib/business/ShopifyTradingRepositor
 import { ShopifyAnalyticsRepository } from "@/lib/business/ShopifyAnalyticsRepository";
 import {
   createCalendarRevenueValues,
+  createTodayPayoutValue,
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
   limitFeed,
@@ -37,7 +40,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, calendarRevenue, recentOrders] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, calendarRevenue, recentOrders, recentLedger] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -57,6 +60,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       ? ShopifyTradingRepository.getCalendarRevenue(new Date(business.generatedAt)).catch(() => null)
       : Promise.resolve(null),
     ShopifyTradingRepository.getRecentOrderSummaries().catch(() => null),
+    CashLedgerRepository.getRecentEntries().catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -320,6 +324,8 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       purchases: notConnected(),
     },
     finance: {
+      recentLedger: recentLedger ? available(recentLedger, business.generatedAt) : unavailable(),
+      todayPayout: createTodayPayoutValue(finance?.todayPayout ?? null, business.sourceStatuses.find((source) => source.source === "shopify-payments"), business.generatedAt),
       ledgerCash: financePosition(finance?.businessCash),
       purchasingPower: wallet
         ? available({ amount: wallet.available_purchasing_power_gbp, currency: "GBP" }, wallet.wallet_last_updated)

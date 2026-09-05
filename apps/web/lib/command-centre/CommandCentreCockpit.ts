@@ -1,3 +1,5 @@
+import type { CashLedgerRepository } from "@/lib/business/CashLedgerRepository";
+import type { ShopifyPaymentsPayout } from "@/lib/business/ShopifyPaymentsRepository";
 import type { BusinessActivityEvent } from "@/lib/business/BusinessActivityRepository";
 import type { CommercialDecisionTimelineResult } from "@/lib/brain/CommercialDecisionTimeline";
 import type { ExecutiveBriefing } from "@/lib/brain/ExecutiveIntelligenceEngine";
@@ -114,6 +116,8 @@ export type CommandCentreCockpitData = {
     purchases: CockpitValue<number>;
   };
   finance: {
+    recentLedger: CockpitValue<Awaited<ReturnType<typeof CashLedgerRepository.getRecentEntries>>>;
+    todayPayout: CockpitValue<{ label: string; money: CockpitMoney | null }>;
     ledgerCash: CockpitValue<CockpitMoney>;
     purchasingPower: CockpitValue<CockpitMoney>;
     protectedReserve: CockpitValue<CockpitMoney>;
@@ -319,4 +323,37 @@ export function deriveBusinessPulse({
   else state = "healthy";
 
   return { state, label: state.charAt(0).toUpperCase() + state.slice(1) };
+}
+
+
+export function createTodayPayoutValue(
+  payout: ShopifyPaymentsPayout | null,
+  source: { status: string; lastUpdatedAt: string | null } | undefined,
+  generatedAt: string,
+): CommandCentreCockpitData["finance"]["todayPayout"] {
+  const londonDate = (at: string) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(at));
+  if (!source || !["live", "stale"].includes(source.status) || !source.lastUpdatedAt ||
+      !Number.isFinite(Date.parse(source.lastUpdatedAt)) || !Number.isFinite(Date.parse(generatedAt)) ||
+      londonDate(source.lastUpdatedAt) !== londonDate(generatedAt)) return unavailable();
+  const age = Date.parse(generatedAt) - Date.parse(source.lastUpdatedAt);
+  if (age < 0) return unavailable();
+  const state = source.status === "stale" || age > 30 * 60_000 ? "stale" : "available";
+  const result = (label: string, money: CockpitMoney | null = null): CommandCentreCockpitData["finance"]["todayPayout"] => ({ state, value: { label, money }, updatedAt: source.lastUpdatedAt });
+  if (!payout) return result("No payout today");
+  if (!Number.isFinite(Date.parse(payout.issuedAt))) return unavailable();
+  if (londonDate(payout.issuedAt) !== londonDate(generatedAt)) return result("No payout today");
+  // The canonical Payments writer selects DEPOSIT payouts only; no order revenue is used.
+  if (!Number.isFinite(payout.amount) || payout.amount < 0 || !/^[A-Z]{3}$/.test(payout.currency)) return unavailable();
+  const money = { amount: payout.amount, currency: payout.currency };
+  switch (payout.status) {
+    case "SCHEDULED": return result("Expected today", money);
+    case "IN_TRANSIT": return result("Payout pending", money);
+    case "PAID": return result("Payout paid today", money);
+    case "FAILED": return result("Payout failed");
+    case "CANCELED": return result("Payout canceled");
+    case "ACTION_REQUIRED": return result("Payout needs attention");
+    default: return unavailable();
+  }
 }

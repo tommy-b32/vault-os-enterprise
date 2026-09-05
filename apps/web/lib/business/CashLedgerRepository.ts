@@ -79,6 +79,25 @@ function transactionTypeFor(
 }
 
 export const CashLedgerRepository = {
+  async getRecentEntries(): Promise<{ currency: CashLedgerSnapshot["currency"]; transactions: Array<Pick<CashLedgerEntry, "id" | "description" | "amountPence" | "createdAt">> }> {
+    const account = await getBusinessAccount();
+    const { data, error } = await supabaseAdmin
+      .from("vault_cash_transactions")
+      .select("id, description, amount_gbp, created_at")
+      .eq("account_id", account.id)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(7);
+    if (error || data === null) throw new Error("Cash ledger unavailable");
+    return {
+      currency: "GBP",
+      transactions: data.map((entry) => ({
+        id: entry.id, description: entry.description,
+        amountPence: poundsToPence(entry.amount_gbp), createdAt: entry.created_at,
+      })),
+    };
+  },
+
   async getSnapshot(limit = 20): Promise<CashLedgerSnapshot> {
     const account = await getBusinessAccount();
     const { data, error } = await supabaseAdmin

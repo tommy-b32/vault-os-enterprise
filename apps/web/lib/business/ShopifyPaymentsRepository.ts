@@ -40,6 +40,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function money(value: unknown): ShopifyPaymentsMoney {
   if (!isRecord(value)) throw new Error("Invalid Shopify Payments money data");
+  if (value.amount === null || value.amount === undefined || value.amount === "") throw new Error("Invalid Shopify Payments money data");
   const amount = Number(value.amount);
 
   if (!Number.isFinite(amount) || typeof value.currency !== "string") {
