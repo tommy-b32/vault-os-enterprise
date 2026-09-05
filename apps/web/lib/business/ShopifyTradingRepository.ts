@@ -196,12 +196,19 @@ export function getCalendarRevenueRanges(now = new Date()) {
   const weekday = new Date(Date.UTC(today.year, today.month - 1, today.day)).getUTCDay();
   const monday = shiftCalendarDay(today, -((weekday + 6) % 7));
   const to = now.toISOString();
+  const currentMonthStart = getZonedMidnight(today.year, today.month, 1).toISOString();
 
   return {
     week: { from: getZonedMidnight(monday.year, monday.month, monday.day).toISOString(), to },
     month: { from: getZonedMidnight(today.year, today.month, 1).toISOString(), to },
-    threeMonths: { from: getZonedMidnight(today.year, today.month - 3, 1).toISOString(), to },
-    sixMonths: { from: getZonedMidnight(today.year, today.month - 6, 1).toISOString(), to },
+    threeMonths: {
+      from: getZonedMidnight(today.year, today.month - 3, 1).toISOString(),
+      to: currentMonthStart,
+    },
+    sixMonths: {
+      from: getZonedMidnight(today.year, today.month - 6, 1).toISOString(),
+      to: currentMonthStart,
+    },
     year: { from: getZonedMidnight(today.year, 1, 1).toISOString(), to },
   };
 }

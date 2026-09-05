@@ -13,72 +13,182 @@ const componentSource = await readFile(new URL("../../components/command-centre/
 
 function compile(source, dependencies) {
   const { outputText } = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      jsx: ts.JsxEmit.ReactJSX,
+      esModuleInterop: true,
+    },
   });
   const exports = {};
-  new Function("require", "exports", outputText)((name) => name in dependencies ? dependencies[name] : require(name), exports);
+  new Function("require", "exports", outputText)(
+    (name) => name in dependencies ? dependencies[name] : require(name),
+    exports,
+  );
   return exports;
 }
 
 function repository(rows = [], fail = () => false) {
   const calls = [];
-  const client = { from(table) {
-    const filters = [];
-    const call = { table, filters, offset: 0, end: Infinity, orders: [] };
-    calls.push(call);
-    const query = {
-      select() { return query; },
-      gte(key, value) { filters.push([key, value, (a, b) => a >= b]); return query; },
-      lt(key, value) { filters.push([key, value, (a, b) => a < b]); return query; },
-      is(key, value) { filters.push([key, value, (a, b) => a === b]); return query; },
-      eq(key, value) { filters.push([key, value, (a, b) => a === b]); return query; },
-      in() { return query; },
-      order(key) { call.orders.push(key); return query; },
-      range(offset, end) { Object.assign(call, { offset, end }); return query; },
-      then(resolve, reject) {
-        const failure = fail(call);
-        if (failure) return Promise.resolve({ data: null, error: failure === "missing" ? null : { message: "Read failed" } }).then(resolve, reject);
-        const data = table === "vault_shopify_order_lines" ? [] : rows.filter((row) =>
-          filters.every(([key, value, compare]) => compare(row[key], value)),
-        ).slice(call.offset, call.end + 1);
-        return Promise.resolve({ data, error: null }).then(resolve, reject);
-      },
-    };
-    return query;
-  } };
-  return { ...compile(repositorySource, { "server-only": {}, "@/lib/supabase-admin": { supabaseAdmin: client } }), calls };
+  const client = {
+    from(table) {
+      const filters = [];
+      const call = { table, filters, offset: 0, end: Infinity, orders: [] };
+      calls.push(call);
+
+      const query = {
+        select() {
+          return query;
+        },
+        gte(key, value) {
+          filters.push([key, value, (a, b) => a >= b]);
+          return query;
+        },
+        lt(key, value) {
+          filters.push([key, value, (a, b) => a < b]);
+          return query;
+        },
+        is(key, value) {
+          filters.push([key, value, (a, b) => a === b]);
+          return query;
+        },
+        eq(key, value) {
+          filters.push([key, value, (a, b) => a === b]);
+          return query;
+        },
+        in() {
+          return query;
+        },
+        order(key) {
+          call.orders.push(key);
+          return query;
+        },
+        range(offset, end) {
+          Object.assign(call, { offset, end });
+          return query;
+        },
+        then(resolve, reject) {
+          const failure = fail(call);
+
+          if (failure) {
+            return Promise.resolve({
+              data: null,
+              error: failure === "missing" ? null : { message: "Read failed" },
+            }).then(resolve, reject);
+          }
+
+          const data = table === "vault_shopify_order_lines"
+            ? []
+            : rows
+                .filter((row) =>
+                  filters.every(([key, value, compare]) => compare(row[key], value)),
+                )
+                .slice(call.offset, call.end + 1);
+
+          return Promise.resolve({ data, error: null }).then(resolve, reject);
+        },
+      };
+
+      return query;
+    },
+  };
+
+  return {
+    ...compile(repositorySource, {
+      "server-only": {},
+      "@/lib/supabase-admin": { supabaseAdmin: client },
+    }),
+    calls,
+  };
 }
 
 const { getCalendarRevenueRanges } = repository();
 
 test("calendar periods start Monday and at the first of the London month and year", () => {
   const now = "2026-09-06T12:34:56.789Z";
+
   assert.deepEqual(getCalendarRevenueRanges(new Date(now)), {
-    week: { from: "2026-08-30T23:00:00.000Z", to: now },
-    month: { from: "2026-08-31T23:00:00.000Z", to: now },
-    threeMonths: { from: "2026-05-31T23:00:00.000Z", to: now },
-    sixMonths: { from: "2026-03-01T00:00:00.000Z", to: now },
-    year: { from: "2026-01-01T00:00:00.000Z", to: now },
+    week: {
+      from: "2026-08-30T23:00:00.000Z",
+      to: now,
+    },
+    month: {
+      from: "2026-08-31T23:00:00.000Z",
+      to: now,
+    },
+    threeMonths: {
+      from: "2026-05-31T23:00:00.000Z",
+      to: "2026-08-31T23:00:00.000Z",
+    },
+    sixMonths: {
+      from: "2026-03-01T00:00:00.000Z",
+      to: "2026-08-31T23:00:00.000Z",
+    },
+    year: {
+      from: "2026-01-01T00:00:00.000Z",
+      to: now,
+    },
   });
-  assert.equal(getCalendarRevenueRanges(new Date("2026-09-06T23:00:00Z")).week.from, "2026-09-06T23:00:00.000Z");
+
+  assert.equal(
+    getCalendarRevenueRanges(new Date("2026-09-06T23:00:00Z")).week.from,
+    "2026-09-06T23:00:00.000Z",
+  );
+
   assert.deepEqual(getCalendarRevenueRanges(new Date("2027-01-01T00:00:00Z")), {
-    week: { from: "2026-12-28T00:00:00.000Z", to: "2027-01-01T00:00:00.000Z" },
-    month: { from: "2027-01-01T00:00:00.000Z", to: "2027-01-01T00:00:00.000Z" },
-    threeMonths: { from: "2026-09-30T23:00:00.000Z", to: "2027-01-01T00:00:00.000Z" },
-    sixMonths: { from: "2026-06-30T23:00:00.000Z", to: "2027-01-01T00:00:00.000Z" },
-    year: { from: "2027-01-01T00:00:00.000Z", to: "2027-01-01T00:00:00.000Z" },
+    week: {
+      from: "2026-12-28T00:00:00.000Z",
+      to: "2027-01-01T00:00:00.000Z",
+    },
+    month: {
+      from: "2027-01-01T00:00:00.000Z",
+      to: "2027-01-01T00:00:00.000Z",
+    },
+    threeMonths: {
+      from: "2026-09-30T23:00:00.000Z",
+      to: "2027-01-01T00:00:00.000Z",
+    },
+    sixMonths: {
+      from: "2026-06-30T23:00:00.000Z",
+      to: "2027-01-01T00:00:00.000Z",
+    },
+    year: {
+      from: "2027-01-01T00:00:00.000Z",
+      to: "2027-01-01T00:00:00.000Z",
+    },
   });
 });
 
 test("London calendar boundaries use the offset at each boundary across BST and GMT transitions", () => {
   for (const [now, week, month] of [
-    ["2026-03-29T02:00:00Z", "2026-03-23T00:00:00.000Z", "2026-03-01T00:00:00.000Z"],
-    ["2026-03-29T23:00:00Z", "2026-03-29T23:00:00.000Z", "2026-03-01T00:00:00.000Z"],
-    ["2026-03-31T23:00:00Z", "2026-03-29T23:00:00.000Z", "2026-03-31T23:00:00.000Z"],
-    ["2026-10-25T02:00:00Z", "2026-10-18T23:00:00.000Z", "2026-09-30T23:00:00.000Z"],
-    ["2026-10-26T00:00:00Z", "2026-10-26T00:00:00.000Z", "2026-09-30T23:00:00.000Z"],
+    [
+      "2026-03-29T02:00:00Z",
+      "2026-03-23T00:00:00.000Z",
+      "2026-03-01T00:00:00.000Z",
+    ],
+    [
+      "2026-03-29T23:00:00Z",
+      "2026-03-29T23:00:00.000Z",
+      "2026-03-01T00:00:00.000Z",
+    ],
+    [
+      "2026-03-31T23:00:00Z",
+      "2026-03-29T23:00:00.000Z",
+      "2026-03-31T23:00:00.000Z",
+    ],
+    [
+      "2026-10-25T02:00:00Z",
+      "2026-10-18T23:00:00.000Z",
+      "2026-09-30T23:00:00.000Z",
+    ],
+    [
+      "2026-10-26T00:00:00Z",
+      "2026-10-26T00:00:00.000Z",
+      "2026-09-30T23:00:00.000Z",
+    ],
   ]) {
     const ranges = getCalendarRevenueRanges(new Date(now));
+
     assert.equal(ranges.week.from, week);
     assert.equal(ranges.month.from, month);
     assert.equal(ranges.year.from, "2026-01-01T00:00:00.000Z");
@@ -86,32 +196,77 @@ test("London calendar boundaries use the offset at each boundary across BST and 
 });
 
 const order = (overrides = {}) => ({
-  id: "order", shopify_created_at: "2026-09-07T08:00:00.000Z", currency: "GBP",
-  gross_total: "100.00", net_revenue: "75.00", refunds: "25.00",
-  cancelled_at: null, "metadata->>test": false, ...overrides,
+  id: "order",
+  shopify_created_at: "2026-09-07T08:00:00.000Z",
+  currency: "GBP",
+  gross_total: "100.00",
+  net_revenue: "75.00",
+  refunds: "25.00",
+  cancelled_at: null,
+  "metadata->>test": false,
+  ...overrides,
 });
 
-test("calendar revenue uses today's stored refund-adjusted net amounts and cancellation/test exclusions", async () => {
+test("calendar revenue uses stored net amounts and completed-month exclusions", async () => {
   const { ShopifyTradingRepository: repo } = repository([
-    order(), order({ id: "refunded", net_revenue: "0.00", refunds: "100.00" }),
-    order({ id: "cancelled", cancelled_at: "2026-09-07T09:00:00Z" }),
-    order({ id: "test", "metadata->>test": true }),
+    order(),
+    order({
+      id: "previous-month",
+      shopify_created_at: "2026-08-15T08:00:00.000Z",
+      net_revenue: "75.00",
+      refunds: "25.00",
+    }),
+    order({
+      id: "refunded",
+      net_revenue: "0.00",
+      refunds: "100.00",
+    }),
+    order({
+      id: "cancelled",
+      cancelled_at: "2026-09-07T09:00:00Z",
+    }),
+    order({
+      id: "test",
+      "metadata->>test": true,
+    }),
   ]);
+
   const now = new Date("2026-09-07T12:00:00Z");
   const today = await repo.getTodaySummary(now);
   const calendar = await repo.getCalendarRevenue(now);
+
   assert.equal(today.netRevenue, 75);
-  for (const period of Object.values(calendar)) assert.equal(period.netRevenue, today.netRevenue);
+  assert.equal(calendar.week.netRevenue, 75);
+  assert.equal(calendar.month.netRevenue, 75);
+  assert.equal(calendar.threeMonths.netRevenue, 75);
+  assert.equal(calendar.sixMonths.netRevenue, 75);
+  assert.equal(calendar.year.netRevenue, 150);
 });
 
-test("calendar queries include period starts and exclude future and prior-period orders", async () => {
+test("calendar queries include period starts and exclude earlier and future orders", async () => {
   const { ShopifyTradingRepository: repo } = repository([
-    order({ shopify_created_at: "2026-08-30T22:59:59.999Z", net_revenue: 1000 }),
-    order({ shopify_created_at: "2026-08-30T23:00:00.000Z", net_revenue: 10 }),
-    order({ shopify_created_at: "2026-08-31T23:00:00.000Z", net_revenue: 20 }),
-    order({ shopify_created_at: "2026-09-06T12:00:00.000Z", net_revenue: 9999 }),
+    order({
+      shopify_created_at: "2026-08-30T22:59:59.999Z",
+      net_revenue: 1000,
+    }),
+    order({
+      shopify_created_at: "2026-08-30T23:00:00.000Z",
+      net_revenue: 10,
+    }),
+    order({
+      shopify_created_at: "2026-08-31T23:00:00.000Z",
+      net_revenue: 20,
+    }),
+    order({
+      shopify_created_at: "2026-09-06T12:00:00.000Z",
+      net_revenue: 9999,
+    }),
   ]);
-  const result = await repo.getCalendarRevenue(new Date("2026-09-06T12:00:00Z"));
+
+  const result = await repo.getCalendarRevenue(
+    new Date("2026-09-06T12:00:00Z"),
+  );
+
   assert.equal(result.week.netRevenue, 30);
   assert.equal(result.month.netRevenue, 20);
   assert.equal(result.year.netRevenue, 1030);
@@ -119,144 +274,570 @@ test("calendar queries include period starts and exclude future and prior-period
 
 test("calendar revenue paginates beyond API row limits with deterministic ordering", async () => {
   const { ShopifyTradingRepository: repo, calls } = repository(
-    Array.from({ length: 1201 }, (_, index) => order({ id: String(index), net_revenue: 1 })),
+    Array.from({ length: 1201 }, (_, index) =>
+      order({
+        id: String(index),
+        shopify_created_at: "2026-08-10T08:00:00.000Z",
+        net_revenue: 1,
+      }),
+    ),
   );
-  const result = await repo.getCalendarRevenue(new Date("2026-09-07T12:00:00Z"));
-  for (const period of Object.values(result)) assert.equal(period.netRevenue, 1201);
-  assert.equal(calls.length, 15);
-  assert.ok(calls.every((call) => call.orders.join() === "shopify_created_at,id"));
+
+  const result = await repo.getCalendarRevenue(
+    new Date("2026-09-07T12:00:00Z"),
+  );
+
+  assert.equal(result.week.netRevenue, 0);
+  assert.equal(result.month.netRevenue, 0);
+  assert.equal(result.threeMonths.netRevenue, 1201);
+  assert.equal(result.sixMonths.netRevenue, 1201);
+  assert.equal(result.year.netRevenue, 1201);
+
+  assert.equal(calls.length, 11);
+  assert.ok(
+    calls.every(
+      (call) => call.orders.join() === "shopify_created_at,id",
+    ),
+  );
 });
 
 test("failed pages, invalid amounts and mixed currencies stay unavailable without hiding other periods", async () => {
   const now = new Date("2026-09-07T12:00:00Z");
-  const failed = repository([order()], (call) => call.filters.some(([key, value]) => key === "shopify_created_at" && value === "2026-01-01T00:00:00.000Z"));
+
+  const failed = repository(
+    [
+      order({
+        shopify_created_at: "2026-09-07T08:00:00.000Z",
+      }),
+    ],
+    (call) =>
+      call.filters.some(
+        ([key, value]) =>
+          key === "shopify_created_at" &&
+          value === "2026-01-01T00:00:00.000Z",
+      ),
+  );
+
   const result = await failed.ShopifyTradingRepository.getCalendarRevenue(now);
+
   assert.equal(result.year, null);
   assert.equal(result.week.netRevenue, 75);
-  const failedPage = repository(Array.from({ length: 501 }, () => order()), (call) => call.offset === 500);
-  assert.deepEqual(await failedPage.ShopifyTradingRepository.getCalendarRevenue(now), { week: null, month: null, threeMonths: null, sixMonths: null, year: null });
-  const missing = repository([], () => "missing");
-  assert.deepEqual(await missing.ShopifyTradingRepository.getCalendarRevenue(now), { week: null, month: null, threeMonths: null, sixMonths: null, year: null });
-  for (const rows of [[order({ net_revenue: null })], [order({ net_revenue: "bad" })], [order(), order({ currency: "USD" })]]) {
-    const invalid = await repository(rows).ShopifyTradingRepository.getCalendarRevenue(now);
-    assert.deepEqual(invalid, { week: null, month: null, threeMonths: null, sixMonths: null, year: null });
-  }
+
+  const failedPage = repository(
+    Array.from({ length: 501 }, (_, index) =>
+      order({
+        id: String(index),
+        shopify_created_at: "2026-08-10T08:00:00.000Z",
+      }),
+    ),
+    (call) => call.offset === 500,
+  );
+
+  assert.deepEqual(
+  await failedPage.ShopifyTradingRepository.getCalendarRevenue(now),
+  {
+    week: {
+      range: {
+        from: "2026-09-06T23:00:00.000Z",
+        to: "2026-09-07T12:00:00.000Z",
+      },
+      netRevenue: 0,
+      currency: null,
+    },
+    month: {
+      range: {
+        from: "2026-08-31T23:00:00.000Z",
+        to: "2026-09-07T12:00:00.000Z",
+      },
+      netRevenue: 0,
+      currency: null,
+    },
+    threeMonths: null,
+    sixMonths: null,
+    year: null,
+  },
+);
+
+const missing = repository([], () => "missing");
+
+assert.deepEqual(
+  await missing.ShopifyTradingRepository.getCalendarRevenue(now),
+  {
+    week: null,
+    month: null,
+    threeMonths: null,
+    sixMonths: null,
+    year: null,
+  },
+);
+
+for (const rows of [
+  [order({ net_revenue: null })],
+  [order({ net_revenue: "bad" })],
+  [order(), order({ currency: "USD" })],
+]) {
+  const invalid =
+    await repository(rows).ShopifyTradingRepository.getCalendarRevenue(now);
+
+  assert.deepEqual(invalid, {
+    week: null,
+    month: null,
+    threeMonths: {
+      range: {
+        from: "2026-05-31T23:00:00.000Z",
+        to: "2026-08-31T23:00:00.000Z",
+      },
+      netRevenue: 0,
+      currency: null,
+    },
+    sixMonths: {
+      range: {
+        from: "2026-03-01T00:00:00.000Z",
+        to: "2026-08-31T23:00:00.000Z",
+      },
+      netRevenue: 0,
+      currency: null,
+    },
+    year: null,
+  });
+}
 });
 
 test("empty successful periods are genuine zero; absent data/freshness/currency remain unavailable and stale is retained", async () => {
   const now = new Date("2026-09-07T12:00:00Z");
-  const summary = await repository().ShopifyTradingRepository.getCalendarRevenue(now);
+  const summary =
+    await repository().ShopifyTradingRepository.getCalendarRevenue(now);
   const at = now.toISOString();
-  const zero = createCalendarRevenueValues(summary, at, false, "GBP");
-  assert.deepEqual(zero.week, { state: "available", value: { amount: 0, currency: "GBP" }, updatedAt: at });
-  assert.equal(createCalendarRevenueValues(summary, at, true, "GBP").year.state, "stale");
+
+  const zero = createCalendarRevenueValues(
+    summary,
+    at,
+    false,
+    "GBP",
+  );
+
+  assert.deepEqual(zero.week, {
+    state: "available",
+    value: {
+      amount: 0,
+      currency: "GBP",
+    },
+    updatedAt: at,
+  });
+
+  assert.equal(
+    createCalendarRevenueValues(summary, at, true, "GBP").year.state,
+    "stale",
+  );
+
   for (const values of [
     createCalendarRevenueValues(null, at, false, "GBP"),
     createCalendarRevenueValues(summary, null, false, "GBP"),
     createCalendarRevenueValues(summary, at, false, null),
-  ]) assert.deepEqual(values, { week: unavailable(), month: unavailable(), threeMonths: unavailable(), sixMonths: unavailable(), year: unavailable() });
-  const withYearCurrency = { ...summary, year: { ...summary.year, netRevenue: 100, currency: "GBP" } };
-  assert.equal(createCalendarRevenueValues(withYearCurrency, at, false, null).week.value.amount, 0);
+  ]) {
+    assert.deepEqual(values, {
+      week: unavailable(),
+      month: unavailable(),
+      threeMonths: unavailable(),
+      sixMonths: unavailable(),
+      year: unavailable(),
+    });
+  }
+
+  const withYearCurrency = {
+    ...summary,
+    year: {
+      ...summary.year,
+      netRevenue: 100,
+      currency: "GBP",
+    },
+  };
+
+  assert.equal(
+    createCalendarRevenueValues(withYearCurrency, at, false, null)
+      .week.value.amount,
+    0,
+  );
 });
 
 test("loader reads calendar revenue at the business snapshot time and preserves canonical freshness", async () => {
-  const loader = await readFile(new URL("./getCommandCentreCockpit.ts", import.meta.url), "utf8");
-  assert.match(loader, /business\.trading\.data\s*\? ShopifyTradingRepository\.getCalendarRevenue\(new Date\(business\.generatedAt\)\)\.catch\(\(\) => null\)/);
-  assert.match(loader, /calendarRevenue: createCalendarRevenueValues\(calendarRevenue, tradingAt, tradingStale, tradingCurrency\)/);
+  const loader = await readFile(
+    new URL("./getCommandCentreCockpit.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    loader,
+    /business\.trading\.data\s*\? ShopifyTradingRepository\.getCalendarRevenue\(new Date\(business\.generatedAt\)\)\.catch\(\(\) => null\)/,
+  );
+
+  assert.match(
+    loader,
+    /calendarRevenue: createCalendarRevenueValues\(calendarRevenue, tradingAt, tradingStale, tradingCurrency\)/,
+  );
 });
 
 test("all five totals render only in Revenue below its chart, with zero, stale and unavailable labels", () => {
   const { CommandCentreCockpit } = compile(componentSource, {
-    "next/link": ({ children, ...props }) => React.createElement("a", props, children),
+    "next/link": ({ children, ...props }) =>
+      React.createElement("a", props, children),
     "@/components/brain/workspace/VaultIcon": () => null,
-    "@/components/command-centre/CommandCentreLiveRefresh": { CommandCentreLiveRefresh: () => null },
+    "@/components/command-centre/CommandCentreLiveRefresh": {
+      CommandCentreLiveRefresh: () => null,
+    },
     "@/lib/command-centre/AttentionPriorityPresentation": {},
   });
-  const emptyMetrics = (values = {}) => new Proxy(values, { get: (target, key) => target[key] ?? unavailable() });
+
+  const emptyMetrics = (values = {}) =>
+    new Proxy(values, {
+      get: (target, key) => target[key] ?? unavailable(),
+    });
+
   const at = "2026-09-07T12:00:00Z";
-  const value = (amount, state = "available") => ({ state, value: { amount, currency: "GBP" }, updatedAt: at });
+
+  const value = (amount, state = "available") => ({
+    state,
+    value: {
+      amount,
+      currency: "GBP",
+    },
+    updatedAt: at,
+  });
+
   const data = {
-    generatedAt: at, systemStatus: "live", latestSourceAt: at, businessPulse: { state: "healthy", label: "Healthy" },
+    generatedAt: at,
+    systemStatus: "live",
+    latestSourceAt: at,
+    businessPulse: {
+      state: "healthy",
+      label: "Healthy",
+    },
     trading: emptyMetrics({
-      revenue: value(75), calendarRevenue: { week: value(0), month: value(100, "stale"), threeMonths: value(0), sixMonths: value(200, "stale"), year: unavailable() },
-      revenueComparison: { state: "available", value: 25 },
-      revenueTrend: [{ label: "2026-09-01", value: 50 }, { label: "2026-09-07", value: 75 }], orderTrend: [],
+      revenue: value(75),
+      calendarRevenue: {
+        week: value(0),
+        month: value(100, "stale"),
+        threeMonths: value(0),
+        sixMonths: value(200, "stale"),
+        year: unavailable(),
+      },
+      revenueComparison: {
+        state: "available",
+        value: 25,
+      },
+      revenueTrend: [
+        {
+          label: "2026-09-01",
+          value: 50,
+        },
+        {
+          label: "2026-09-07",
+          value: 75,
+        },
+      ],
+      orderTrend: [],
     }),
-    website: emptyMetrics({ shopifyAnalytics: emptyMetrics({ availability: "unavailable" }), visitorTrend: [] }),
-    finance: emptyMetrics(), inventory: emptyMetrics(), operations: emptyMetrics(),
-    executiveBriefing: { headline: "Briefing", summary: "Summary", positives: [], blockers: [], supportingEvidence: [], unlocks: [], todayFocus: unavailable() },
-    attention: [], domains: [], feed: [],
+    website: emptyMetrics({
+      shopifyAnalytics: emptyMetrics({
+        availability: "unavailable",
+      }),
+      visitorTrend: [],
+    }),
+    finance: emptyMetrics(),
+    inventory: emptyMetrics(),
+    operations: emptyMetrics(),
+    executiveBriefing: {
+      headline: "Briefing",
+      summary: "Summary",
+      positives: [],
+      blockers: [],
+      supportingEvidence: [],
+      unlocks: [],
+      todayFocus: unavailable(),
+    },
+    attention: [],
+    domains: [],
+    feed: [],
   };
-  const html = renderToStaticMarkup(React.createElement(CommandCentreCockpit, { data }));
-  const revenue = html.match(/<article[^>]*>[\s\S]*?<\/article>/)[0];
-  for (const label of ["This week", "This month", "Last 3 months", "Last 6 months", "This year"]) {
+
+  const html = renderToStaticMarkup(
+    React.createElement(CommandCentreCockpit, { data }),
+  );
+
+  const revenue = html.match(
+    /<article[^>]*>[\s\S]*?<\/article>/,
+  )[0];
+
+  for (const label of [
+    "This week",
+    "This month",
+    "Last 3 months",
+    "Last 6 months",
+    "This year",
+  ]) {
     assert.equal(html.split(label).length - 1, 1);
     assert.ok(revenue.includes(label));
   }
-  assert.match(revenue, /This week<\/span><strong class="is-available">£0<\/strong>/);
-  assert.match(revenue, /This month<\/span><strong class="is-stale">£100<small>Stale<\/small>/);
-  assert.match(revenue, /This year<\/span><strong class="is-unavailable">Unavailable<\/strong>/);
-  assert.match(revenue, /Europe\/London · Partial \/ in progress/);
+
+  assert.match(
+    revenue,
+    /This week<\/span><strong class="is-available">£0<\/strong>/,
+  );
+
+  assert.match(
+    revenue,
+    /This month<\/span><strong class="is-stale">£100<small>Stale<\/small>/,
+  );
+
+  assert.match(
+    revenue,
+    /This year<\/span><strong class="is-unavailable">Unavailable<\/strong>/,
+  );
+
+  assert.match(
+    revenue,
+    /Europe\/London · Partial \/ in progress/,
+  );
+
   assert.match(revenue, /£75/);
   assert.match(revenue, /\+25%/);
-  assert.match(revenue, /Seven-day live trend from 2026-09-01 to 2026-09-07/);
-  assert.ok(revenue.indexOf("</svg>") < revenue.indexOf("This week"));
-  for (const state of ["available", "stale", "unavailable"]) {
-    data.trading.calendarRevenue.threeMonths = state === "unavailable" ? unavailable() : value(0, state);
-    data.trading.calendarRevenue.sixMonths = state === "unavailable" ? unavailable() : value(0, state);
-    const rendered = renderToStaticMarkup(React.createElement(CommandCentreCockpit, { data }));
-    for (const label of ["Last 3 months", "Last 6 months"]) {
-      const row = rendered.slice(rendered.indexOf(label), rendered.indexOf("</strong>", rendered.indexOf(label)));
-      assert.ok(row.includes('class="is-' + state + '"'));
-      assert.ok(row.includes(state === "unavailable" ? "Unavailable" : "\u00a30"));
-      if (state === "stale") assert.ok(row.includes("<small>Stale</small>"));
-      assert.ok(revenue.indexOf("</svg>") < revenue.indexOf(label));
+
+  assert.match(
+    revenue,
+    /Seven-day live trend from 2026-09-01 to 2026-09-07/,
+  );
+
+  assert.ok(
+    revenue.indexOf("</svg>") < revenue.indexOf("This week"),
+  );
+
+  for (const state of [
+    "available",
+    "stale",
+    "unavailable",
+  ]) {
+    data.trading.calendarRevenue.threeMonths =
+      state === "unavailable"
+        ? unavailable()
+        : value(0, state);
+
+    data.trading.calendarRevenue.sixMonths =
+      state === "unavailable"
+        ? unavailable()
+        : value(0, state);
+
+    const rendered = renderToStaticMarkup(
+      React.createElement(CommandCentreCockpit, { data }),
+    );
+
+    for (const label of [
+      "Last 3 months",
+      "Last 6 months",
+    ]) {
+      const row = rendered.slice(
+        rendered.indexOf(label),
+        rendered.indexOf(
+          "</strong>",
+          rendered.indexOf(label),
+        ),
+      );
+
+      assert.ok(
+        row.includes('class="is-' + state + '"'),
+      );
+
+      assert.ok(
+        row.includes(
+          state === "unavailable"
+            ? "Unavailable"
+            : "£0",
+        ),
+      );
+
+      if (state === "stale") {
+        assert.ok(
+          row.includes("<small>Stale</small>"),
+        );
+      }
+
+      assert.ok(
+        revenue.indexOf("</svg>") <
+          revenue.indexOf(label),
+      );
     }
   }
 });
 
-
 test("longer calendar periods use London month starts across DST and year rollover", () => {
   for (const [snapshot, threeMonths, sixMonths] of [
-    ["2026-09-05T12:00:00Z", "2026-05-31T23:00:00.000Z", "2026-03-01T00:00:00.000Z"],
-    ["2027-01-05T12:00:00Z", "2026-09-30T23:00:00.000Z", "2026-06-30T23:00:00.000Z"],
-    ["2026-03-29T02:00:00Z", "2025-12-01T00:00:00.000Z", "2025-08-31T23:00:00.000Z"],
-    ["2026-10-25T02:00:00Z", "2026-06-30T23:00:00.000Z", "2026-03-31T23:00:00.000Z"],
-    ["2026-05-31T23:00:00Z", "2026-03-01T00:00:00.000Z", "2025-12-01T00:00:00.000Z"],
+    [
+      "2026-09-05T12:00:00Z",
+      "2026-05-31T23:00:00.000Z",
+      "2026-03-01T00:00:00.000Z",
+    ],
+    [
+      "2027-01-05T12:00:00Z",
+      "2026-09-30T23:00:00.000Z",
+      "2026-06-30T23:00:00.000Z",
+    ],
+    [
+      "2026-03-29T02:00:00Z",
+      "2025-12-01T00:00:00.000Z",
+      "2025-08-31T23:00:00.000Z",
+    ],
+    [
+      "2026-10-25T02:00:00Z",
+      "2026-06-30T23:00:00.000Z",
+      "2026-03-31T23:00:00.000Z",
+    ],
+    [
+      "2026-05-31T23:00:00Z",
+      "2026-03-01T00:00:00.000Z",
+      "2025-12-01T00:00:00.000Z",
+    ],
   ]) {
-    const ranges = getCalendarRevenueRanges(new Date(snapshot));
-    assert.equal(ranges.threeMonths.from, threeMonths);
-    assert.equal(ranges.sixMonths.from, sixMonths);
-    for (const period of Object.values(ranges)) assert.equal(period.to, new Date(snapshot).toISOString());
+    const ranges = getCalendarRevenueRanges(
+      new Date(snapshot),
+    );
+
+    assert.equal(
+      ranges.threeMonths.from,
+      threeMonths,
+    );
+
+    assert.equal(
+      ranges.sixMonths.from,
+      sixMonths,
+    );
+
+    assert.equal(
+      ranges.week.to,
+      new Date(snapshot).toISOString(),
+    );
+
+    assert.equal(
+      ranges.month.to,
+      new Date(snapshot).toISOString(),
+    );
+
+    assert.equal(
+      ranges.year.to,
+      new Date(snapshot).toISOString(),
+    );
+
+    assert.equal(
+      ranges.threeMonths.to,
+      ranges.month.from,
+    );
+
+    assert.equal(
+      ranges.sixMonths.to,
+      ranges.month.from,
+    );
   }
 });
 
-test("longer periods include exact starts, exclude earlier and future orders, and retain net accounting", async () => {
+test("longer periods include exact starts, exclude earlier and current-month orders, and retain net accounting", async () => {
   const now = new Date("2026-09-05T12:00:00Z");
   const ranges = getCalendarRevenueRanges(now);
-  for (const period of ["threeMonths", "sixMonths"]) {
+
+  for (const period of [
+    "threeMonths",
+    "sixMonths",
+  ]) {
     const from = ranges[period].from;
+
     const { ShopifyTradingRepository: repo } = repository([
-      order({ shopify_created_at: from }),
-      order({ shopify_created_at: from, net_revenue: 0, refunds: 100 }),
-      order({ shopify_created_at: new Date(Date.parse(from) - 1).toISOString(), net_revenue: 999 }),
-      order({ shopify_created_at: now.toISOString(), net_revenue: 999 }),
-      order({ shopify_created_at: "2026-09-06T00:00:00.000Z", net_revenue: 999 }),
-      order({ shopify_created_at: from, cancelled_at: from }),
-      order({ shopify_created_at: from, "metadata->>test": true }),
+      order({
+        shopify_created_at: from,
+      }),
+      order({
+        shopify_created_at: from,
+        net_revenue: 0,
+        refunds: 100,
+      }),
+      order({
+        shopify_created_at: new Date(
+          Date.parse(from) - 1,
+        ).toISOString(),
+        net_revenue: 999,
+      }),
+      order({
+        shopify_created_at: now.toISOString(),
+        net_revenue: 999,
+      }),
+      order({
+        shopify_created_at: "2026-09-06T00:00:00.000Z",
+        net_revenue: 999,
+      }),
+      order({
+        shopify_created_at: from,
+        cancelled_at: from,
+      }),
+      order({
+        shopify_created_at: from,
+        "metadata->>test": true,
+      }),
     ]);
-    assert.equal((await repo.getCalendarRevenue(now))[period].netRevenue, 75);
+
+    assert.equal(
+      (await repo.getCalendarRevenue(now))[period].netRevenue,
+      75,
+    );
   }
 });
 
 test("new period values preserve zero, stale and unavailable states", async () => {
-  const summary = await repository().ShopifyTradingRepository.getCalendarRevenue(new Date("2026-09-05T12:00:00Z"));
+  const summary =
+    await repository().ShopifyTradingRepository.getCalendarRevenue(
+      new Date("2026-09-05T12:00:00Z"),
+    );
+
   const at = "2026-09-05T12:00:00Z";
-  for (const period of ["threeMonths", "sixMonths"]) {
-    assert.deepEqual(createCalendarRevenueValues(summary, at, false, "GBP")[period], {
-      state: "available", value: { amount: 0, currency: "GBP" }, updatedAt: at,
-    });
-    assert.equal(createCalendarRevenueValues(summary, at, true, "GBP")[period].state, "stale");
-    assert.deepEqual(createCalendarRevenueValues({ ...summary, [period]: null }, at, false, "GBP")[period], unavailable());
+
+  for (const period of [
+    "threeMonths",
+    "sixMonths",
+  ]) {
+    assert.deepEqual(
+      createCalendarRevenueValues(
+        summary,
+        at,
+        false,
+        "GBP",
+      )[period],
+      {
+        state: "available",
+        value: {
+          amount: 0,
+          currency: "GBP",
+        },
+        updatedAt: at,
+      },
+    );
+
+    assert.equal(
+      createCalendarRevenueValues(
+        summary,
+        at,
+        true,
+        "GBP",
+      )[period].state,
+      "stale",
+    );
+
+    assert.deepEqual(
+      createCalendarRevenueValues(
+        {
+          ...summary,
+          [period]: null,
+        },
+        at,
+        false,
+        "GBP",
+      )[period],
+      unavailable(),
+    );
   }
 });
+
