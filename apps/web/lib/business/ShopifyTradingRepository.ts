@@ -29,6 +29,15 @@ export type ShopifyTodaySummary = {
   profit: null;
 };
 
+export type ShopifyRecentOrderSummary = {
+  id: string;
+  displayName: string;
+  quantity: number | null;
+  netRevenue: number;
+  currency: string;
+  createdAt: string;
+};
+
 export type ShopifyRecentOrder = {
   id: string;
   orderNumber: string;
@@ -421,6 +430,51 @@ export const ShopifyTradingRepository = {
       awaitingFulfilment: ordersResult.count,
       updatedAt: latestSyncAt,
     };
+  },
+
+  async getRecentOrderSummaries(): Promise<ShopifyRecentOrderSummary[]> {
+    const { data: orders, error } = await supabaseAdmin
+      .from("vault_shopify_orders")
+      .select("id, order_name, order_number, net_revenue, currency, shopify_created_at")
+      .eq("source", "shopify")
+      .eq("metadata->>test", false)
+      .is("cancelled_at", null)
+      .order("shopify_created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(3);
+    if (error || orders === null) throw new Error("Recent canonical orders unavailable");
+    if (!orders.length) return [];
+
+    const quantities = new Map<string, number>();
+    // Page line quantities so API row limits cannot silently undercount units.
+    for (let offset = 0; ; offset += 500) {
+      const { data: lines, error: lineError } = await supabaseAdmin
+        .from("vault_shopify_order_lines")
+        .select("id, order_id, quantity")
+        .in("order_id", orders.map((order) => order.id))
+        .order("id")
+        .range(offset, offset + 499);
+      if (lineError || lines === null) throw new Error("Recent order quantities unavailable");
+      for (const line of lines) {
+        if (!Number.isSafeInteger(line.quantity) || line.quantity < 0) throw new Error("Invalid order quantity");
+        quantities.set(line.order_id, (quantities.get(line.order_id) ?? 0) + line.quantity);
+      }
+      if (lines.length < 500) break;
+    }
+    return orders.map((order) => {
+      if (order.net_revenue === null || order.net_revenue === undefined || order.net_revenue === "" ||
+          !/^[A-Z]{3}$/.test(order.currency ?? "") || !Number.isFinite(Date.parse(order.shopify_created_at))) {
+        throw new Error("Recent order accounting data unavailable");
+      }
+      return {
+        id: order.id,
+        displayName: order.order_name || (order.order_number ? "#" + order.order_number : "Order"),
+        quantity: quantities.get(order.id) ?? null,
+        netRevenue: numberFromDatabase(order.net_revenue),
+        currency: order.currency,
+        createdAt: order.shopify_created_at,
+      };
+    });
   },
 
   async getRecentOrders(limit = 10): Promise<ShopifyRecentOrder[]> {

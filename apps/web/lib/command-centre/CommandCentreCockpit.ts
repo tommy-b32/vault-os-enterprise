@@ -2,7 +2,7 @@ import type { BusinessActivityEvent } from "@/lib/business/BusinessActivityRepos
 import type { CommercialDecisionTimelineResult } from "@/lib/brain/CommercialDecisionTimeline";
 import type { ExecutiveBriefing } from "@/lib/brain/ExecutiveIntelligenceEngine";
 import type { InventorySyncStatus } from "@/lib/inventory/InventoryFreshness";
-import type { ShopifyCalendarRevenue } from "@/lib/business/ShopifyTradingRepository";
+import type { ShopifyCalendarRevenue, ShopifyRecentOrderSummary } from "@/lib/business/ShopifyTradingRepository";
 
 export type CockpitValue<T> =
   | { state: "available" | "stale"; value: T; updatedAt: string | null }
@@ -68,6 +68,7 @@ export type CommandCentreCockpitData = {
   trading: {
     revenue: CockpitValue<CockpitMoney>;
     calendarRevenue: Record<"week" | "month" | "threeMonths" | "sixMonths" | "year", CockpitValue<CockpitMoney>>;
+    recentOrders: CockpitValue<Array<ShopifyRecentOrderSummary & { destination: string }>>;
     orders: CockpitValue<number>;
     units: CockpitValue<number>;
     averageOrderValue: CockpitValue<CockpitMoney>;
