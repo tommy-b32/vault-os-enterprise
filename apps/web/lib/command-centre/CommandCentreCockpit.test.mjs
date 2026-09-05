@@ -132,7 +132,7 @@ test("premium redesign preserves every original KPI and snapshot field", async (
   ]) {
     assert.match(component, new RegExp(`label="${label}"`));
   }
-  for (const label of ["Shopify sessions", "Shopify checkout sessions", "Shopify completed-checkout sessions"]) {
+  for (const label of ["Human Shopify sessions", "Shopify checkout sessions", "Shopify completed-checkout sessions"]) {
     assert.match(component, new RegExp(label));
   }
 
@@ -158,7 +158,7 @@ test("premium redesign preserves every original KPI and snapshot field", async (
   }
 });
 
-test("Website Traffic presents the complete partial Shopify funnel without replacing Vault tracking", async () => {
+test("Website Traffic identifies human-only Shopify Analytics and preserves the complete partial funnel without replacing Vault tracking", async () => {
   const [component, loader] = await Promise.all([
     readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8"),
     readFile(new URL("./getCommandCentreCockpit.ts", import.meta.url), "utf8"),
@@ -175,11 +175,16 @@ test("Website Traffic presents the complete partial Shopify funnel without repla
     assert.match(component, new RegExp(metric.replace(".", "\\.")));
   }
   for (const label of [
-    "Shopify sessions", "Online store visitors", "Cart additions",
-    "Reached checkout", "Completed checkout", "Shopify conversion rate",
+    "Human Shopify sessions", "Online store visitors", "Cart additions",
+    "Reached checkout", "Completed checkout", "Human-session conversion",
   ]) {
     assert.match(component, new RegExp(label));
   }
+  assert.match(component, /shopifyAnalyticsAvailable \? <div className="cc-shopify-analytics">\s*<div className="cc-shopify-source">Shopify Analytics · Automated traffic excluded<\/div>/);
+  assert.doesNotMatch(component, /"Shopify sessions"|Shopify conversion rate/);
+  assert.match(component, /shopifyAnalytics\.sessions\.updatedAt/);
+  assert.match(component, /\.cc-kpi-values span\{overflow-wrap:anywhere;/);
+  assert.match(component, /@media\(max-width:600px\)\{[^\n]*\.cc-kpi-values\{grid-template-columns:1fr\}/);
   assert.match(component, /Today · Partial \/ in progress/);
   assert.match(component, /availability === "live" \? "Live" : "Stale"/);
   assert.match(component, /cc-shopify-status strong\.is-stale/);
@@ -368,7 +373,7 @@ test("cockpit uses canonical loaders, valid routes, and no demonstration data", 
   assert.match(component, /Estimated total visitors/);
   assert.match(component, /Estimated untracked/);
   assert.doesNotMatch(component, /eyebrow="Website Conversion"/);
-  assert.match(component, /eyebrow="Website Traffic"[^>]*shopifyAnalyticsAvailable[^>]*"Shopify sessions"[^>]*"Online store visitors"[^>]*"Shopify conversion rate"/);
+  assert.match(component, /eyebrow="Website Traffic"[^>]*shopifyAnalyticsAvailable[^>]*"Human Shopify sessions"[^>]*"Online store visitors"[^>]*"Human-session conversion"/);
   assert.match(component, /Pending Shopify reporting access/);
   assert.match(component, /Live tracked/);
   assert.doesNotMatch(component, /UK share|ukTrafficPercentage/);
