@@ -67,7 +67,7 @@ export type CommandCentreCockpitData = {
   executiveBriefing: ExecutiveBriefing;
   trading: {
     revenue: CockpitValue<CockpitMoney>;
-    calendarRevenue: Record<"week" | "month" | "year", CockpitValue<CockpitMoney>>;
+    calendarRevenue: Record<"week" | "month" | "threeMonths" | "sixMonths" | "year", CockpitValue<CockpitMoney>>;
     orders: CockpitValue<number>;
     units: CockpitValue<number>;
     averageOrderValue: CockpitValue<CockpitMoney>;
@@ -150,7 +150,7 @@ export function createCalendarRevenueValues(
   fallbackCurrency: string | null,
 ): CommandCentreCockpitData["trading"]["calendarRevenue"] {
   const currency = fallbackCurrency ?? summary?.year?.currency ?? summary?.month?.currency ?? null;
-  const value = (period: "week" | "month" | "year"): CockpitValue<CockpitMoney> => {
+  const value = (period: "week" | "month" | "threeMonths" | "sixMonths" | "year"): CockpitValue<CockpitMoney> => {
     const total = summary?.[period];
     const periodCurrency = total?.currency ?? currency;
     if (!total || !updatedAt || !periodCurrency || !Number.isFinite(total.netRevenue)) return unavailable();
@@ -160,7 +160,7 @@ export function createCalendarRevenueValues(
       updatedAt,
     };
   };
-  return { week: value("week"), month: value("month"), year: value("year") };
+  return { week: value("week"), month: value("month"), threeMonths: value("threeMonths"), sixMonths: value("sixMonths"), year: value("year") };
 }
 
 export const notConnected = <T>(): CockpitValue<T> => ({

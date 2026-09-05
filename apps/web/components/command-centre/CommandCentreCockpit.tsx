@@ -186,6 +186,8 @@ export function CommandCentreCockpit({ data }: DataProps) {
             <div className="cc-calendar-revenue" aria-label="Calendar net Shopify revenue">
               <MetricRow label="This week" value={data.trading.calendarRevenue.week} formatter={(v) => formatMoney(v as CockpitMoney)} />
               <MetricRow label="This month" value={data.trading.calendarRevenue.month} formatter={(v) => formatMoney(v as CockpitMoney)} />
+              <MetricRow label="Last 3 months" value={data.trading.calendarRevenue.threeMonths} formatter={(v) => formatMoney(v as CockpitMoney)} />
+              <MetricRow label="Last 6 months" value={data.trading.calendarRevenue.sixMonths} formatter={(v) => formatMoney(v as CockpitMoney)} />
               <MetricRow label="This year" value={data.trading.calendarRevenue.year} formatter={(v) => formatMoney(v as CockpitMoney)} />
               <p>Europe/London · Partial / in progress</p>
             </div>

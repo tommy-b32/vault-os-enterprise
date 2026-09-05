@@ -11,7 +11,7 @@ export type ShopifyTradingRange = {
   to: string;
 };
 
-export type ShopifyCalendarRevenue = Record<"week" | "month" | "year", {
+export type ShopifyCalendarRevenue = Record<"week" | "month" | "threeMonths" | "sixMonths" | "year", {
   range: ShopifyTradingRange;
   netRevenue: number;
   currency: string | null;
@@ -200,6 +200,8 @@ export function getCalendarRevenueRanges(now = new Date()) {
   return {
     week: { from: getZonedMidnight(monday.year, monday.month, monday.day).toISOString(), to },
     month: { from: getZonedMidnight(today.year, today.month, 1).toISOString(), to },
+    threeMonths: { from: getZonedMidnight(today.year, today.month - 3, 1).toISOString(), to },
+    sixMonths: { from: getZonedMidnight(today.year, today.month - 6, 1).toISOString(), to },
     year: { from: getZonedMidnight(today.year, 1, 1).toISOString(), to },
   };
 }
@@ -292,12 +294,14 @@ export const ShopifyTradingRepository = {
       }, 0);
       return { range, netRevenue, currency: getCurrency(orders) };
     };
-    const [week, month, year] = await Promise.all([
+    const [week, month, threeMonths, sixMonths, year] = await Promise.all([
       summary(ranges.week).catch(() => null),
       summary(ranges.month).catch(() => null),
+      summary(ranges.threeMonths).catch(() => null),
+      summary(ranges.sixMonths).catch(() => null),
       summary(ranges.year).catch(() => null),
     ]);
-    return { week, month, year };
+    return { week, month, threeMonths, sixMonths, year };
   },
 
   async getLatestSyncAt(): Promise<string | null> {
