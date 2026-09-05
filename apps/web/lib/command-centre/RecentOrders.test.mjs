@@ -61,14 +61,15 @@ const order = (id, overrides = {}) => ({ id, source: "shopify", order_name: "#" 
   net_revenue: "70", refunds: "30", currency: "GBP", shopify_created_at: "2026-09-05T03:00:00Z",
   fulfilment_status: null, cancelled_at: null, "metadata->>test": false, ...overrides });
 
-test("latest three eligible orders use Shopify creation time, canonical net revenue and summed units", async () => {
+test("latest seven eligible orders use Shopify creation time, canonical net revenue and summed units", async () => {
   const { ShopifyTradingRepository: repo, calls } = repository([
-    order("1250"), order("1249"), order("1248"), order("1247"),
+    order("1250"), order("1249"), order("1248"), order("1247"), order("1246"), order("1245"), order("1244"), order("1243"),
     order("9999", { "metadata->>test": true }), order("9998", { cancelled_at: "2026-09-05" }),
     order("9997", { source: "other" }), order("9996", { shopify_created_at: "2026-01-01T00:00:00Z", created_at: "2026-09-06" }),
   ], [{ id: "a", order_id: "1250", quantity: 2 }, { id: "b", order_id: "1250", quantity: 1 }]);
   const result = await repo.getRecentOrderSummaries();
-  assert.deepEqual(result.map(row => row.id), ["1250", "1249", "1248"]);
+  assert.deepEqual(result.map(row => row.id), ["1250", "1249", "1248", "1247", "1246", "1245", "1244"]);
+  assert.equal(calls[0].limit, 7);
   assert.equal(result[0].quantity, 3);
   assert.equal(result[0].netRevenue, 70);
   assert.equal(result[0].currency, "GBP");
@@ -184,7 +185,7 @@ test("recent orders render inside Orders Today with links, units, money, time an
   data.trading.averageOrderValue = value(40);
   data.trading.orderComparison = { state: "available", value: 25 };
   data.trading.orderTrend = [{ label: "2026-09-04", value: 4 }, { label: "2026-09-05", value: 8 }];
-  const recent = ["1250", "1249", "1248", "1247"].map((id, index) => ({ id, displayName: "#" + id,
+  const recent = ["1250", "1249", "1248", "1247", "1246", "1245", "1244", "1243"].map((id, index) => ({ id, displayName: "#" + id,
     destination: "/orders/" + id, quantity: index === 1 ? 1 : 2, netRevenue: 70, currency: "GBP",
     createdAt: index === 0 ? "2026-09-05T03:00:00Z" : "2026-09-04T00:00:00Z" }));
   const render = () => renderToStaticMarkup(React.createElement(CommandCentreCockpit, { data }));
@@ -207,7 +208,7 @@ test("recent orders render inside Orders Today with links, units, money, time an
   assert.match(componentSource, /\.cc-fulfilment-dot\.is-completed\{background:#48da7d\}/);
   assert.match(componentSource, /\.cc-fulfilment-dot\.is-awaiting\{background:#54c8f3\}/);
   assert.match(componentSource, /\.cc-fulfilment-dot\{[^}]*background:#69716e/);
-  for (const [state, rows, message] of [["available", recent, null], ["stale", recent, "Stale"], ["available", [], "No recent orders"], ["unavailable", null, "Recent orders unavailable"]]) {
+  for (const [state, rows, message] of [["available", recent, null], ["available", recent.slice(0, 2), null], ["stale", recent, "Stale"], ["available", [], "No recent orders"], ["unavailable", null, "Recent orders unavailable"]]) {
     data.trading.recentOrders = { state, value: rows, updatedAt: at };
     const html = render();
     const card = html.match(/<article[^>]*>[\s\S]*?<\/article>/g).find(article => article.includes("Orders Today"));
@@ -217,11 +218,14 @@ test("recent orders render inside Orders Today with links, units, money, time an
     assert.ok(card.indexOf("</svg>") < card.indexOf("Recent Orders"));
     if (message) assert.ok(card.includes(message));
     if (rows?.length) {
-      assert.equal((card.match(/<li>/g) ?? []).length, 3);
-      assert.ok(card.includes('href="/orders/1250"'));
+      assert.equal((card.match(/<li>/g) ?? []).length, Math.min(rows.length, 7));
+      for (const row of rows.slice(0, 7)) {
+        assert.ok(card.includes(`href="${row.destination}"`));
+        assert.ok(card.includes(`dateTime="${row.createdAt}"`) || card.includes(`datetime="${row.createdAt}"`));
+      }
       assert.ok(card.includes("2 items")); assert.ok(card.includes("1 item"));
       assert.ok(card.includes("\u00a370")); assert.ok(card.includes("9h ago")); assert.ok(card.includes("4 Sept"));
-      assert.ok(!html.includes("#1247"));
+      assert.ok(!html.includes("#1243"));
     }
   }
 });

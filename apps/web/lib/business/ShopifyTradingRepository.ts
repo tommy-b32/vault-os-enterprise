@@ -442,7 +442,7 @@ export const ShopifyTradingRepository = {
       .is("cancelled_at", null)
       .order("shopify_created_at", { ascending: false })
       .order("id", { ascending: false })
-      .limit(3);
+      .limit(7);
     if (error || orders === null) throw new Error("Recent canonical orders unavailable");
     if (!orders.length) return [];
 
