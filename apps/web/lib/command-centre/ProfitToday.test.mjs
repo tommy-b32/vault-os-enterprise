@@ -68,11 +68,11 @@ test("stale, invalid, mismatched-currency and pending sources cannot produce a l
   }
 });
 
-test("live loader reuses canonical revenue and Meta, marking uncollected costs unavailable", async () => {
+test("live loader reuses canonical revenue and Meta, preserving payment-fee incompleteness", async () => {
   const loader = await readFile(new URL("./getCommandCentreCockpit.ts", import.meta.url), "utf8");
-  const section = loader.slice(loader.indexOf("profit: {"), loader.indexOf("systemStatus:", loader.indexOf("profit: {")));
+  const section = loader.slice(loader.indexOf("profit: (() =>"), loader.indexOf("systemStatus:", loader.indexOf("profit: (() =>")));
   assert.ok(section.includes("paymentFees: unavailable()"));
-  assert.ok(section.includes("shipping: createShippingCostValue(todayShipping, trading"));
+  assert.ok(section.includes("const shipping = createShippingCostValue(todayShipping, trading"));
   assert.ok(section.includes("productCost: createProductCostValue(todayCogs, trading"));
   assert.ok(section.includes("tradingMoney(trading.netRevenue)"));
   assert.ok(section.includes("money(metaAds.today.spend, metaAds.currency)"));
@@ -99,4 +99,10 @@ test("Profit card follows Finance without changing headline layout and renders i
   const financeStart = source.indexOf('<KpiCard eyebrow="Finance Position"');
   assert.ok(source.slice(source.indexOf("</KpiCard>", financeStart)).startsWith('</KpiCard>\n        <ProfitTodayCard data={data} />') || source.replaceAll("\r\n", "\n").slice(source.replaceAll("\r\n", "\n").indexOf("</KpiCard>", source.replaceAll("\r\n", "\n").indexOf('<KpiCard eyebrow="Finance Position"'))).startsWith('</KpiCard>\n        <ProfitTodayCard data={data} />'));
   assert.ok(source.includes('.cc-kpi-grid>.cc-kpi-card:nth-child(6){contain:size;align-self:stretch;overflow:visible}'));
+});
+
+test("Profit card identifies Shopify reporting lag without weakening its missing-cost state", async () => {
+  const source = await readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8");
+  assert.ok(source.includes("Awaiting Shopify cost data"));
+  assert.ok(source.includes('profit.shippingSourceState === "awaiting_shopify_cost"'));
 });

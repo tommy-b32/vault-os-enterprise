@@ -274,15 +274,22 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
 
   return {
     generatedAt: business.generatedAt,
-    profit: { shippingAccountingStatus: "unreconciled", ...createProfitTodayValue({
+    profit: (() => {
+      const shipping = createShippingCostValue(todayShipping, trading, { status: business.trading.status, generatedAt: business.generatedAt });
+      return { shippingAccountingStatus: "unreconciled" as const,
+        ...(shipping.state === "unavailable" && (todayShipping?.awaitingCostOrders ?? 0) > 0 &&
+          todayShipping!.coveredOrders + todayShipping!.awaitingCostOrders === todayShipping!.orderCount
+          ? { shippingSourceState: "awaiting_shopify_cost" as const } : {}),
+        ...createProfitTodayValue({
       revenue: trading && ["live", "stale"].includes(business.trading.status) ? tradingMoney(trading.netRevenue) : unavailable(),
       productCost: createProductCostValue(todayCogs, trading, { status: business.trading.status, updatedAt: tradingAt, generatedAt: business.generatedAt }),
       // Actual purchased-label totals only; credits/adjustments remain unreconciled.
-      shipping: createShippingCostValue(todayShipping, trading, { status: business.trading.status, generatedAt: business.generatedAt }),
+      shipping,
       paymentFees: unavailable(),
       metaSpend: metaAds?.today && metaAds.currency && metaAds.reportingTimezone === "Europe/London" && ["live", "stale"].includes(metaAds.availability)
         ? available(money(metaAds.today.spend, metaAds.currency)!, metaAds.fetchedAt, metaAds.availability === "stale") : unavailable(),
-    }) },
+        }) };
+    })(),
     systemStatus: business.freshness.status,
     latestSourceAt: business.freshness.latestSourceAt,
     brainConfidence: unavailable(),

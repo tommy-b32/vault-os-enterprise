@@ -16,6 +16,7 @@ export type ProfitTodayInputs = Record<"revenue" | "productCost" | "shipping" | 
 export type ProfitTodayData = ProfitTodayInputs & {
   // Purchased-label totals remain operational until credits/adjustments are reconciled.
   shippingAccountingStatus?: "unreconciled";
+  shippingSourceState?: "awaiting_shopify_cost";
   estimatedProfit: CockpitValue<CockpitMoney>;
   margin: CockpitValue<number>;
   missingInputs: string[];

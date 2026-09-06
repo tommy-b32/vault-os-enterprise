@@ -32,6 +32,12 @@ test("shipping parser preserves exact IDs, multiple-label totals and real zero; 
   assert.match(query, /SINCE 2026-09-05 UNTIL today LIMIT 51/);
 });
 
+test("a confirmed Shopify label without a ShopifyQL amount is explicitly retryable source lag", () => {
+  assert.deepEqual([...mod.confirmedShippingLabels([{ id: order.shopify_order_id, fulfillments: [{ shippingLabel: { id: "gid://shopify/ShippingLabel/1" } }] }], [order])], [order.shopify_order_id]);
+  assert.deepEqual([...mod.confirmedShippingLabels([{ id: order.shopify_order_id, fulfillments: [{ shippingLabel: null }] }], [order])], []);
+  assert.throws(() => mod.confirmedShippingLabels([{ id: "gid://shopify/Order/2", fulfillments: [] }], [order]));
+});
+
 test("backfill requests are bounded, reproducible and cursor validated", () => {
   const input = mod.parseShippingRequest({}, new Date(at));
   assert.equal(input.createdBefore, new Date(at).toISOString());
@@ -53,15 +59,19 @@ test("sync writes explicit missing rows, replaces totals and refuses failed/trun
     assert.equal(args.snapshots[0].label_count, 2);
     assert.equal(args.snapshots[1].label_cost_gbp, null);
     assert.equal(args.snapshots[1].label_count, null);
+    assert.equal(args.snapshots[0].source_state, "covered");
+    assert.equal(args.snapshots[1].source_state, "awaiting_shopify_cost");
     return { error: null };
   } };
-  api = async () => ({ shop: { id: "shop", currencyCode: "GBP", ianaTimezone: "Europe/London" }, shopifyqlQuery: { parseErrors: [], tableData: table([row]) } });
+  api = async () => ({ shop: { id: "shop", currencyCode: "GBP", ianaTimezone: "Europe/London" },
+    nodes: [{ id: order.shopify_order_id, fulfillments: [{ shippingLabel: { id: "label" } }] }, { id: "gid://shopify/Order/2", fulfillments: [{ shippingLabel: { id: "label" } }] }],
+    shopifyqlQuery: { parseErrors: [], tableData: table([row]) } });
   const result = await mod.syncShippingBatch(db, mod.parseShippingRequest({}));
   assert.equal(result.covered, 1);
   assert.equal(result.processed, 2);
   assert.ok(calls.some(call => call[0] === "gte" && call[1] === "shopify_created_at"));
   assert.ok(calls.some(call => call[0] === "limit" && call[1] === 51));
-  api = async () => ({ shop: { currencyCode: "GBP", ianaTimezone: "Europe/London" }, shopifyqlQuery: { parseErrors: ["denied"], tableData: null } });
+  api = async () => ({ shop: { currencyCode: "GBP", ianaTimezone: "Europe/London" }, nodes: [], shopifyqlQuery: { parseErrors: ["denied"], tableData: null } });
   await assert.rejects(mod.syncShippingBatch(db, mod.parseShippingRequest({})));
   assert.equal(writeCount, 1);
 });
@@ -90,8 +100,12 @@ test("migration enforces idempotency, identity, missing coverage and London orde
     await db.exec(`create role anon; create role authenticated; create role service_role;
       create table vault_shopify_orders(id uuid primary key, shopify_order_id text, source text default 'shopify',
         shopify_created_at timestamptz, cancelled_at timestamptz, metadata jsonb default '{"test":false}');`);
-    await db.exec(await readFile(new URL("supabase/migrations/20260908120000_shopify_shipping_costs.sql", root), "utf8"));
     const id = n => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+    await db.exec(await readFile(new URL("supabase/migrations/20260908120000_shopify_shipping_costs.sql", root), "utf8"));
+    await db.query("insert into vault_shopify_orders values ($1,$2,'shopify',$3,null,$4)", [id(99), "gid://shopify/Order/99", "2026-03-28T10:00:00Z", JSON.stringify({ test: false })]);
+    await db.query("insert into vault_shopify_shipping_costs(order_id,shopify_order_id,shop_id,label_cost_gbp,label_count,query_from,fetched_at) values ($1,$2,'shop',$3,1,'2026-03-27','2026-03-29T12:00:00Z')", [id(99), "gid://shopify/Order/99", "2.95"]);
+    await db.exec(await readFile(new URL("supabase/migrations/20260908140000_shopify_shipping_cost_source_lag.sql", root), "utf8"));
+    assert.equal((await db.query("select source_state from vault_shopify_shipping_costs where order_id = $1", [id(99)])).rows[0].source_state, "covered");
     for (const [n, date, metadata, cancelled] of [
       [1, "2026-03-29T23:00:00Z", { test: false }, null],
       [2, "2026-03-30T10:00:00Z", { test: false }, null],
@@ -99,7 +113,7 @@ test("migration enforces idempotency, identity, missing coverage and London orde
       [4, "2026-03-30T10:00:00Z", { test: true }, null],
       [5, "2026-03-30T10:00:00Z", { test: false }, "2026-03-30T11:00:00Z"],
     ]) await db.query("insert into vault_shopify_orders values ($1,$2,'shopify',$3,$4,$5)", [id(n), `gid://shopify/Order/${n}`, date, cancelled, JSON.stringify(metadata)]);
-    const snapshot = (n, cost = "3.77", fetched = "2026-03-30T12:00:00Z") => ({ order_id: id(n), shopify_order_id: `gid://shopify/Order/${n}`, shop_id: "shop", label_cost_gbp: cost, label_count: cost === null ? null : 2, fetched_at: fetched, query_from: "2026-03-28" });
+    const snapshot = (n, cost = "3.77", fetched = "2026-03-30T12:00:00Z", sourceState = cost === null ? "awaiting_shopify_cost" : "covered") => ({ order_id: id(n), shopify_order_id: `gid://shopify/Order/${n}`, shop_id: "shop", label_cost_gbp: cost, label_count: cost === null ? null : 2, source_state: sourceState, fetched_at: fetched, query_from: "2026-03-28" });
     const save = rows => db.query("select record_shopify_shipping_costs($1::jsonb)", [JSON.stringify(rows)]);
     const daily = async () => (await db.query("select * from get_shopify_daily_shipping('2026-03-30T12:00:00Z')")).rows[0];
     await save([snapshot(1)]);
@@ -115,6 +129,7 @@ test("migration enforces idempotency, identity, missing coverage and London orde
     await save([snapshot(2, null, "2026-03-30T12:02:00Z")]);
     assert.equal((await daily()).total_shipping_gbp, null);
     assert.equal((await daily()).accounting_status, "unreconciled");
+    assert.equal((await daily()).awaiting_cost_orders, 1);
     await assert.rejects(save([{ ...snapshot(1), shopify_order_id: "gid://shopify/Order/2" }]));
     await assert.rejects(save([{ ...snapshot(1), query_from: "2026-03-31" }]));
     await assert.rejects(save([{ ...snapshot(1), label_cost_gbp: "-1" }]));

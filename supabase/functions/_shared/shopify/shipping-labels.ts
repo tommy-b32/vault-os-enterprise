@@ -5,6 +5,7 @@ export const SHIPPING_BATCH_SIZE = 50;
 type Order = { id: string; shopify_order_id: string; shopify_created_at: string };
 type Table = { columns: { name: string }[]; rows: unknown };
 type LabelCost = { cost: string; count: number };
+type LabelNode = { id: string; fulfillments: Array<{ shippingLabel: { id: string } | null }> } | null;
 
 export function parseShippingRequest(input: unknown, now = new Date()) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid shipping request");
@@ -59,6 +60,19 @@ export function parseLabelCosts(table: Table, orders: Order[]): Map<string, Labe
   return result;
 }
 
+export function confirmedShippingLabels(nodes: LabelNode[], orders: Order[]): Set<string> {
+  const expected = new Set(orders.map(order => order.shopify_order_id));
+  const confirmed = new Set<string>();
+  const seen = new Set<string>();
+  for (const node of nodes) {
+    if (node === null) continue;
+    if (!expected.has(node.id) || seen.has(node.id) || !Array.isArray(node.fulfillments)) throw new Error("Invalid shipping-label confirmation");
+    seen.add(node.id);
+    if (node.fulfillments.some(fulfilment => fulfilment?.shippingLabel?.id)) confirmed.add(node.id);
+  }
+  return confirmed;
+}
+
 export async function syncShippingBatch(supabase: SupabaseClient, input: ReturnType<typeof parseShippingRequest>) {
   let selection = supabase.from("vault_shopify_orders").select("id,shopify_order_id,shopify_created_at")
     .eq("source", "shopify").gte("shopify_created_at", input.createdFrom).lt("shopify_created_at", input.createdBefore)
@@ -73,18 +87,22 @@ export async function syncShippingBatch(supabase: SupabaseClient, input: ReturnT
   const { query, from } = shippingQuery(orders);
   const response = await shopifyGraphQL<{
     shop: { id: string; currencyCode: string; ianaTimezone: string };
+    nodes: LabelNode[];
     shopifyqlQuery: { parseErrors: string[]; tableData: Table | null } | null;
-  }>(`query VaultShippingCosts($query: String!) {
+  }>(`query VaultShippingCosts($query: String!, $orderIds: [ID!]!) {
     shop { id currencyCode ianaTimezone }
+    nodes(ids: $orderIds) { ... on Order { id fulfillments { shippingLabel { id } } } }
     shopifyqlQuery(query: $query) { parseErrors tableData { columns { name } rows } }
-  }`, { query }, Date.now() + 25000);
+  }`, { query, orderIds: orders.map(order => order.shopify_order_id) }, Date.now() + 25000);
   if (!response.shopifyqlQuery || response.shopifyqlQuery.parseErrors.length || !response.shopifyqlQuery.tableData ||
       response.shop.currencyCode !== "GBP" || response.shop.ianaTimezone !== "Europe/London") throw new Error("Shipping analytics unavailable or incompatible currency/timezone");
   const costs = parseLabelCosts(response.shopifyqlQuery.tableData, orders);
+  const labels = confirmedShippingLabels(response.nodes, orders);
   const rows = orders.map(order => ({
     order_id: order.id, shopify_order_id: order.shopify_order_id, shop_id: response.shop.id,
     label_cost_gbp: costs.get(order.shopify_order_id)?.cost ?? null,
     label_count: costs.get(order.shopify_order_id)?.count ?? null,
+    source_state: costs.has(order.shopify_order_id) ? "covered" : labels.has(order.shopify_order_id) ? "awaiting_shopify_cost" : "missing",
     fetched_at: fetchedAt, query_from: from,
   }));
   // One atomic replace per order, including explicit missing snapshots; never add totals.

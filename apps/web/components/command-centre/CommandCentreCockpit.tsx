@@ -250,7 +250,7 @@ export function ProfitTodayCard({ data }: DataProps) {
         <MetricRow label="Payment fees" value={profit.paymentFees} formatter={cost} />
         <MetricRow label="Margin" value={profit.margin} formatter={(entry) => `${Number(entry).toFixed(1)}%`} helpScope="profit" helpDescription="Estimated contribution divided by net Shopify revenue, as a percentage. Unavailable when revenue is zero or required costs are missing." />
       </div>
-      {profit.missingInputs.length ? <p>Incomplete · Missing: {profit.missingInputs.join(", ")}</p> : <p>{profit.estimatedProfit.state === "stale" ? "Stale estimate" : "Estimated profit"}</p>}
+      {profit.missingInputs.length ? <p>Incomplete{profit.shippingSourceState === "awaiting_shopify_cost" ? " · Awaiting Shopify cost data" : ""} · Missing: {profit.missingInputs.join(", ")}</p> : <p>{profit.estimatedProfit.state === "stale" ? "Stale estimate" : "Estimated profit"}</p>}
       <p>{display(data.trading.orders)} orders · {display(data.trading.units)} units · Today · Europe/London</p>
     </div>
   </KpiCard>;
