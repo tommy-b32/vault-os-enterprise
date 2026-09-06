@@ -15,6 +15,11 @@ export type MetaAdsSnapshot = {
     ctr: number;
     cpc: number;
     purchases: number;
+    linkClicks: number;
+    landingPageViews: number;
+    costPerPurchase: number | null;
+    cpm: number | null;
+    landingPageViewRate: number | null;
   };
 };
 
@@ -37,7 +42,7 @@ export const MetaAdsRepository = {
         .maybeSingle(),
       supabaseAdmin
         .from("vault_meta_ads_daily")
-        .select("reporting_date, spend, impressions, ctr, cpc, purchases, purchase_value, roas, fetched_at")
+        .select("reporting_date, spend, impressions, link_clicks, landing_page_views, ctr, cpc, purchases, purchase_value, roas, fetched_at")
         .order("reporting_date", { ascending: false })
         .limit(7),
     ]);
@@ -81,6 +86,17 @@ export const MetaAdsRepository = {
             ctr: Number(today.ctr),
             cpc: Number(today.cpc),
             purchases: Number(today.purchases),
+            linkClicks: Number(today.link_clicks),
+            landingPageViews: Number(today.landing_page_views),
+            costPerPurchase: Number(today.purchases) > 0
+              ? Number(today.spend) / Number(today.purchases)
+              : null,
+            cpm: Number(today.impressions) > 0
+              ? (Number(today.spend) / Number(today.impressions)) * 1000
+              : null,
+            landingPageViewRate: Number(today.link_clicks) > 0
+              ? (Number(today.landing_page_views) / Number(today.link_clicks)) * 100
+              : null,
           }
         : null,
     };

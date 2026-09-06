@@ -161,6 +161,7 @@ test("recent orders render inside Orders Today with links, units, money, time an
       }),
       visitorTrend: [],
     }),
+    meta: emptyMetrics({ connection: "unavailable" }),
     finance: emptyMetrics(),
     inventory: emptyMetrics(),
     operations: emptyMetrics(),

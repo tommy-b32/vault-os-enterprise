@@ -135,7 +135,9 @@ test("premium redesign preserves every original KPI and snapshot field", async (
     assert.match(component, new RegExp(label));
   }
 
-  assert.match(component, /Meta marketing metrics are not integrated/);
+  for (const label of ["Spend today", "Meta-attributed revenue", "Purchases", "Cost per purchase", "ROAS", "CTR", "CPC", "CPM", "Landing page view rate"]) {
+    assert.ok(component.includes(`label="${label}"`));
+  }
   assert.match(component, /<Sparkline points=\{trend\}/);
   assert.match(component, /Live trend building/);
   assert.match(component, /role="img"/);
@@ -308,7 +310,7 @@ test("canonical zero remains distinct from unavailable", () => {
   assert.notEqual(zero.state, unavailable().state);
 });
 
-test("Meta values are explicitly not connected", () => {
+test("notConnected values retain their explicit empty state", () => {
   assert.deepEqual(notConnected(), {
     state: "not_connected",
     value: null,

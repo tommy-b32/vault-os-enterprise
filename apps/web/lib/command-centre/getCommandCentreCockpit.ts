@@ -332,6 +332,27 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     },
     meta: {
       connection: metaAds?.availability ?? "unavailable",
+      costPerPurchase: metaAds?.today?.costPerPurchase != null && metaAds.currency
+        ? available(
+            money(metaAds.today.costPerPurchase, metaAds.currency)!,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
+      cpm: metaAds?.today?.cpm != null && metaAds.currency
+        ? available(
+            money(metaAds.today.cpm, metaAds.currency)!,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
+      landingPageViewRate: metaAds?.today?.landingPageViewRate != null
+        ? available(
+            metaAds.today.landingPageViewRate,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
       spend: metaAds?.today && metaAds.currency
         ? available(
             money(metaAds.today.spend, metaAds.currency)!,

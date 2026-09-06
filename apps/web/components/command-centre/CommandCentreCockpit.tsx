@@ -323,7 +323,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <MetricRow label="Inventory" value={data.inventory.freshness} formatter={() => inventoryFreshnessText(data.inventory.freshness, data.generatedAt)} />
           <MetricRow label="Reorder review" value={data.inventory.reorderReview} />
         </Snapshot>
-                <Snapshot title="Marketing Snapshot" subtitle="Meta Ads" icon="target">
+        <Snapshot title="Marketing Snapshot" subtitle="Meta Ads" icon="target">
           <MetricRow
             label="Spend today"
             value={data.meta.spend}
@@ -335,14 +335,19 @@ export function CommandCentreCockpit({ data }: DataProps) {
             formatter={(value) => formatMoney(value as CockpitMoney)}
           />
           <MetricRow
+            label="Purchases"
+            value={data.meta.purchases}
+            formatter={(value) => Number(value).toLocaleString("en-GB", { maximumFractionDigits: 0 })}
+          />
+          <MetricRow
+            label="Cost per purchase"
+            value={data.meta.costPerPurchase}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
             label="ROAS"
             value={data.meta.roas}
             formatter={(value) => `${Number(value).toFixed(2)}x`}
-          />
-          <MetricRow
-            label="Purchases"
-            value={data.meta.purchases}
-            formatter={(value) => Number(value).toLocaleString("en-GB")}
           />
           <MetricRow
             label="CTR"
@@ -353,6 +358,16 @@ export function CommandCentreCockpit({ data }: DataProps) {
             label="CPC"
             value={data.meta.costPerClick}
             formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            label="CPM"
+            value={data.meta.cpm}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            label="Landing page view rate"
+            value={data.meta.landingPageViewRate}
+            formatter={(value) => `${Number(value).toFixed(2)}%`}
           />
         </Snapshot>
         <Snapshot title="Operations Snapshot" subtitle="Order fulfilment" icon="orders" href="/orders">

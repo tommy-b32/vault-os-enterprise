@@ -178,6 +178,7 @@ test("Finance card keeps metrics and renders nine signed ledger rows with gracef
       }),
       visitorTrend: [],
     }),
+    meta: emptyMetrics({ connection: "unavailable" }),
     finance: emptyMetrics(),
     inventory: emptyMetrics(),
     operations: emptyMetrics(),

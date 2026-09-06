@@ -113,6 +113,9 @@ export type CommandCentreCockpitData = {
     impressions: CockpitValue<number>;
     clickThroughRate: CockpitValue<number>;
     costPerClick: CockpitValue<CockpitMoney>;
+    costPerPurchase: CockpitValue<CockpitMoney>;
+    cpm: CockpitValue<CockpitMoney>;
+    landingPageViewRate: CockpitValue<number>;
     purchases: CockpitValue<number>;
   };
   finance: {
