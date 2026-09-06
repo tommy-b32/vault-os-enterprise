@@ -15,6 +15,7 @@ import {
   createCalendarRevenueValues,
   createTodayPayoutValue,
   createProfitTodayValue,
+  createProductCostValue,
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
   limitFeed,
@@ -41,7 +42,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -63,6 +64,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       : Promise.resolve(null),
     ShopifyTradingRepository.getRecentOrderSummaries().catch(() => null),
     CashLedgerRepository.getRecentEntries().catch(() => null),
+    ShopifyTradingRepository.getTodayCogs(new Date(business.generatedAt)).catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -271,9 +273,8 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     generatedAt: business.generatedAt,
     profit: createProfitTodayValue({
       revenue: trading && ["live", "stale"].includes(business.trading.status) ? tradingMoney(trading.netRevenue) : unavailable(),
-      // No sold-item cost allocation, outbound expense, or order-fee source exists yet.
-      // Do not substitute today's supplier prices, customer shipping charges, or payouts.
-      productCost: unavailable(),
+      productCost: createProductCostValue(todayCogs, trading, { status: business.trading.status, updatedAt: tradingAt, generatedAt: business.generatedAt }),
+      // Outbound expenses and payment fees are still uncollected; keep profit incomplete.
       shipping: unavailable(),
       paymentFees: unavailable(),
       metaSpend: metaAds?.today && metaAds.currency && metaAds.reportingTimezone === "Europe/London" && ["live", "stale"].includes(metaAds.availability)

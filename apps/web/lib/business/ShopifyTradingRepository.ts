@@ -291,6 +291,19 @@ async function getOrdersInRange(
 }
 
 export const ShopifyTradingRepository = {
+  async getTodayCogs(now = new Date()) {
+    const { data, error } = await supabaseAdmin.rpc("get_shopify_daily_cogs", { target_at: now.toISOString() }).single<Record<string, unknown>>();
+    if (error || !data) throw new Error("Canonical daily COGS is unavailable");
+    const count = (value: unknown) => {
+      const number = value == null || value === "" ? NaN : Number(value);
+      if (!Number.isSafeInteger(number) || number < 0) throw new Error("Invalid COGS coverage");
+      return number;
+    };
+    const totalCogs = data.total_cogs_gbp == null ? null : Number(data.total_cogs_gbp);
+    if (totalCogs !== null && (!Number.isFinite(totalCogs) || totalCogs < 0)) throw new Error("Invalid COGS total");
+    return { totalCogs, totalUnits: count(data.total_units), costedUnits: count(data.costed_units),
+      missingCostLines: count(data.missing_cost_lines), orderCount: count(data.order_count), sourceAt: data.source_at as string | null };
+  },
   async getCalendarRevenue(now = new Date()): Promise<ShopifyCalendarRevenue> {
     const ranges = getCalendarRevenueRanges(now);
     const summary = async (range: ShopifyTradingRange) => {

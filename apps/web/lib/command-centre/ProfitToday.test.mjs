@@ -5,11 +5,27 @@ import { createRequire } from "node:module";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
-import { createProfitTodayValue, unavailable } from "./CommandCentreCockpit.ts";
+import { createProfitTodayValue, createProductCostValue, unavailable } from "./CommandCentreCockpit.ts";
 
 const at = "2026-09-07T12:00:00Z";
 const money = (amount, state = "available", currency = "GBP") => ({ state, value: { amount, currency }, updatedAt: at });
 const inputs = () => ({ revenue: money(200), productCost: money(60), shipping: money(10), metaSpend: money(20), paymentFees: money(5) });
+
+test("only complete matching sold-unit coverage exposes COGS; shipping and fees still block profit", () => {
+  const coverage = { totalCogs: 40, totalUnits: 5, costedUnits: 5, missingCostLines: 0, orderCount: 2, sourceAt: at };
+  const trading = { itemsSold: 5, orderCount: 2 };
+  const source = { status: "live", updatedAt: at, generatedAt: at };
+  const cost = createProductCostValue(coverage, trading, source);
+  assert.deepEqual(cost, money(40));
+  for (const bad of [null, { ...coverage, missingCostLines: 1 }, { ...coverage, costedUnits: 4 }, { ...coverage, totalCogs: null }, { ...coverage, orderCount: 3 }]) {
+    assert.deepEqual(createProductCostValue(bad, trading, source), unavailable());
+  }
+  assert.equal(createProductCostValue(coverage, trading, { ...source, status: "stale" }).state, "stale");
+  assert.equal(createProductCostValue(coverage, trading, { ...source, status: "unavailable" }).state, "unavailable");
+  const result = createProfitTodayValue({ ...inputs(), productCost: cost, shipping: unavailable(), paymentFees: unavailable() });
+  assert.deepEqual(result.estimatedProfit, unavailable());
+  assert.deepEqual(result.missingInputs, ["shipping", "payment fees"]);
+});
 
 test("trusted complete costs subtract each expense once and margin divides by net revenue", () => {
   // 200 is already canonical adjusted revenue: refunds and discounts are not subtracted again.
@@ -55,7 +71,8 @@ test("stale, invalid, mismatched-currency and pending sources cannot produce a l
 test("live loader reuses canonical revenue and Meta, marking uncollected costs unavailable", async () => {
   const loader = await readFile(new URL("./getCommandCentreCockpit.ts", import.meta.url), "utf8");
   const section = loader.slice(loader.indexOf("profit: createProfitTodayValue"), loader.indexOf("systemStatus:", loader.indexOf("profit: createProfitTodayValue")));
-  for (const key of ["productCost", "shipping", "paymentFees"]) assert.ok(section.includes(`${key}: unavailable()`));
+  for (const key of ["shipping", "paymentFees"]) assert.ok(section.includes(`${key}: unavailable()`));
+  assert.ok(section.includes("productCost: createProductCostValue(todayCogs, trading"));
   assert.ok(section.includes("tradingMoney(trading.netRevenue)"));
   assert.ok(section.includes("money(metaAds.today.spend, metaAds.currency)"));
   assert.ok(section.includes('metaAds.reportingTimezone === "Europe/London"'));

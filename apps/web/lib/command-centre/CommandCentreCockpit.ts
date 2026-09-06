@@ -19,6 +19,21 @@ export type ProfitTodayData = ProfitTodayInputs & {
   missingInputs: string[];
 };
 
+export function createProductCostValue(
+  cogs: { totalCogs: number | null; totalUnits: number; costedUnits: number; missingCostLines: number; orderCount: number; sourceAt: string | null } | null,
+  trading: { itemsSold: number; orderCount: number } | null,
+  source: { status: string; updatedAt: string | null; generatedAt: string },
+): CockpitValue<CockpitMoney> {
+  if (!cogs || !trading || !["live", "stale"].includes(source.status) || !source.updatedAt ||
+      cogs.totalCogs == null || !Number.isFinite(cogs.totalCogs) || cogs.totalCogs < 0 ||
+      cogs.missingCostLines !== 0 || cogs.costedUnits !== cogs.totalUnits ||
+      cogs.totalUnits !== trading.itemsSold || cogs.orderCount !== trading.orderCount) return unavailable();
+  const updatedAt = cogs.sourceAt ?? source.updatedAt;
+  const age = Date.parse(source.generatedAt) - Date.parse(updatedAt);
+  if (!Number.isFinite(age) || age < 0) return unavailable();
+  return { state: source.status === "stale" || age > 30 * 60_000 ? "stale" : "available", value: { amount: cogs.totalCogs, currency: "GBP" }, updatedAt };
+}
+
 /**
  * Estimated contribution = canonical net Shopify revenue - sold-item COGS
  * - outbound shipping expense - Meta spend - payment fees, all for the same day/currency.
