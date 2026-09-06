@@ -148,21 +148,91 @@ function Sparkline({ points }: { points: CockpitTrendPoint[] }) {
   );
 }
 
-function MetricRow({ label, value, formatter, metaHelp }: {
+function MetricRow({ label, value, formatter, metaHelp, helpScope = "snapshot" }: {
   label: string;
+  helpScope?: string;
   metaHelp?: string;
   value: CockpitValue<number | CockpitMoney | string>;
   formatter?: (value: number | CockpitMoney | string) => string;
 }) {
   return (
     <div className="cc-metric-row">
-      <span>{metaHelp ? <MetaLabel label={label} metric={metaHelp} scope="snapshot" /> : label}</span>
+      <span>{metaHelp ? <MetaLabel label={label} metric={metaHelp} scope={helpScope} /> : label}</span>
       <strong className={`is-${value.state}`}>
         {display(value, formatter ?? ((entry) => String(entry)))}
         {stateLabel(value) ? <small>{stateLabel(value)}</small> : null}
       </strong>
     </div>
   );
+}
+
+function MetaMetricRows({ meta, scope }: { meta: CommandCentreCockpitData["meta"]; scope: string }) {
+  const data = { meta };
+  return <>
+          <MetricRow
+            helpScope={scope}
+            label="Spend today"
+            metaHelp="Spend"
+            value={data.meta.spend}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            helpScope={scope}
+            label="Meta-attributed revenue"
+            metaHelp="Meta-attributed revenue"
+            value={data.meta.attributedRevenue}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            helpScope={scope}
+            label="Purchases"
+            metaHelp="Purchases"
+            value={data.meta.purchases}
+            formatter={(value) => Number(value).toLocaleString("en-GB", { maximumFractionDigits: 0 })}
+          />
+          <MetricRow
+            helpScope={scope}
+            label="Cost per purchase"
+            metaHelp="Cost per purchase"
+            value={data.meta.costPerPurchase}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            helpScope={scope}
+            label="ROAS"
+            metaHelp="ROAS"
+            value={data.meta.roas}
+            formatter={(value) => `${Number(value).toFixed(2)}x`}
+          />
+          <MetricRow
+            helpScope={scope}
+            label="CTR"
+            metaHelp="CTR"
+            value={data.meta.clickThroughRate}
+            formatter={(value) => `${Number(value).toFixed(2)}%`}
+          />
+          <MetricRow
+            helpScope={scope}
+            label="CPC"
+            metaHelp="CPC"
+            value={data.meta.costPerClick}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            helpScope={scope}
+            label="CPM"
+            metaHelp="CPM"
+            value={data.meta.cpm}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            helpScope={scope}
+            label="Landing page view rate"
+            metaHelp="Landing page view rate"
+            value={data.meta.landingPageViewRate}
+            formatter={(value) => `${Number(value).toFixed(2)}%`}
+          />
+  </>;
 }
 
 function Snapshot({ title, subtitle, icon, href, children }: {
@@ -292,6 +362,9 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <span>
             <MetaLabel label="Meta-attributed revenue" /> {display(data.meta.attributedRevenue, (value) => formatMoney(value))}
           </span>
+          <section className="cc-meta-details" aria-label="Today's Meta metrics">
+            <MetaMetricRows meta={data.meta} scope="card-details" />
+          </section>
         </KpiCard>
         <KpiCard eyebrow="Finance Position" icon="inventory" accent="gold" value={moneyValue(data.finance.ledgerCash)}>
           <div className="cc-finance-support">
@@ -371,60 +444,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <MetricRow label="Reorder review" value={data.inventory.reorderReview} />
         </Snapshot>
         <Snapshot title="Marketing Snapshot" subtitle="Meta Ads" icon="target">
-          <MetricRow
-            label="Spend today"
-            metaHelp="Spend"
-            value={data.meta.spend}
-            formatter={(value) => formatMoney(value as CockpitMoney)}
-          />
-          <MetricRow
-            label="Meta-attributed revenue"
-            metaHelp="Meta-attributed revenue"
-            value={data.meta.attributedRevenue}
-            formatter={(value) => formatMoney(value as CockpitMoney)}
-          />
-          <MetricRow
-            label="Purchases"
-            metaHelp="Purchases"
-            value={data.meta.purchases}
-            formatter={(value) => Number(value).toLocaleString("en-GB", { maximumFractionDigits: 0 })}
-          />
-          <MetricRow
-            label="Cost per purchase"
-            metaHelp="Cost per purchase"
-            value={data.meta.costPerPurchase}
-            formatter={(value) => formatMoney(value as CockpitMoney)}
-          />
-          <MetricRow
-            label="ROAS"
-            metaHelp="ROAS"
-            value={data.meta.roas}
-            formatter={(value) => `${Number(value).toFixed(2)}x`}
-          />
-          <MetricRow
-            label="CTR"
-            metaHelp="CTR"
-            value={data.meta.clickThroughRate}
-            formatter={(value) => `${Number(value).toFixed(2)}%`}
-          />
-          <MetricRow
-            label="CPC"
-            metaHelp="CPC"
-            value={data.meta.costPerClick}
-            formatter={(value) => formatMoney(value as CockpitMoney)}
-          />
-          <MetricRow
-            label="CPM"
-            metaHelp="CPM"
-            value={data.meta.cpm}
-            formatter={(value) => formatMoney(value as CockpitMoney)}
-          />
-          <MetricRow
-            label="Landing page view rate"
-            metaHelp="Landing page view rate"
-            value={data.meta.landingPageViewRate}
-            formatter={(value) => `${Number(value).toFixed(2)}%`}
-          />
+          <MetaMetricRows meta={data.meta} scope="snapshot" />
         </Snapshot>
         <Snapshot title="Operations Snapshot" subtitle="Order fulfilment" icon="orders" href="/orders">
           <MetricRow label="Awaiting fulfilment" value={data.operations.awaitingFulfilment} />
@@ -455,6 +475,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 
 function CommandCentreCockpitStyles() {
   return <style>{`
+    .cc-kpi-card.is-meta>.cc-kpi-support{flex-direction:column}.cc-meta-details{min-width:0;border-top:1px solid rgba(255,255,255,.12);padding-top:3px}.cc-meta-details .cc-metric-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:8px;padding:6px 0}.cc-meta-details .cc-metric-row>span{text-align:left;min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-metric-row>strong{min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-hint-content{width:min(260px,70vw)}
     .cc-kpi-card.is-meta{overflow:visible}.cc-kpi-card.is-meta:after{display:none}.cc-kpi-card.is-meta:hover,.cc-kpi-card.is-meta:focus-within{z-index:3}.cc-kpi-support .cc-hint .cc-hint-content{text-align:left}.cc-kpi-values>div:last-child .cc-hint-content{left:auto;right:0}
     .cc-hint{position:relative;display:inline-block;cursor:help;text-decoration:underline dotted;text-underline-offset:3px}.cc-hint:focus-visible{outline:2px solid #dfb33e;outline-offset:3px;border-radius:2px}.cc-hint .cc-hint-content{visibility:hidden;position:absolute;z-index:20;top:100%;left:0;width:260px;max-width:calc(100vw - 48px);padding:10px 12px;border:1px solid #626052;border-radius:6px;background:#202521;color:#eeeee8;box-shadow:0 6px 20px #0008;font-size:12px;font-weight:400;line-height:1.5;text-align:left;white-space:normal;text-transform:none;letter-spacing:normal}.cc-hint:hover>.cc-hint-content,.cc-hint:focus>.cc-hint-content{visibility:visible}.cc-meta-comparison{display:grid;gap:5px;margin:12px 0;font-size:12px;color:#aeb5af}.cc-meta-change.is-positive{color:#58d27d}.cc-meta-change.is-negative{color:#ff7474}.cc-meta-change.is-neutral{color:#aeb5af}.cc-meta-direction{font-size:11px}
     .cc-fulfilment-dot{display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;vertical-align:middle;background:#69716e}.cc-fulfilment-dot.is-completed{background:#48da7d}.cc-fulfilment-dot.is-awaiting{background:#54c8f3}

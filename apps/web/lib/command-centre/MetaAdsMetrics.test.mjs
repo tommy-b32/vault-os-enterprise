@@ -60,6 +60,40 @@ const history = Array.from({ length: 7 }, (_, i) => ({
   spend: i === 0 ? "600" : "100", purchase_value: i === 0 ? "600" : "300", purchases: i === 0 ? "60" : "10",
 }));
 
+test("Meta card retains its headline and comparisons above nine shared detail rows with unique tooltips", async () => {
+  const source = await readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8");
+  const start = source.lastIndexOf("<KpiCard", source.indexOf('eyebrow="Meta Ads"'));
+  const card = source.slice(start, source.indexOf("</KpiCard>", start) + "</KpiCard>".length);
+  const helpers = source.slice(source.indexOf("const META_HELP"), source.indexOf("function Snapshot"));
+  const compiled = ts.transpileModule(`${helpers}\nconst VaultIcon = () => null;\nexport function Render({data}) { return <>${card}<MetaMetricRows meta={data.meta} scope="snapshot" /></>; }`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const exports = {};
+  new Function("require", "exports", compiled)(createRequire(import.meta.url), exports);
+  const meta = mapMeta(await snapshot({}, "live", null, history), unavailable);
+  const html = renderToStaticMarkup(React.createElement(exports.Render, { data: { meta } }));
+  const headline = html.slice(html.indexOf('class="cc-kpi-values"'), html.indexOf('class="cc-meta-comparison"'));
+  assert.match(headline, /<strong>4\.00x<\/strong>/);
+  assert.match(headline, /<strong>£120<\/strong>/);
+  assert.match(headline, /<strong>8<\/strong>/);
+  assert.ok(headline.indexOf("ROAS today") < headline.indexOf("Spend today"));
+  assert.ok(headline.indexOf("Spend today") < headline.indexOf("Purchases"));
+  const detailStart = html.indexOf('class="cc-meta-details"');
+  assert.ok(html.indexOf("ROAS change") < detailStart);
+  assert.ok(html.indexOf("baseline 2.00x") < detailStart);
+  assert.ok(html.indexOf("Cost per purchase change") < detailStart);
+  assert.ok(html.indexOf("Meta-attributed revenue") < detailStart);
+  const details = html.slice(detailStart, html.indexOf("</section>", detailStart));
+  const labels = [...details.matchAll(/aria-describedby="meta-card-details-[^"]+">([^<]+)/g)].map(match => match[1]);
+  assert.deepEqual(labels, ["Spend today", "Meta-attributed revenue", "Purchases", "Cost per purchase", "ROAS", "CTR", "CPC", "CPM", "Landing page view rate"]);
+  assert.equal((details.match(/class="cc-metric-row"/g) ?? []).length, 9);
+  assert.equal((details.match(/tabindex="0"/g) ?? []).length, 9);
+  assert.equal((details.match(/role="tooltip"/g) ?? []).length, 9);
+  for (const value of ["£120", "£480", ">8<", "£15", "4.00x", "3.99%", "£0.15", "£6", "80.00%"]) assert.ok(details.includes(value), value);
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(ids).size, ids.length);
+});
+
 test("previous seven exact completed dates exclude today and use ratios of totals", async () => {
   const source = await snapshot({}, "live", null, history);
   assert.deepEqual(source.previous7Days, { roas: 2, costPerPurchase: 10 });
