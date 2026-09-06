@@ -146,7 +146,7 @@ test("premium redesign preserves every original KPI and snapshot field", async (
     "Business Pulse", "Executive Intelligence", "Going well",
     "Limiting the business", "Supporting evidence", "Today&apos;s Focus",
     "Unlocks", "Needs Your Attention", "Latest Business Activity",
-    "Sales Funnel", "Inventory Snapshot", "Meta Ads Details",
+    "Sales Funnel", "Inventory Snapshot", "Marketing Snapshot",
     "Operations Snapshot", "CommandCentreLiveRefresh", "Sources current",
   ]) {
     assert.match(component, new RegExp(preserved));
