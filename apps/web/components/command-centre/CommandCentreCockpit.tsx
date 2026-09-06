@@ -231,8 +231,20 @@ export function CommandCentreCockpit({ data }: DataProps) {
             <div className="cc-vault-tracking"><strong>Vault live tracking</strong><span>Consented sessions {numberValue(data.website.sessions)} · Live tracked visitors {numberValue(data.website.liveTrackedVisitors)}</span><span>Tracked conversion {percentValue(data.website.conversionRate)} · Abandoned-checkout evidence {numberValue(data.website.abandonedCheckouts)}</span></div>
           </div> : <><span className="cc-traffic-breakdown">Tracked {numberValue(data.website.trackedVisitors)} · Estimated untracked {numberValue(data.website.estimatedUntrackedVisitors)} · Live tracked {numberValue(data.website.liveTrackedVisitors)}</span><span>{data.website.shopifyAnalytics.availability === "pending_permission" ? "Pending Shopify reporting access" : "Shopify Analytics unavailable"}</span></>}
         </KpiCard>
-        <KpiCard eyebrow="Meta Ads" icon="target" accent="pink" value="Not connected">
-          <span>Meta marketing data is not integrated.</span>
+                <KpiCard
+          eyebrow="Meta Ads"
+          icon="target"
+          accent="pink"
+          value={display(data.meta.roas, (value) => `${value.toFixed(2)}x`)}
+          valueLabel="ROAS today"
+          secondaryValue={display(data.meta.spend, (value) => formatMoney(value))}
+          secondaryLabel="Spend today"
+          tertiaryValue={display(data.meta.purchases, (value) => value.toLocaleString("en-GB"))}
+          tertiaryLabel="Purchases"
+        >
+          <span>
+            Meta-attributed revenue {display(data.meta.attributedRevenue, (value) => formatMoney(value))}
+          </span>
         </KpiCard>
         <KpiCard eyebrow="Finance Position" icon="inventory" accent="gold" value={moneyValue(data.finance.ledgerCash)}>
           <div className="cc-finance-support">
@@ -311,8 +323,37 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <MetricRow label="Inventory" value={data.inventory.freshness} formatter={() => inventoryFreshnessText(data.inventory.freshness, data.generatedAt)} />
           <MetricRow label="Reorder review" value={data.inventory.reorderReview} />
         </Snapshot>
-        <Snapshot title="Marketing Snapshot" subtitle="Meta Ads" icon="target">
-          <div className="cc-connection-state"><strong>Not connected</strong><p>Meta marketing metrics are not integrated with Vault OS.</p></div>
+                <Snapshot title="Marketing Snapshot" subtitle="Meta Ads" icon="target">
+          <MetricRow
+            label="Spend today"
+            value={data.meta.spend}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            label="Meta-attributed revenue"
+            value={data.meta.attributedRevenue}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
+          <MetricRow
+            label="ROAS"
+            value={data.meta.roas}
+            formatter={(value) => `${Number(value).toFixed(2)}x`}
+          />
+          <MetricRow
+            label="Purchases"
+            value={data.meta.purchases}
+            formatter={(value) => Number(value).toLocaleString("en-GB")}
+          />
+          <MetricRow
+            label="CTR"
+            value={data.meta.clickThroughRate}
+            formatter={(value) => `${Number(value).toFixed(2)}%`}
+          />
+          <MetricRow
+            label="CPC"
+            value={data.meta.costPerClick}
+            formatter={(value) => formatMoney(value as CockpitMoney)}
+          />
         </Snapshot>
         <Snapshot title="Operations Snapshot" subtitle="Order fulfilment" icon="orders" href="/orders">
           <MetricRow label="Awaiting fulfilment" value={data.operations.awaitingFulfilment} />

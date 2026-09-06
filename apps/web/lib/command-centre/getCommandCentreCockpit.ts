@@ -10,6 +10,7 @@ import type { FinancePosition } from "@/lib/business/BusinessFinanceRepository";
 import { StorefrontFunnelRepository } from "@/lib/business/StorefrontFunnelRepository";
 import { ShopifyTradingRepository } from "@/lib/business/ShopifyTradingRepository";
 import { ShopifyAnalyticsRepository } from "@/lib/business/ShopifyAnalyticsRepository";
+import { MetaAdsRepository } from "@/lib/business/MetaAdsRepository";
 import {
   createCalendarRevenueValues,
   createTodayPayoutValue,
@@ -17,7 +18,6 @@ import {
   deriveBusinessPulse,
   limitFeed,
   limitInsights,
-  notConnected,
   reconcileTimelineInventoryFreshness,
   selectAttentionItems,
   selectTodaysFocus,
@@ -40,7 +40,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, calendarRevenue, recentOrders, recentLedger] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -56,6 +56,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     StorefrontFunnelRepository.getToday().catch(() => null),
     ShopifyTradingRepository.getOperationsSnapshot().catch(() => null),
     ShopifyAnalyticsRepository.getSnapshot().catch(() => null),
+    MetaAdsRepository.getSnapshot().catch(() => null),
     business.trading.data
       ? ShopifyTradingRepository.getCalendarRevenue(new Date(business.generatedAt)).catch(() => null)
       : Promise.resolve(null),
@@ -171,7 +172,23 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
             ? "No purchasing power"
             : wallet.purchasing_power_state.replaceAll("_", " "),
     },
-    { domain: "Marketing", state: "not_connected", detail: "Meta not connected" },
+    {
+      domain: "Marketing",
+      state: metaAds?.availability === "live"
+        ? "healthy"
+        : metaAds?.availability === "stale"
+          ? "watch"
+          : metaAds?.availability === "pending_configuration"
+            ? "not_connected"
+            : "unavailable",
+      detail: metaAds?.availability === "live"
+        ? "Meta Ads current"
+        : metaAds?.availability === "stale"
+          ? "Meta Ads data stale"
+          : metaAds?.availability === "pending_configuration"
+            ? "Meta Ads configuration pending"
+            : "Meta Ads unavailable",
+    },
     { domain: "Operations", state: "watch", detail: "Partial visibility" },
     supplierBlocker
       ? { domain: "Suppliers", state: "attention", detail: supplierBlocker.title }
@@ -314,14 +331,56 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       },
     },
     meta: {
-      connection: "not_connected",
-      spend: notConnected(),
-      attributedRevenue: notConnected(),
-      roas: notConnected(),
-      impressions: notConnected(),
-      clickThroughRate: notConnected(),
-      costPerClick: notConnected(),
-      purchases: notConnected(),
+      connection: metaAds?.availability ?? "unavailable",
+      spend: metaAds?.today && metaAds.currency
+        ? available(
+            money(metaAds.today.spend, metaAds.currency)!,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
+      attributedRevenue: metaAds?.today && metaAds.currency
+        ? available(
+            money(metaAds.today.attributedRevenue, metaAds.currency)!,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
+      roas: metaAds?.today
+        ? available(
+            metaAds.today.roas,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
+      impressions: metaAds?.today
+        ? available(
+            metaAds.today.impressions,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
+      clickThroughRate: metaAds?.today
+        ? available(
+            metaAds.today.ctr,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
+      costPerClick: metaAds?.today && metaAds.currency
+        ? available(
+            money(metaAds.today.cpc, metaAds.currency)!,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
+      purchases: metaAds?.today
+        ? available(
+            metaAds.today.purchases,
+            metaAds.fetchedAt,
+            metaAds.availability === "stale",
+          )
+        : unavailable(),
     },
     finance: {
       recentLedger: recentLedger ? available(recentLedger, business.generatedAt) : unavailable(),

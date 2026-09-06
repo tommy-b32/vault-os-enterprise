@@ -106,7 +106,7 @@ export type CommandCentreCockpitData = {
     };
   };
   meta: {
-    connection: "not_connected";
+    connection: "live" | "stale" | "unavailable" | "pending_configuration";
     spend: CockpitValue<CockpitMoney>;
     attributedRevenue: CockpitValue<CockpitMoney>;
     roas: CockpitValue<number>;
