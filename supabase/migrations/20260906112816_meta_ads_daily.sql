@@ -1,4 +1,4 @@
-﻿create table if not exists public.vault_meta_ads_daily (
+create table if not exists public.vault_meta_ads_daily (
   id bigint generated always as identity primary key,
   ad_account_id text not null,
   reporting_date date not null,
