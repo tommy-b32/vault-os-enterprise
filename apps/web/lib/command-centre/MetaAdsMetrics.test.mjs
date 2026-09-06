@@ -60,12 +60,14 @@ const history = Array.from({ length: 7 }, (_, i) => ({
   spend: i === 0 ? "600" : "100", purchase_value: i === 0 ? "600" : "300", purchases: i === 0 ? "60" : "10",
 }));
 
-test("Meta card retains its headline and nine detail rows with tooltips but no comparison block", async () => {
+test("compact Meta headline and separate details card retain values and unique tooltips without comparisons", async () => {
   const source = await readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8");
   const start = source.lastIndexOf("<KpiCard", source.indexOf('eyebrow="Meta Ads"'));
   const card = source.slice(start, source.indexOf("</KpiCard>", start) + "</KpiCard>".length);
-  const helpers = source.slice(source.indexOf("const META_HELP"), source.indexOf("function Snapshot"));
-  const compiled = ts.transpileModule(`${helpers}\nconst VaultIcon = () => null;\nexport function Render({data}) { return <>${card}<MetaMetricRows meta={data.meta} scope="snapshot" /></>; }`, {
+  const detailCardStart = source.indexOf('<Snapshot title="Meta Ads Details"');
+  const detailCard = source.slice(detailCardStart, source.indexOf("</Snapshot>", detailCardStart) + "</Snapshot>".length);
+  const helpers = source.slice(source.indexOf("const META_HELP"), source.indexOf("function FulfilmentDot"));
+  const compiled = ts.transpileModule(`${helpers}\nconst VaultIcon = () => null;\nexport function Render({data}) { return <>${card}${detailCard}</>; }`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
@@ -78,7 +80,11 @@ test("Meta card retains its headline and nine detail rows with tooltips but no c
   assert.match(headline, /<strong>8<\/strong>/);
   assert.ok(headline.indexOf("ROAS today") < headline.indexOf("Spend today"));
   assert.ok(headline.indexOf("Spend today") < headline.indexOf("Purchases"));
-  const detailStart = html.indexOf('class="cc-meta-details"');
+  const detailStart = html.indexOf('<article class="cc-card cc-snapshot"');
+  assert.ok(detailStart > html.indexOf("</article>"));
+  assert.ok(!card.includes("MetaMetricRows"));
+  assert.ok(!html.slice(0, detailStart).includes("cc-metric-row"));
+  assert.ok(html.includes("Meta Ads Details"));
   assert.ok(!html.includes("ROAS change"));
   assert.ok(!html.includes("previous 7 days"));
   assert.ok(!html.includes("Cost per purchase change"));
@@ -87,10 +93,13 @@ test("Meta card retains its headline and nine detail rows with tooltips but no c
   const grid = source.match(/\.cc-kpi-grid\{([^}]+)\}/)[1];
   assert.ok(grid.includes("grid-template-columns:repeat(4,minmax(0,1fr))"));
   assert.ok(grid.includes("grid-auto-rows:auto"));
-  assert.ok(grid.includes("align-items:start"));
+  assert.ok(grid.includes("align-items:stretch"));
+  const headlineGrid = source.slice(source.indexOf('<section className="cc-kpi-grid"'), source.indexOf('<section className="cc-kpi-grid cc-secondary-grid"'));
+  assert.equal((headlineGrid.match(/<KpiCard\b/g) ?? []).length, 4);
+  assert.ok(!headlineGrid.includes('eyebrow="Finance Position"'));
   assert.ok(html.indexOf("Meta-attributed revenue") < detailStart);
-  const details = html.slice(detailStart, html.indexOf("</section>", detailStart));
-  const labels = [...details.matchAll(/aria-describedby="meta-card-details-[^"]+">([^<]+)/g)].map(match => match[1]);
+  const details = html.slice(detailStart, html.indexOf("</article>", detailStart));
+  const labels = [...details.matchAll(/aria-describedby="meta-snapshot-[^"]+">([^<]+)/g)].map(match => match[1]);
   assert.deepEqual(labels, ["Spend today", "Meta-attributed revenue", "Purchases", "Cost per purchase", "ROAS", "CTR", "CPC", "CPM", "Landing page view rate"]);
   assert.equal((details.match(/class="cc-metric-row"/g) ?? []).length, 9);
   assert.equal((details.match(/tabindex="0"/g) ?? []).length, 9);
@@ -228,7 +237,7 @@ test("missing today, query errors and pending configuration preserve connection 
   }
 });
 
-test("Marketing Snapshot formats Meta percentage values directly to two decimals", async () => {
+test("Meta Ads Details formats Meta percentage values directly to two decimals", async () => {
   const component = await readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8");
   for (const key of ["clickThroughRate", "landingPageViewRate"]) {
     assert.ok(component.includes(`value={data.meta.${key}}\n            formatter={(value) => \x60${"${Number(value).toFixed(2)}"}%\x60}`) ||
