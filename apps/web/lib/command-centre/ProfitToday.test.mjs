@@ -70,8 +70,9 @@ test("stale, invalid, mismatched-currency and pending sources cannot produce a l
 
 test("live loader reuses canonical revenue and Meta, marking uncollected costs unavailable", async () => {
   const loader = await readFile(new URL("./getCommandCentreCockpit.ts", import.meta.url), "utf8");
-  const section = loader.slice(loader.indexOf("profit: createProfitTodayValue"), loader.indexOf("systemStatus:", loader.indexOf("profit: createProfitTodayValue")));
-  for (const key of ["shipping", "paymentFees"]) assert.ok(section.includes(`${key}: unavailable()`));
+  const section = loader.slice(loader.indexOf("profit: {"), loader.indexOf("systemStatus:", loader.indexOf("profit: {")));
+  assert.ok(section.includes("paymentFees: unavailable()"));
+  assert.ok(section.includes("shipping: createShippingCostValue(todayShipping, trading"));
   assert.ok(section.includes("productCost: createProductCostValue(todayCogs, trading"));
   assert.ok(section.includes("tradingMoney(trading.netRevenue)"));
   assert.ok(section.includes("money(metaAds.today.spend, metaAds.currency)"));

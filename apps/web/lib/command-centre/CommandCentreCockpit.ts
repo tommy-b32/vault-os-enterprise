@@ -14,10 +14,26 @@ export type CockpitMoney = { amount: number; currency: string };
 
 export type ProfitTodayInputs = Record<"revenue" | "productCost" | "shipping" | "metaSpend" | "paymentFees", CockpitValue<CockpitMoney>>;
 export type ProfitTodayData = ProfitTodayInputs & {
+  // Purchased-label totals remain operational until credits/adjustments are reconciled.
+  shippingAccountingStatus?: "unreconciled";
   estimatedProfit: CockpitValue<CockpitMoney>;
   margin: CockpitValue<number>;
   missingInputs: string[];
 };
+
+export function createShippingCostValue(
+  shipping: { total: number | null; orderCount: number; coveredOrders: number; sourceAt: string | null } | null,
+  trading: { orderCount: number; currency: string | null } | null,
+  source: { status: string; generatedAt: string },
+): CockpitValue<CockpitMoney> {
+  if (!shipping || !trading || !["live", "stale"].includes(source.status) || trading.currency !== "GBP" ||
+      shipping.orderCount <= 0 || shipping.orderCount !== trading.orderCount || shipping.coveredOrders !== shipping.orderCount ||
+      shipping.total === null || !Number.isFinite(shipping.total) || shipping.total < 0 || !shipping.sourceAt) return unavailable();
+  const age = Date.parse(source.generatedAt) - Date.parse(shipping.sourceAt);
+  if (!Number.isFinite(age) || age < 0) return unavailable();
+  return { state: source.status === "stale" || age > 30 * 60_000 ? "stale" : "available",
+    value: { amount: shipping.total, currency: "GBP" }, updatedAt: shipping.sourceAt };
+}
 
 export function createProductCostValue(
   cogs: { totalCogs: number | null; totalUnits: number; costedUnits: number; missingCostLines: number; orderCount: number; sourceAt: string | null } | null,

@@ -11,11 +11,13 @@ import { StorefrontFunnelRepository } from "@/lib/business/StorefrontFunnelRepos
 import { ShopifyTradingRepository } from "@/lib/business/ShopifyTradingRepository";
 import { ShopifyAnalyticsRepository } from "@/lib/business/ShopifyAnalyticsRepository";
 import { MetaAdsRepository } from "@/lib/business/MetaAdsRepository";
+import { ShopifyShippingRepository } from "@/lib/business/ShopifyShippingRepository";
 import {
   createCalendarRevenueValues,
   createTodayPayoutValue,
   createProfitTodayValue,
   createProductCostValue,
+  createShippingCostValue,
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
   limitFeed,
@@ -42,7 +44,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -65,6 +67,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     ShopifyTradingRepository.getRecentOrderSummaries().catch(() => null),
     CashLedgerRepository.getRecentEntries().catch(() => null),
     ShopifyTradingRepository.getTodayCogs(new Date(business.generatedAt)).catch(() => null),
+    ShopifyShippingRepository.getToday(new Date(business.generatedAt)).catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -271,15 +274,15 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
 
   return {
     generatedAt: business.generatedAt,
-    profit: createProfitTodayValue({
+    profit: { shippingAccountingStatus: "unreconciled", ...createProfitTodayValue({
       revenue: trading && ["live", "stale"].includes(business.trading.status) ? tradingMoney(trading.netRevenue) : unavailable(),
       productCost: createProductCostValue(todayCogs, trading, { status: business.trading.status, updatedAt: tradingAt, generatedAt: business.generatedAt }),
-      // Outbound expenses and payment fees are still uncollected; keep profit incomplete.
-      shipping: unavailable(),
+      // Actual purchased-label totals only; credits/adjustments remain unreconciled.
+      shipping: createShippingCostValue(todayShipping, trading, { status: business.trading.status, generatedAt: business.generatedAt }),
       paymentFees: unavailable(),
       metaSpend: metaAds?.today && metaAds.currency && metaAds.reportingTimezone === "Europe/London" && ["live", "stale"].includes(metaAds.availability)
         ? available(money(metaAds.today.spend, metaAds.currency)!, metaAds.fetchedAt, metaAds.availability === "stale") : unavailable(),
-    }),
+    }) },
     systemStatus: business.freshness.status,
     latestSourceAt: business.freshness.latestSourceAt,
     brainConfidence: unavailable(),
