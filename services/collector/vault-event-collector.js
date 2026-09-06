@@ -73,14 +73,13 @@ function sendTrackedEvent(event, eventName, details) {
 
   vaultSeenEventIds.add(event.id);
   const payload = canonicalEventPayload(event, eventName);
-  sendVaultEvent({
-    ...payload,
-    ...details,
-    metadata: {
-      ...payload.metadata,
-      ...(details.metadata || {})
-    }
-  });
+  const eventPayload = Object.assign({}, payload, details);
+  eventPayload.metadata = Object.assign(
+    {},
+    payload.metadata,
+    details.metadata || {}
+  );
+  sendVaultEvent(eventPayload);
 }
 
 analytics.subscribe("page_viewed", function (event) {
@@ -137,13 +136,34 @@ analytics.subscribe("product_added_to_cart", function (event) {
   const merchandise = cartLine && cartLine.merchandise;
   const product = merchandise && merchandise.product;
   const productUrl = product && product.url;
-  const handleMatch = typeof productUrl === "string"
-    ? productUrl.match(/\/products\/([^/?#]+)/)
-    : null;
+  let productHandle = null;
+  let lineTotal = null;
+  let lineCurrency = null;
+
+  if (cartLine && cartLine.cost && cartLine.cost.totalAmount) {
+    lineTotal = cartLine.cost.totalAmount.amount;
+    lineCurrency = cartLine.cost.totalAmount.currencyCode;
+  }
+
+  if (typeof productUrl === "string") {
+    const productMarker = "/products/";
+    const productStart = productUrl.indexOf(productMarker);
+
+    if (productStart >= 0) {
+      productHandle = productUrl.slice(productStart + productMarker.length);
+      const queryStart = productHandle.indexOf("?");
+      const hashStart = productHandle.indexOf("#");
+      let productEnd = productHandle.length;
+
+      if (queryStart >= 0 && queryStart < productEnd) productEnd = queryStart;
+      if (hashStart >= 0 && hashStart < productEnd) productEnd = hashStart;
+      productHandle = productHandle.slice(0, productEnd) || null;
+    }
+  }
 
   sendTrackedEvent(event, "PRODUCT_ADDED_TO_CART", {
     product_id: product && product.id,
-    product_handle: handleMatch ? handleMatch[1] : null,
+    product_handle: productHandle,
     product_title: product && product.title,
     variant_id: merchandise && merchandise.id,
     variant_title: merchandise && merchandise.title,
@@ -151,12 +171,9 @@ analytics.subscribe("product_added_to_cart", function (event) {
     metadata: {
       quantity: cartLine ? cartLine.quantity : null,
       sku: merchandise && merchandise.sku,
-      line_total: cartLine && cartLine.cost
-        ? cartLine.cost.totalAmount.amount
-        : null,
-      currency: cartLine && cartLine.cost
-        ? cartLine.cost.totalAmount.currencyCode
-        : null
+      product_url: typeof productUrl === "string" ? productUrl : null,
+      line_total: lineTotal,
+      currency: lineCurrency
     }
   });
 });
@@ -164,23 +181,27 @@ analytics.subscribe("product_added_to_cart", function (event) {
 function sendCheckoutEvent(event, eventName) {
   const checkout = event.data.checkout;
   const order = checkout && checkout.order;
+  let lineItems = [];
+  let checkoutTotal = null;
+
+  if (checkout && Array.isArray(checkout.lineItems)) {
+    lineItems = checkout.lineItems;
+  }
+
+  if (checkout && checkout.totalPrice) {
+    checkoutTotal = checkout.totalPrice.amount;
+  }
 
   sendTrackedEvent(event, eventName, {
     shopify_checkout_token: checkout && checkout.token,
-    customer_item_count: checkout && Array.isArray(checkout.lineItems)
-      ? checkout.lineItems.reduce(function (total, line) {
-          return total + (Number(line.quantity) || 0);
-        }, 0)
-      : 0,
+    customer_item_count: lineItems.reduce(function (total, line) {
+      return total + (line ? Number(line.quantity) || 0 : 0);
+    }, 0),
     metadata: {
       checkout_token_present: Boolean(checkout && checkout.token),
       currency: checkout && checkout.currencyCode,
-      line_item_count: checkout && Array.isArray(checkout.lineItems)
-        ? checkout.lineItems.length
-        : 0,
-      total: checkout && checkout.totalPrice
-        ? checkout.totalPrice.amount
-        : null,
+      line_item_count: lineItems.length,
+      total: checkoutTotal,
       order_id: order && order.id ? order.id : null
     }
   });
