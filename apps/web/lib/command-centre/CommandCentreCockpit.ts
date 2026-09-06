@@ -6,6 +6,18 @@ import type { ExecutiveBriefing } from "@/lib/brain/ExecutiveIntelligenceEngine"
 import type { InventorySyncStatus } from "@/lib/inventory/InventoryFreshness";
 import type { ShopifyCalendarRevenue, ShopifyRecentOrderSummary } from "@/lib/business/ShopifyTradingRepository";
 
+export type TodayPerformance = {
+  todayRevenue: number;
+  expectedRevenue: number;
+  revenuePace: number | null;
+  todayOrders: number;
+  expectedOrders: number;
+  todayAov: number | null;
+  historicalAov: number | null;
+  projectedRevenue: number | null;
+  baselineSampleCount: number;
+};
+
 export type CockpitValue<T> =
   | { state: "available" | "stale"; value: T; updatedAt: string | null }
   | { state: "unavailable" | "not_connected" | "pending"; value: null; updatedAt: null };
@@ -147,6 +159,7 @@ export type TodaysFocus =
 
 export type CommandCentreCockpitData = {
   profit: ProfitTodayData;
+  todayPerformance: CockpitValue<TodayPerformance>;
   generatedAt: string;
   systemStatus: "live" | "stale" | "partial" | "unavailable" | "error";
   latestSourceAt: string | null;

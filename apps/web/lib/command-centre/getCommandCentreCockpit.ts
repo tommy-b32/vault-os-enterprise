@@ -46,7 +46,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping, todayPaymentFees] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping, todayPaymentFees, todayPerformance] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -71,6 +71,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     ShopifyTradingRepository.getTodayCogs(new Date(business.generatedAt)).catch(() => null),
     ShopifyShippingRepository.getToday(new Date(business.generatedAt)).catch(() => null),
     ShopifyPaymentFeeRepository.getToday(new Date(business.generatedAt)).catch(() => null),
+    ShopifyTradingRepository.getTodayPerformance(new Date(business.generatedAt)).catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -277,6 +278,11 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
 
   return {
     generatedAt: business.generatedAt,
+    todayPerformance: (() => {
+      if (!todayPerformance || !["live", "stale"].includes(business.trading.status)) return unavailable();
+      const { sourceAt, ...value } = todayPerformance;
+      return available(value, sourceAt, business.trading.status === "stale");
+    })(),
     profit: (() => {
       const shipping = createShippingCostValue(todayShipping, trading, { status: business.trading.status, generatedAt: business.generatedAt });
       const paymentFees = createPaymentFeeValue(todayPaymentFees, trading, { status: business.trading.status, generatedAt: business.generatedAt });

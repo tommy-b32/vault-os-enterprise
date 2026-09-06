@@ -256,6 +256,29 @@ export function ProfitTodayCard({ data }: DataProps) {
   </KpiCard>;
 }
 
+function TodayPerformanceCard({ data }: DataProps) {
+  const performance = data.todayPerformance ?? { state: "unavailable", value: null, updatedAt: null } as CockpitValue<NonNullable<CommandCentreCockpitData["todayPerformance"]["value"]>>;
+  const metrics = (value: number | null): CockpitValue<number> =>
+    value !== null && (performance.state === "available" || performance.state === "stale")
+      ? { state: performance.state, value, updatedAt: performance.updatedAt }
+      : { state: "unavailable", value: null, updatedAt: null };
+  const values = performance.value;
+  const status = values?.revenuePace == null ? "Pace unavailable" : values.revenuePace > 105 ? "Ahead of pace" : values.revenuePace < 95 ? "Behind pace" : "On pace";
+  return <KpiCard eyebrow="Today’s Performance" icon="analytics" accent="blue" value={performance.value ? status : display(performance)} trendContent={false}>
+    <div className="cc-performance-support">
+      <MetricRow label="Revenue by now" value={metrics(values?.todayRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label="Expected by now" value={metrics(values?.expectedRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label="Revenue pace" value={metrics(values?.revenuePace ?? null)} formatter={(value) => `${Number(value).toFixed(1)}%`} helpScope="performance" helpDescription="Today’s net Shopify revenue through the current London time, compared with the same-time average for matching historical weekdays." />
+      <MetricRow label="Orders by now" value={metrics(values?.todayOrders ?? null)} formatter={(value) => Number(value).toLocaleString("en-GB", { maximumFractionDigits: 0 })} />
+      <MetricRow label="Expected orders" value={metrics(values?.expectedOrders ?? null)} formatter={(value) => Number(value).toFixed(1)} />
+      <MetricRow label="Today’s AOV" value={metrics(values?.todayAov ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label="Historical AOV" value={metrics(values?.historicalAov ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label="Projected revenue" value={metrics(values?.projectedRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} helpScope="performance" helpDescription="Projected end-of-day net Shopify revenue from matching-weekday completion fractions. It is a projection, not booked revenue." />
+      <p>{values ? `${values.baselineSampleCount} matching weekdays · Europe/London` : "At least 4 matching historical weekdays required"}</p>
+    </div>
+  </KpiCard>;
+}
+
 function Snapshot({ title, subtitle, icon, href, children }: {
   title: string; subtitle: string; icon: VaultIconName; href?: string; children: React.ReactNode;
 }) {
@@ -400,6 +423,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
           </div>
         </KpiCard>
         <ProfitTodayCard data={data} />
+        <TodayPerformanceCard data={data} />
       </section>
 
       <section className="cc-middle-grid">
@@ -493,7 +517,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 
 function CommandCentreCockpitStyles() {
   return <style>{`
-    .cc-profit-support{display:grid;width:100%;min-width:0;gap:5px}.cc-profit-rows .cc-metric-row{padding:3px 0;font-size:12px;gap:8px}.cc-profit-rows .cc-metric-row>span{text-align:left}.cc-profit-support p{margin:0;font-size:11px;line-height:1.35}.cc-profit-support .cc-hint-content{text-align:left}@media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(6){contain:size;align-self:stretch;overflow:visible}}
+    .cc-profit-support,.cc-performance-support{display:grid;width:100%;min-width:0;gap:5px}.cc-profit-rows .cc-metric-row,.cc-performance-support .cc-metric-row{padding:3px 0;font-size:12px;gap:8px}.cc-profit-rows .cc-metric-row>span,.cc-performance-support .cc-metric-row>span{text-align:left}.cc-profit-support p,.cc-performance-support p{margin:0;font-size:11px;line-height:1.35}.cc-profit-support .cc-hint-content,.cc-performance-support .cc-hint-content{text-align:left}@media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(6){contain:size;align-self:stretch;overflow:visible}}
     @media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(n+2):nth-child(-n+4){contain:size;align-self:stretch;overflow:visible}.cc-kpi-card.is-meta>.cc-kpi-support{gap:4px;margin-top:4px}.cc-kpi-card.is-meta .cc-meta-details{padding-top:0}.cc-kpi-card.is-meta .cc-meta-details .cc-metric-row{padding:2px 0}}
     .cc-kpi-card.is-meta>.cc-kpi-support{flex-direction:column}.cc-meta-details{min-width:0;border-top:1px solid rgba(255,255,255,.12);padding-top:3px}.cc-meta-details .cc-metric-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:8px;padding:6px 0}.cc-meta-details .cc-metric-row>span{text-align:left;min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-metric-row>strong{min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-hint-content{width:min(260px,70vw)}
     .cc-kpi-card.is-meta{overflow:visible}.cc-kpi-card.is-meta:after{display:none}.cc-kpi-card.is-meta:hover,.cc-kpi-card.is-meta:focus-within{z-index:3}.cc-kpi-support .cc-hint .cc-hint-content{text-align:left}.cc-kpi-values>div:last-child .cc-hint-content{left:auto;right:0}

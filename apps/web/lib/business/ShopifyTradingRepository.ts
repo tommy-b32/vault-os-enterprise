@@ -71,6 +71,19 @@ export type ShopifyOperationsSnapshot = {
   updatedAt: string;
 };
 
+export type ShopifyTodayPerformance = {
+  todayRevenue: number;
+  expectedRevenue: number;
+  revenuePace: number | null;
+  todayOrders: number;
+  expectedOrders: number;
+  todayAov: number | null;
+  historicalAov: number | null;
+  projectedRevenue: number | null;
+  baselineSampleCount: number;
+  sourceAt: string | null;
+};
+
 export type ShopifyTopProduct = {
   productId: string;
   title: string;
@@ -291,6 +304,30 @@ async function getOrdersInRange(
 }
 
 export const ShopifyTradingRepository = {
+  async getTodayPerformance(now = new Date()): Promise<ShopifyTodayPerformance | null> {
+    const { data, error } = await supabaseAdmin.rpc("get_shopify_today_performance", { target_at: now.toISOString() }).single<Record<string, unknown>>();
+    if (error || !data || data.availability !== "available") return null;
+    const number = (value: unknown, nullable = false) => {
+      if (nullable && value === null) return null;
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed < 0) throw new Error("Invalid Shopify performance data");
+      return parsed;
+    };
+    const required = (value: unknown) => {
+      const parsed = number(value);
+      if (parsed === null) throw new Error("Missing Shopify performance data");
+      return parsed;
+    };
+    const todayOrders = required(data.today_orders);
+    const baselineSampleCount = required(data.baseline_sample_count);
+    if (!Number.isSafeInteger(todayOrders) || !Number.isSafeInteger(baselineSampleCount) || baselineSampleCount < 4) return null;
+    const sourceAt = typeof data.source_at === "string" && Number.isFinite(Date.parse(data.source_at)) ? data.source_at : null;
+    if (!sourceAt) return null;
+    return { todayRevenue: required(data.today_revenue_gbp), expectedRevenue: required(data.expected_revenue_gbp),
+      revenuePace: number(data.revenue_pace_percent, true), todayOrders, expectedOrders: number(data.expected_orders)!,
+      todayAov: number(data.today_aov_gbp, true), historicalAov: number(data.historical_aov_gbp, true),
+      projectedRevenue: number(data.projected_revenue_gbp, true), baselineSampleCount, sourceAt };
+  },
   async getTodayCogs(now = new Date()) {
     const { data, error } = await supabaseAdmin.rpc("get_shopify_daily_cogs", { target_at: now.toISOString() }).single<Record<string, unknown>>();
     if (error || !data) throw new Error("Canonical daily COGS is unavailable");
