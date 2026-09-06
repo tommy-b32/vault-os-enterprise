@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
-import { createProfitTodayValue, createProductCostValue, unavailable } from "./CommandCentreCockpit.ts";
+import { createProfitTodayValue, createProductCostValue, createPaymentFeeValue, unavailable } from "./CommandCentreCockpit.ts";
 
 const at = "2026-09-07T12:00:00Z";
 const money = (amount, state = "available", currency = "GBP") => ({ state, value: { amount, currency }, updatedAt: at });
@@ -68,10 +68,11 @@ test("stale, invalid, mismatched-currency and pending sources cannot produce a l
   }
 });
 
-test("live loader reuses canonical revenue and Meta, preserving payment-fee incompleteness", async () => {
+test("live loader reuses canonical revenue, Meta and complete payment-fee coverage", async () => {
   const loader = await readFile(new URL("./getCommandCentreCockpit.ts", import.meta.url), "utf8");
   const section = loader.slice(loader.indexOf("profit: (() =>"), loader.indexOf("systemStatus:", loader.indexOf("profit: (() =>")));
-  assert.ok(section.includes("paymentFees: unavailable()"));
+  assert.ok(section.includes("const paymentFees = createPaymentFeeValue(todayPaymentFees, trading"));
+  assert.ok(section.includes("paymentFees,"));
   assert.ok(section.includes("const shipping = createShippingCostValue(todayShipping, trading"));
   assert.ok(section.includes("productCost: createProductCostValue(todayCogs, trading"));
   assert.ok(section.includes("tradingMoney(trading.netRevenue)"));

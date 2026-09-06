@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fetchShopifyAnalytics } from "../_shared/shopify/analytics.ts";
 import { refreshShippingCosts } from "../_shared/shopify/shipping-labels.ts";
+import { refreshPaymentFees } from "../_shared/shopify/payment-fees.ts";
 
 const respond = (body: unknown, status = 200) => Response.json(body, { status });
 
@@ -33,8 +34,11 @@ Deno.serve(async (request) => {
     if (stateError) throw stateError;
     await supabase.from("vault_shopify_analytics_daily").delete().lt("reporting_date", new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10));
     // Shipping failure must not invalidate the independent website analytics source.
-    const shipping = await refreshShippingCosts(supabase).catch(() => ({ complete: false, unavailable: true }));
-    return respond({ success: true, availability: result.availability, aggregate_days: result.days.length, shipping });
+    const [shipping, paymentFees] = await Promise.all([
+      refreshShippingCosts(supabase).catch(() => ({ complete: false, unavailable: true })),
+      refreshPaymentFees(supabase).catch(() => ({ complete: false, unavailable: true })),
+    ]);
+    return respond({ success: true, availability: result.availability, aggregate_days: result.days.length, shipping, payment_fees: paymentFees });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Shopify Analytics synchronization failed";
     const failureCode = /access|permission|denied/i.test(message) ? "protected_data_denied" : /429|thrott/i.test(message) ? "throttled" : "shopifyql_error";

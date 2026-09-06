@@ -36,6 +36,19 @@ export function createShippingCostValue(
     value: { amount: shipping.total, currency: "GBP" }, updatedAt: shipping.sourceAt };
 }
 
+export function createPaymentFeeValue(
+  fees: { total: number | null; orderCount: number; coveredOrders: number; sourceAt: string | null } | null,
+  trading: { orderCount: number; currency: string | null } | null,
+  source: { status: string; generatedAt: string },
+): CockpitValue<CockpitMoney> {
+  if (!fees || !trading || !["live", "stale"].includes(source.status) || trading.currency !== "GBP" ||
+      fees.orderCount <= 0 || fees.orderCount !== trading.orderCount || fees.coveredOrders !== fees.orderCount ||
+      fees.total === null || !Number.isFinite(fees.total) || fees.total < 0 || !fees.sourceAt) return unavailable();
+  const age = Date.parse(source.generatedAt) - Date.parse(fees.sourceAt);
+  if (!Number.isFinite(age) || age < 0) return unavailable();
+  return { state: source.status === "stale" || age > 30 * 60_000 ? "stale" : "available", value: { amount: fees.total, currency: "GBP" }, updatedAt: fees.sourceAt };
+}
+
 export function createProductCostValue(
   cogs: { totalCogs: number | null; totalUnits: number; costedUnits: number; missingCostLines: number; orderCount: number; sourceAt: string | null } | null,
   trading: { itemsSold: number; orderCount: number } | null,

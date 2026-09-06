@@ -12,11 +12,13 @@ import { ShopifyTradingRepository } from "@/lib/business/ShopifyTradingRepositor
 import { ShopifyAnalyticsRepository } from "@/lib/business/ShopifyAnalyticsRepository";
 import { MetaAdsRepository } from "@/lib/business/MetaAdsRepository";
 import { ShopifyShippingRepository } from "@/lib/business/ShopifyShippingRepository";
+import { ShopifyPaymentFeeRepository } from "@/lib/business/ShopifyPaymentFeeRepository";
 import {
   createCalendarRevenueValues,
   createTodayPayoutValue,
   createProfitTodayValue,
   createProductCostValue,
+  createPaymentFeeValue,
   createShippingCostValue,
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
@@ -44,7 +46,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping] = await Promise.all([
+  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping, todayPaymentFees] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
@@ -68,6 +70,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     CashLedgerRepository.getRecentEntries().catch(() => null),
     ShopifyTradingRepository.getTodayCogs(new Date(business.generatedAt)).catch(() => null),
     ShopifyShippingRepository.getToday(new Date(business.generatedAt)).catch(() => null),
+    ShopifyPaymentFeeRepository.getToday(new Date(business.generatedAt)).catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -276,6 +279,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     generatedAt: business.generatedAt,
     profit: (() => {
       const shipping = createShippingCostValue(todayShipping, trading, { status: business.trading.status, generatedAt: business.generatedAt });
+      const paymentFees = createPaymentFeeValue(todayPaymentFees, trading, { status: business.trading.status, generatedAt: business.generatedAt });
       return { shippingAccountingStatus: "unreconciled" as const,
         ...(shipping.state === "unavailable" && (todayShipping?.awaitingCostOrders ?? 0) > 0 &&
           todayShipping!.coveredOrders + todayShipping!.awaitingCostOrders === todayShipping!.orderCount
@@ -285,7 +289,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       productCost: createProductCostValue(todayCogs, trading, { status: business.trading.status, updatedAt: tradingAt, generatedAt: business.generatedAt }),
       // Actual purchased-label totals only; credits/adjustments remain unreconciled.
       shipping,
-      paymentFees: unavailable(),
+      paymentFees,
       metaSpend: metaAds?.today && metaAds.currency && metaAds.reportingTimezone === "Europe/London" && ["live", "stale"].includes(metaAds.availability)
         ? available(money(metaAds.today.spend, metaAds.currency)!, metaAds.fetchedAt, metaAds.availability === "stale") : unavailable(),
         }) };
