@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
+import React from "react";
+import { createRequire } from "node:module";
+import { renderToStaticMarkup } from "react-dom/server";
 import { unavailable } from "./CommandCentreCockpit.ts";
 
 const repositorySource = await readFile(new URL("../business/MetaAdsRepository.ts", import.meta.url), "utf8");
@@ -23,12 +26,12 @@ const row = {
   link_clicks: "300", landing_page_views: "240",
 };
 
-async function snapshot(overrides = {}, availability = "live", error = null) {
+async function snapshot(overrides = {}, availability = "live", error = null, history = [], timezone = "Europe/London", at = now) {
   const supabaseAdmin = {
     from(table) {
       const result = table === "vault_meta_ads_daily"
-        ? { data: [{ ...row, ...overrides }], error }
-        : { data: { availability, reporting_timezone: "Europe/London", currency: "GBP" }, error };
+        ? { data: [{ ...row, ...overrides }, ...history], error }
+        : { data: { availability, reporting_timezone: timezone, currency: "GBP" }, error };
       return {
         select(columns) {
           if (table === "vault_meta_ads_daily") {
@@ -40,7 +43,7 @@ async function snapshot(overrides = {}, availability = "live", error = null) {
         eq() { return this; },
         order() { return this; },
         maybeSingle: async () => result,
-        limit: async () => result,
+        limit: async (count) => { assert.ok(count >= 8); return result; },
       };
     },
   };
@@ -48,8 +51,90 @@ async function snapshot(overrides = {}, availability = "live", error = null) {
   new Function("require", "exports", compile(repositorySource))(
     (name) => name === "server-only" ? {} : { supabaseAdmin }, exports,
   );
-  return exports.MetaAdsRepository.getSnapshot(now);
+  return exports.MetaAdsRepository.getSnapshot(at);
 }
+
+const history = Array.from({ length: 7 }, (_, i) => ({
+  ...row,
+  reporting_date: new Date(Date.UTC(2026, 8, 5 - i)).toISOString().slice(0, 10),
+  spend: i === 0 ? "600" : "100", purchase_value: i === 0 ? "600" : "300", purchases: i === 0 ? "60" : "10",
+}));
+
+test("previous seven exact completed dates exclude today and use ratios of totals", async () => {
+  const source = await snapshot({}, "live", null, history);
+  assert.deepEqual(source.previous7Days, { roas: 2, costPerPurchase: 10 });
+  assert.equal(source.roasChangePercent, 100);
+  assert.equal(source.costPerPurchaseChangePercent, 50);
+  const changedToday = await snapshot({ spend: "240", purchase_value: "2400" }, "live", null, history);
+  assert.deepEqual(changedToday.previous7Days, source.previous7Days);
+  const weighted = await snapshot({}, "live", null, history.map((day, i) => ({ ...day, purchases: i === 0 ? "120" : "5" })));
+  assert.equal(weighted.previous7Days.costPerPurchase, 1200 / 150);
+  assert.notEqual(weighted.previous7Days.costPerPurchase, (5 + 6 * 20) / 7);
+});
+
+test("zero baseline and today denominators do not invent comparisons", async () => {
+  const zeroSpend = await snapshot({}, "live", null, history.map(day => ({ ...day, spend: "0" })));
+  assert.equal(zeroSpend.previous7Days.roas, null);
+  assert.equal(zeroSpend.roasChangePercent, null);
+  assert.equal(zeroSpend.costPerPurchaseChangePercent, null);
+  const zeroPurchases = await snapshot({}, "live", null, history.map(day => ({ ...day, purchases: "0" })));
+  assert.equal(zeroPurchases.previous7Days.costPerPurchase, null);
+  assert.equal(zeroPurchases.costPerPurchaseChangePercent, null);
+  assert.equal((await snapshot({ spend: "0" }, "live", null, history)).roasChangePercent, null);
+  assert.equal((await snapshot({ purchases: "0" }, "live", null, history)).costPerPurchaseChangePercent, null);
+  const zeroRevenue = await snapshot({}, "live", null, history.map(day => ({ ...day, purchase_value: "0" })));
+  assert.equal(zeroRevenue.roasChangePercent, null);
+});
+
+test("missing dates cannot be substituted with older history; stale and pending states survive mapping", async () => {
+  const incomplete = await snapshot({}, "live", null, [...history.slice(0, 6), { ...row, reporting_date: "2026-08-29" }]);
+  assert.equal(incomplete.previous7Days, null);
+  assert.deepEqual(mapMeta(incomplete, unavailable).roasChangePercent, unavailable());
+  const stale = mapMeta(await snapshot({}, "stale", null, history), unavailable);
+  for (const key of ["roasChangePercent", "costPerPurchaseChangePercent", "previous7DaysRoas"]) {
+    assert.equal(stale[key].state, "stale");
+    assert.equal(stale[key].updatedAt, row.fetched_at);
+    assert.deepEqual(mapMeta(await snapshot({}, "pending_configuration", null, history), unavailable)[key], unavailable());
+    assert.deepEqual(mapMeta(await snapshot({}, "live", { message: "failed" }, history), unavailable)[key], unavailable());
+  }
+});
+
+test("account timezone selects today and excludes it at UTC midnight and DST boundaries", async () => {
+  for (const [at, timezone, todayDate] of [
+    ["2026-09-06T00:30:00Z", "America/Los_Angeles", "2026-09-05"],
+    ["2026-03-29T23:30:00Z", "Europe/London", "2026-03-30"],
+  ]) {
+    const preceding = history.map((day, i) => ({ ...day, reporting_date: new Date(Date.parse(`${todayDate}T00:00:00Z`) - (i + 1) * 86400000).toISOString().slice(0, 10) }));
+    const source = await snapshot({ reporting_date: todayDate, fetched_at: at }, "live", null, preceding, timezone, new Date(at));
+    assert.equal(source.today.roas, 4);
+    assert.equal(source.previous7Days.roas, 2);
+  }
+});
+
+test("Meta comparison directions and focusable tooltip markup are accessible", async () => {
+  const source = await readFile(new URL("../../components/command-centre/CommandCentreCockpit.tsx", import.meta.url), "utf8");
+  const local = source.slice(source.indexOf("const META_HELP"), source.indexOf("function KpiCard")) + "\nexport { MetaLabel };";
+  const exports = {};
+  new Function("require", "exports", ts.transpileModule(local, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText)(createRequire(import.meta.url), exports);
+  for (const [amount, lowerIsBetter, word] of [[10, false, "Improved"], [-10, false, "Worsened"], [-10, true, "Improved"], [10, true, "Worsened"], [0, true, "Unchanged"]]) {
+    const html = renderToStaticMarkup(React.createElement(exports.MetaComparison, { label: "Change", lowerIsBetter, value: { state: "stale", value: amount, updatedAt: row.fetched_at } }));
+    assert.ok(html.includes(word));
+    assert.ok(html.includes("Stale"));
+    assert.ok(html.includes('tabindex="0"'));
+    assert.ok(html.includes('role="tooltip"'));
+    assert.ok(html.includes('aria-describedby="meta-top-'));
+  }
+  for (const metric of ["ROAS", "CTR", "CPC", "CPM", "Cost per purchase", "Landing page view rate", "Meta-attributed revenue", "Spend", "Purchases"]) {
+    assert.ok(source.includes(`metaHelp="${metric}"`));
+    const html = renderToStaticMarkup(React.createElement(exports.MetaLabel, { label: metric, scope: "snapshot" }));
+    assert.ok(html.includes(metric));
+    assert.ok(html.includes('tabindex="0"'));
+    assert.ok(html.includes('role="tooltip"'));
+    const describedBy = html.match(/aria-describedby="([^"]+)"/)[1];
+    assert.ok(html.includes(`id="${describedBy}"`));
+  }
+  assert.ok(source.includes(".cc-hint:hover>.cc-hint-content,.cc-hint:focus>.cc-hint-content"));
+});
 
 test("Meta derives efficiency from today's stored data and preserves percentage CTR", async () => {
   const source = await snapshot();

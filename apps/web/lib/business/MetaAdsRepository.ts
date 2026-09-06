@@ -7,6 +7,9 @@ export type MetaAdsSnapshot = {
   fetchedAt: string | null;
   reportingTimezone: string | null;
   currency: string | null;
+  previous7Days: { roas: number | null; costPerPurchase: number | null } | null;
+  roasChangePercent: number | null;
+  costPerPurchaseChangePercent: number | null;
   today: null | {
     spend: number;
     attributedRevenue: number;
@@ -44,7 +47,7 @@ export const MetaAdsRepository = {
         .from("vault_meta_ads_daily")
         .select("reporting_date, spend, impressions, link_clicks, landing_page_views, ctr, cpc, purchases, purchase_value, roas, fetched_at")
         .order("reporting_date", { ascending: false })
-        .limit(7),
+        .limit(8),
     ]);
 
     if (stateError || daysError) {
@@ -54,6 +57,9 @@ export const MetaAdsRepository = {
         reportingTimezone: null,
         currency: null,
         today: null,
+        previous7Days: null,
+        roasChangePercent: null,
+        costPerPurchaseChangePercent: null,
       };
     }
 
@@ -70,13 +76,41 @@ export const MetaAdsRepository = {
             : "unavailable";
 
     const timezone = state?.reporting_timezone ?? "Europe/London";
-    const today = days?.find((day) => day.reporting_date === dateInTimezone(now, timezone)) ?? null;
+    const todayDate = dateInTimezone(now, timezone);
+    const today = days?.find((day) => day.reporting_date === todayDate) ?? null;
+    // Step through calendar dates, not 24-hour intervals in the account timezone (DST).
+    const previousDates = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(`${todayDate}T00:00:00Z`);
+      date.setUTCDate(date.getUTCDate() - index - 1);
+      return date.toISOString().slice(0, 10);
+    });
+    const previousDays = previousDates.map((date) => days?.find((day) => day.reporting_date === date));
+    const complete = previousDays.every((day) => day &&
+      [day.spend, day.purchase_value, day.purchases].every((value) =>
+        value != null && Number.isFinite(Number(value)) && Number(value) >= 0));
+    const total = (key: "spend" | "purchase_value" | "purchases") =>
+      previousDays.reduce((sum, day) => sum + Number(day?.[key]), 0);
+    const ratio = (numerator: number, denominator: number): number | null =>
+      Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0
+        ? numerator / denominator : null;
+    const previous7Days = complete ? {
+      roas: ratio(total("purchase_value"), total("spend")),
+      costPerPurchase: ratio(total("spend"), total("purchases")),
+    } : null;
+    const change = (current: number | null, baseline: number | null | undefined) =>
+      current != null && baseline != null && baseline > 0
+        ? ((current - baseline) / baseline) * 100 : null;
+    const todayRoas = today ? ratio(Number(today.purchase_value), Number(today.spend)) : null;
+    const todayCpp = today ? ratio(Number(today.spend), Number(today.purchases)) : null;
 
     return {
       availability,
       fetchedAt: latest?.fetched_at ?? state?.last_successful_at ?? null,
       reportingTimezone: state?.reporting_timezone ?? null,
       currency: state?.currency ?? null,
+      previous7Days,
+      roasChangePercent: change(todayRoas, previous7Days?.roas),
+      costPerPurchaseChangePercent: change(todayCpp, previous7Days?.costPerPurchase),
       today: today
         ? {
             spend: Number(today.spend),

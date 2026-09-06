@@ -106,6 +106,9 @@ export type CommandCentreCockpitData = {
     };
   };
   meta: {
+    previous7DaysRoas: CockpitValue<number>;
+    roasChangePercent: CockpitValue<number>;
+    costPerPurchaseChangePercent: CockpitValue<number>;
     connection: "live" | "stale" | "unavailable" | "pending_configuration";
     spend: CockpitValue<CockpitMoney>;
     attributedRevenue: CockpitValue<CockpitMoney>;

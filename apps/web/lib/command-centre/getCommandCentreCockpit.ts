@@ -331,6 +331,12 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
       },
     },
     meta: {
+      previous7DaysRoas: metaAds?.previous7Days?.roas != null && ["live", "stale"].includes(metaAds.availability)
+        ? available(metaAds.previous7Days.roas, metaAds.fetchedAt, metaAds.availability === "stale") : unavailable(),
+      roasChangePercent: metaAds?.roasChangePercent != null && ["live", "stale"].includes(metaAds.availability)
+        ? available(metaAds.roasChangePercent, metaAds.fetchedAt, metaAds.availability === "stale") : unavailable(),
+      costPerPurchaseChangePercent: metaAds?.costPerPurchaseChangePercent != null && ["live", "stale"].includes(metaAds.availability)
+        ? available(metaAds.costPerPurchaseChangePercent, metaAds.fetchedAt, metaAds.availability === "stale") : unavailable(),
       connection: metaAds?.availability ?? "unavailable",
       costPerPurchase: metaAds?.today?.costPerPurchase != null && metaAds.currency
         ? available(
