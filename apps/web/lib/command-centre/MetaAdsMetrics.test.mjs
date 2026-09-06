@@ -97,6 +97,14 @@ test("compact Meta headline and separate details card retain values and unique t
   const headlineGrid = source.slice(source.indexOf('<section className="cc-kpi-grid"'), source.indexOf('<section className="cc-kpi-grid cc-secondary-grid"'));
   assert.equal((headlineGrid.match(/<KpiCard\b/g) ?? []).length, 4);
   assert.ok(!headlineGrid.includes('eyebrow="Finance Position"'));
+  const secondaryGrid = source.slice(source.indexOf('<section className="cc-kpi-grid cc-secondary-grid"'), source.indexOf('<section className="cc-middle-grid"'));
+  assert.ok(secondaryGrid.includes('eyebrow="Finance Position"'));
+  assert.ok(secondaryGrid.includes('<Snapshot title="Meta Ads Details"'));
+  assert.ok(secondaryGrid.indexOf('eyebrow="Finance Position"') < secondaryGrid.indexOf('<Snapshot title="Meta Ads Details"'));
+  assert.equal(source.split('<Snapshot title="Meta Ads Details"').length - 1, 1);
+  assert.ok(!source.slice(source.indexOf('<section className="cc-snapshot-grid"')).includes('<Snapshot title="Meta Ads Details"'));
+  assert.ok(source.includes('.cc-kpi-grid.cc-secondary-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}'));
+  assert.ok(source.includes('@media(max-width:600px){.cc-kpi-grid.cc-secondary-grid{grid-template-columns:1fr}}'));
   assert.ok(html.indexOf("Meta-attributed revenue") < detailStart);
   const details = html.slice(detailStart, html.indexOf("</article>", detailStart));
   const labels = [...details.matchAll(/aria-describedby="meta-snapshot-[^"]+">([^<]+)/g)].map(match => match[1]);

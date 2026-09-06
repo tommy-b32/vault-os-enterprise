@@ -361,7 +361,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
         </KpiCard>
       </section>
 
-      <section className="cc-kpi-grid cc-secondary-grid" aria-label="Finance overview">
+      <section className="cc-kpi-grid cc-secondary-grid" aria-label="Finance and Meta overview">
         <KpiCard eyebrow="Finance Position" icon="inventory" accent="gold" value={moneyValue(data.finance.ledgerCash)}>
           <div className="cc-finance-support">
             <div className="cc-finance-metrics"><span>Purchasing power {moneyValue(data.finance.purchasingPower)}</span><span>Reserve {moneyValue(data.finance.protectedReserve)} · Committed {moneyValue(data.finance.committedPurchaseOrders)}</span></div>
@@ -378,6 +378,9 @@ export function CommandCentreCockpit({ data }: DataProps) {
             </section>
           </div>
         </KpiCard>
+        <Snapshot title="Meta Ads Details" subtitle="Meta Ads" icon="target">
+          <MetaMetricRows meta={data.meta} scope="snapshot" />
+        </Snapshot>
       </section>
 
       <section className="cc-middle-grid">
@@ -439,9 +442,6 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <MetricRow label="Inventory" value={data.inventory.freshness} formatter={() => inventoryFreshnessText(data.inventory.freshness, data.generatedAt)} />
           <MetricRow label="Reorder review" value={data.inventory.reorderReview} />
         </Snapshot>
-        <Snapshot title="Meta Ads Details" subtitle="Meta Ads" icon="target">
-          <MetaMetricRows meta={data.meta} scope="snapshot" />
-        </Snapshot>
         <Snapshot title="Operations Snapshot" subtitle="Order fulfilment" icon="orders" href="/orders">
           <MetricRow label="Awaiting fulfilment" value={data.operations.awaitingFulfilment} />
           <MetricRow label="Dispatched today" value={data.operations.dispatchedToday} />
@@ -471,7 +471,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 
 function CommandCentreCockpitStyles() {
   return <style>{`
-    .cc-secondary-grid{margin-top:var(--cc-panel-gap)}.cc-kpi-grid.cc-secondary-grid{align-items:start}
+    .cc-secondary-grid{margin-top:var(--cc-panel-gap)}.cc-kpi-grid.cc-secondary-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}@media(max-width:600px){.cc-kpi-grid.cc-secondary-grid{grid-template-columns:1fr}}
     .cc-kpi-card.is-meta{overflow:visible}.cc-kpi-card.is-meta:after{display:none}.cc-kpi-card.is-meta:hover,.cc-kpi-card.is-meta:focus-within{z-index:3}.cc-kpi-support .cc-hint .cc-hint-content{text-align:left}.cc-kpi-values>div:last-child .cc-hint-content{left:auto;right:0}
     .cc-hint{position:relative;display:inline-block;cursor:help;text-decoration:underline dotted;text-underline-offset:3px}.cc-hint:focus-visible{outline:2px solid #dfb33e;outline-offset:3px;border-radius:2px}.cc-hint .cc-hint-content{visibility:hidden;position:absolute;z-index:20;top:100%;left:0;width:260px;max-width:calc(100vw - 48px);padding:10px 12px;border:1px solid #626052;border-radius:6px;background:#202521;color:#eeeee8;box-shadow:0 6px 20px #0008;font-size:12px;font-weight:400;line-height:1.5;text-align:left;white-space:normal;text-transform:none;letter-spacing:normal}.cc-hint:hover>.cc-hint-content,.cc-hint:focus>.cc-hint-content{visibility:visible}.cc-meta-comparison{display:grid;gap:5px;margin:12px 0;font-size:12px;color:#aeb5af}.cc-meta-change.is-positive{color:#58d27d}.cc-meta-change.is-negative{color:#ff7474}.cc-meta-change.is-neutral{color:#aeb5af}.cc-meta-direction{font-size:11px}
     .cc-fulfilment-dot{display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;vertical-align:middle;background:#69716e}.cc-fulfilment-dot.is-completed{background:#48da7d}.cc-fulfilment-dot.is-awaiting{background:#54c8f3}
