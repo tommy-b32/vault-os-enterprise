@@ -544,6 +544,7 @@ test("all five totals render only in Revenue below its chart, with zero, stale a
       visitorTrend: [],
     }),
     meta: emptyMetrics({ connection: "unavailable" }),
+    profit: emptyMetrics({ missingInputs: ["product cost", "shipping", "payment fees"] }),
     finance: emptyMetrics(),
     inventory: emptyMetrics(),
     operations: emptyMetrics(),

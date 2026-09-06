@@ -14,6 +14,7 @@ import { MetaAdsRepository } from "@/lib/business/MetaAdsRepository";
 import {
   createCalendarRevenueValues,
   createTodayPayoutValue,
+  createProfitTodayValue,
   createWebsiteTrafficBreakdown,
   deriveBusinessPulse,
   limitFeed,
@@ -268,6 +269,16 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
 
   return {
     generatedAt: business.generatedAt,
+    profit: createProfitTodayValue({
+      revenue: trading && ["live", "stale"].includes(business.trading.status) ? tradingMoney(trading.netRevenue) : unavailable(),
+      // No sold-item cost allocation, outbound expense, or order-fee source exists yet.
+      // Do not substitute today's supplier prices, customer shipping charges, or payouts.
+      productCost: unavailable(),
+      shipping: unavailable(),
+      paymentFees: unavailable(),
+      metaSpend: metaAds?.today && metaAds.currency && metaAds.reportingTimezone === "Europe/London" && ["live", "stale"].includes(metaAds.availability)
+        ? available(money(metaAds.today.spend, metaAds.currency)!, metaAds.fetchedAt, metaAds.availability === "stale") : unavailable(),
+    }),
     systemStatus: business.freshness.status,
     latestSourceAt: business.freshness.latestSourceAt,
     brainConfidence: unavailable(),

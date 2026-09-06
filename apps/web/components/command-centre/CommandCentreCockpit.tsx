@@ -148,8 +148,9 @@ function Sparkline({ points }: { points: CockpitTrendPoint[] }) {
   );
 }
 
-function MetricRow({ label, value, formatter, metaHelp, helpScope = "snapshot" }: {
+function MetricRow({ label, value, formatter, metaHelp, helpScope = "snapshot", helpDescription }: {
   label: string;
+  helpDescription?: string;
   helpScope?: string;
   metaHelp?: string;
   value: CockpitValue<number | CockpitMoney | string>;
@@ -157,7 +158,7 @@ function MetricRow({ label, value, formatter, metaHelp, helpScope = "snapshot" }
 }) {
   return (
     <div className="cc-metric-row">
-      <span>{metaHelp ? <MetaLabel label={label} metric={metaHelp} scope={helpScope} /> : label}</span>
+      <span>{helpDescription ? <CommandCentreHint id={`${helpScope}-${label.toLowerCase().replaceAll(" ", "-")}`} label={label} description={helpDescription} /> : metaHelp ? <MetaLabel label={label} metric={metaHelp} scope={helpScope} /> : label}</span>
       <strong className={`is-${value.state}`}>
         {display(value, formatter ?? ((entry) => String(entry)))}
         {stateLabel(value) ? <small>{stateLabel(value)}</small> : null}
@@ -233,6 +234,26 @@ function MetaMetricRows({ meta, scope }: { meta: CommandCentreCockpitData["meta"
             formatter={(value) => `${Number(value).toFixed(2)}%`}
           />
   </>;
+}
+
+export function ProfitTodayCard({ data }: DataProps) {
+  const profit = data.profit;
+  const cost = (entry: number | CockpitMoney | string) => formatMoney({ ...(entry as CockpitMoney), amount: -(entry as CockpitMoney).amount });
+  return <KpiCard eyebrow="Profit Today" icon="target" accent="green" value={display(profit.estimatedProfit, formatMoney)} trendContent={false}>
+    <div className="cc-profit-support">
+      <CommandCentreHint id="profit-estimate" label="Estimated contribution" description="Estimated profit is revenue minus canonical product, outbound shipping, Meta advertising and payment costs. All required inputs must be known. This is an operational estimate, not accounting profit." />
+      <div className="cc-profit-rows">
+        <MetricRow label="Revenue" value={profit.revenue} formatter={(entry) => formatMoney(entry as CockpitMoney)} />
+        <MetricRow label="Product cost" value={profit.productCost} formatter={cost} helpScope="profit" helpDescription="Cost of today's sold units, using trusted costs allocated to those sales. Current supplier prices alone cannot establish sold-item COGS." />
+        <MetricRow label="Shipping" value={profit.shipping} formatter={cost} />
+        <MetricRow label="Meta ad spend" value={profit.metaSpend} formatter={cost} />
+        <MetricRow label="Payment fees" value={profit.paymentFees} formatter={cost} />
+        <MetricRow label="Margin" value={profit.margin} formatter={(entry) => `${Number(entry).toFixed(1)}%`} helpScope="profit" helpDescription="Estimated contribution divided by net Shopify revenue, as a percentage. Unavailable when revenue is zero or required costs are missing." />
+      </div>
+      {profit.missingInputs.length ? <p>Incomplete · Missing: {profit.missingInputs.join(", ")}</p> : <p>{profit.estimatedProfit.state === "stale" ? "Stale estimate" : "Estimated profit"}</p>}
+      <p>{display(data.trading.orders)} orders · {display(data.trading.units)} units · Today · Europe/London</p>
+    </div>
+  </KpiCard>;
 }
 
 function Snapshot({ title, subtitle, icon, href, children }: {
@@ -378,6 +399,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
             </section>
           </div>
         </KpiCard>
+        <ProfitTodayCard data={data} />
       </section>
 
       <section className="cc-middle-grid">
@@ -471,6 +493,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 
 function CommandCentreCockpitStyles() {
   return <style>{`
+    .cc-profit-support{display:grid;width:100%;min-width:0;gap:5px}.cc-profit-rows .cc-metric-row{padding:3px 0;font-size:12px;gap:8px}.cc-profit-rows .cc-metric-row>span{text-align:left}.cc-profit-support p{margin:0;font-size:11px;line-height:1.35}.cc-profit-support .cc-hint-content{text-align:left}@media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(6){contain:size;align-self:stretch;overflow:visible}}
     @media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(n+2):nth-child(-n+4){contain:size;align-self:stretch;overflow:visible}.cc-kpi-card.is-meta>.cc-kpi-support{gap:4px;margin-top:4px}.cc-kpi-card.is-meta .cc-meta-details{padding-top:0}.cc-kpi-card.is-meta .cc-meta-details .cc-metric-row{padding:2px 0}}
     .cc-kpi-card.is-meta>.cc-kpi-support{flex-direction:column}.cc-meta-details{min-width:0;border-top:1px solid rgba(255,255,255,.12);padding-top:3px}.cc-meta-details .cc-metric-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:8px;padding:6px 0}.cc-meta-details .cc-metric-row>span{text-align:left;min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-metric-row>strong{min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-hint-content{width:min(260px,70vw)}
     .cc-kpi-card.is-meta{overflow:visible}.cc-kpi-card.is-meta:after{display:none}.cc-kpi-card.is-meta:hover,.cc-kpi-card.is-meta:focus-within{z-index:3}.cc-kpi-support .cc-hint .cc-hint-content{text-align:left}.cc-kpi-values>div:last-child .cc-hint-content{left:auto;right:0}

@@ -12,6 +12,48 @@ export type CockpitValue<T> =
 
 export type CockpitMoney = { amount: number; currency: string };
 
+export type ProfitTodayInputs = Record<"revenue" | "productCost" | "shipping" | "metaSpend" | "paymentFees", CockpitValue<CockpitMoney>>;
+export type ProfitTodayData = ProfitTodayInputs & {
+  estimatedProfit: CockpitValue<CockpitMoney>;
+  margin: CockpitValue<number>;
+  missingInputs: string[];
+};
+
+/**
+ * Estimated contribution = canonical net Shopify revenue - sold-item COGS
+ * - outbound shipping expense - Meta spend - payment fees, all for the same day/currency.
+ * Net revenue already contains Shopify adjustments: never subtract refunds/discounts again.
+ * Shipping charged to customers is revenue, not an expense. Landed COGS includes inbound
+ * freight, so shipping here must exclude that freight. Payouts are not payment fees.
+ * Current catalogue/PO purchase costs are not historical sold-item COGS.
+ */
+export function createProfitTodayValue(inputs: ProfitTodayInputs): ProfitTodayData {
+  const labels: Record<keyof ProfitTodayInputs, string> = {
+    revenue: "revenue", productCost: "product cost", shipping: "shipping", metaSpend: "Meta ad spend", paymentFees: "payment fees",
+  };
+  const entries = Object.entries(inputs) as [keyof ProfitTodayInputs, CockpitValue<CockpitMoney>][];
+  const missingInputs = entries.filter(([key, entry]) =>
+    !["available", "stale"].includes(entry.state) || !entry.value ||
+    !Number.isFinite(entry.value.amount) || (key !== "revenue" && entry.value.amount < 0) ||
+    !/^[A-Z]{3}$/.test(entry.value.currency) || !entry.updatedAt || !Number.isFinite(Date.parse(entry.updatedAt)),
+  ).map(([key]) => labels[key]);
+  const result: ProfitTodayData = { ...inputs, estimatedProfit: unavailable(), margin: unavailable(), missingInputs };
+  if (missingInputs.length) return result;
+  const currency = inputs.revenue.value!.currency;
+  if (entries.some(([, entry]) => entry.value!.currency !== currency)) {
+    result.missingInputs = ["matching cost currencies"];
+    return result;
+  }
+  const amount = inputs.revenue.value!.amount - inputs.productCost.value!.amount -
+    inputs.shipping.value!.amount - inputs.metaSpend.value!.amount - inputs.paymentFees.value!.amount;
+  if (!Number.isFinite(amount)) return { ...result, missingInputs: ["valid cost totals"] };
+  const state = entries.some(([, entry]) => entry.state === "stale") ? "stale" : "available";
+  const updatedAt = entries.map(([, entry]) => entry.updatedAt!).sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+  result.estimatedProfit = { state, value: { amount, currency }, updatedAt };
+  if (inputs.revenue.value!.amount > 0) result.margin = { state, value: amount / inputs.revenue.value!.amount * 100, updatedAt };
+  return result;
+}
+
 export type CockpitTrendPoint = {
   label: string;
   value: number;
@@ -59,6 +101,7 @@ export type TodaysFocus =
   | { state: "unavailable" };
 
 export type CommandCentreCockpitData = {
+  profit: ProfitTodayData;
   generatedAt: string;
   systemStatus: "live" | "stale" | "partial" | "unavailable" | "error";
   latestSourceAt: string | null;
