@@ -1,7 +1,8 @@
 export type CatalogueVariant = { id: string; productId: string; sourceVariantId: string; option1: string | null; option2: string | null; option3: string | null; sourceActive: boolean; availableForSale: boolean; available: number | null };
 export type Structure = { state: "resolved"; sizePosition: 1 | 2 | 3; descriptorPosition: 1 | 2 | 3; variants: ResolvedVariant[] } | { state: "ambiguous"; variants: CatalogueVariant[] };
 export type ResolvedVariant = CatalogueVariant & { size: string; descriptor: string; key: string };
-export type ModelAssessment = { key: string; descriptor: string; status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data"; confidence: "low" | "medium" | "high"; sold7: number; sold14: number; previous14: number; stock: number | null; daysCover: number | null; priority: "none" | "watch" | "medium" | "high" | "critical"; sizeRisks: string[]; stockImbalance: { weakStockShare: number; constrainedSizes: string[] } | null; action: string };
+export type ModelAttentionClass = "actionable" | "monitor" | "informational";
+export type ModelAssessment = { key: string; descriptor: string; status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data"; confidence: "low" | "medium" | "high"; sold7: number; sold14: number; previous14: number; stock: number | null; daysCover: number | null; priority: "none" | "watch" | "medium" | "high" | "critical"; sizeRisks: string[]; stockImbalance: { weakStockShare: number; constrainedSizes: string[] } | null; attention: ModelAttentionClass; action: string };
 
 const normalizeSize = (value: string | null) => {
   const v = value?.trim().toUpperCase().replace(/\s+/g, " ") ?? "";
@@ -44,6 +45,22 @@ export function assessModels(structure: Structure, sales: Map<string, { sold7: n
     if (incomplete || freshness !== "current") priority = "watch"; else if (credible && (sizeRisks.length || (daysCover !== null && daysCover <= 7))) priority = "critical"; else if (credible && daysCover !== null && daysCover <= 14) priority = "high"; else if (demand.sold14 >= 3 && daysCover !== null && daysCover <= 28 && status !== "cooling") priority = "medium"; else if (status === "emerging" || status === "insufficient_data" || sizeRisks.length || daysCover === null || (daysCover !== null && daysCover <= 45)) priority = "watch";
     if (stockImbalance && priority === "none") priority = "watch";
     if (status === "cooling" && priority !== "critical") priority = daysCover !== null && daysCover <= 28 ? "watch" : stockImbalance ? "watch" : "none";
-    return { key, descriptor: variants[0].descriptor, status, confidence: c, ...demand, stock, daysCover, priority, sizeRisks, stockImbalance, action: priority === "high" || priority === "critical" || priority === "medium" ? "Review Purchase Intelligence for verified reorder quantity." : priority === "watch" ? "Monitor stock and demand before increasing purchasing." : "No immediate reorder — adequate stock cover." };
+    const explicitRisk = sizeRisks.length > 0 || stockImbalance !== null;
+    const attention: ModelAttentionClass = priority === "medium" || priority === "high" || priority === "critical" || (priority === "watch" && explicitRisk)
+      ? "actionable"
+      : demand.sold14 === 0 && !explicitRisk && stock !== null && freshness === "current"
+        ? "informational"
+        : "monitor";
+    return { key, descriptor: variants[0].descriptor, status, confidence: c, ...demand, stock, daysCover, priority, sizeRisks, stockImbalance, attention, action: priority === "high" || priority === "critical" || priority === "medium" ? "Review Purchase Intelligence for verified reorder quantity." : priority === "watch" ? "Monitor stock and demand before increasing purchasing." : "No immediate reorder — adequate stock cover." };
   });
+}
+
+export function summarizeModelAttention(models: ModelAssessment[]) {
+  const summary = { actionableModelCount: 0, monitorModelCount: 0, informationalModelCount: 0 };
+  for (const model of models) {
+    if (model.attention === "actionable") summary.actionableModelCount += 1;
+    else if (model.attention === "monitor") summary.monitorModelCount += 1;
+    else summary.informationalModelCount += 1;
+  }
+  return summary;
 }

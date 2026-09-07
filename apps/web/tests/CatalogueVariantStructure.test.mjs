@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessModels, resolveCatalogueVariantStructure } from "../lib/intelligence/CatalogueVariantStructure.ts";
+import { assessModels, resolveCatalogueVariantStructure, summarizeModelAttention } from "../lib/intelligence/CatalogueVariantStructure.ts";
 
 const v = (id, one, two, extra = {}) => ({ id, productId: "p", sourceVariantId: `shop-${id}`, option1: one, option2: two, option3: null, sourceActive: true, availableForSale: true, available: 5, ...extra });
 test("resolves standard and reversed catalogue structures without product-name rules", () => {
@@ -33,4 +33,17 @@ test("does not infer imbalance from isolated demand, balanced stock, or zero dem
   assert.equal(model([v("m", "Logo", "M", { available: 0, availableForSale: false }), v("xxl", "Logo", "2XL", { available: 20 })], [["shop-m", { sold7: 1, sold14: 1, previous14: 0 }]]).stockImbalance, null);
   assert.equal(model([v("m", "Logo", "M", { available: 5 }), v("l", "Logo", "L", { available: 5 })], [["shop-m", { sold7: 3, sold14: 6, previous14: 4 }], ["shop-l", { sold7: 3, sold14: 6, previous14: 4 }]]).stockImbalance, null);
   assert.equal(model([v("m", "Logo", "M", { available: 0, availableForSale: false }), v("xxl", "Logo", "2XL", { available: 20 })], []).stockImbalance, null);
+});
+test("separates informational, monitor, and explicit stock risks without changing priority", () => {
+  const model = (rows, sales) => assessModels(resolveCatalogueVariantStructure("p", rows), new Map(sales), "current")[0];
+  const informational = model([v("a", "Zero", "M", { available: 5 })], []);
+  const monitor = model([v("b", "Early", "M", { available: 1 })], [["shop-b", { sold7: 1, sold14: 2, previous14: 0 }]]);
+  const actionable = model([v("m", "Risk", "M", { available: 0, availableForSale: false }), v("x", "Risk", "2XL", { available: 17 })], [["shop-m", { sold7: 3, sold14: 6, previous14: 4 }]]);
+  assert.equal(informational.attention, "informational"); assert.equal(monitor.attention, "monitor"); assert.equal(actionable.attention, "actionable");
+  assert.deepEqual(summarizeModelAttention([informational, monitor, actionable]), { actionableModelCount: 1, monitorModelCount: 1, informationalModelCount: 1 });
+});
+test("diagnostic rollup fixture has no actionable risks and excludes zero-demand models", () => {
+  const structure = resolveCatalogueVariantStructure("p", [v("zero", "Zero", "M", { available: 4 }), v("early", "Early", "M", { available: 2 })]);
+  const models = assessModels(structure, new Map([["shop-early", { sold7: 1, sold14: 2, previous14: 0 }]]), "current");
+  assert.deepEqual(summarizeModelAttention(models), { actionableModelCount: 0, monitorModelCount: 1, informationalModelCount: 1 });
 });
