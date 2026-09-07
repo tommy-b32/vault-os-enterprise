@@ -2,7 +2,7 @@ export type CatalogueVariant = { id: string; productId: string; sourceVariantId:
 export type Structure = { state: "resolved"; sizePosition: 1 | 2 | 3; descriptorPosition: 1 | 2 | 3; variants: ResolvedVariant[] } | { state: "ambiguous"; variants: CatalogueVariant[] };
 export type ResolvedVariant = CatalogueVariant & { size: string; descriptor: string; key: string };
 export type ModelAttentionClass = "actionable" | "monitor" | "informational";
-export type ModelAssessment = { key: string; descriptor: string; status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data"; confidence: "low" | "medium" | "high"; sold7: number; sold14: number; previous14: number; stock: number | null; daysCover: number | null; priority: "none" | "watch" | "medium" | "high" | "critical"; sizeRisks: string[]; stockImbalance: { weakStockShare: number; constrainedSizes: string[] } | null; attention: ModelAttentionClass; action: string };
+export type ModelAssessment = { key: string; descriptor: string; status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data"; confidence: "low" | "medium" | "high"; sold7: number; sold14: number; previous14: number; stock: number | null; daysCover: number | null; priority: "none" | "watch" | "medium" | "high" | "critical"; sizeRisks: string[]; stockImbalance: { weakStockShare: number; constrainedSizes: string[] } | null; constrainedDemand: { units: number; share: number } | null; attention: ModelAttentionClass; action: string };
 
 const normalizeSize = (value: string | null) => {
   const v = value?.trim().toUpperCase().replace(/\s+/g, " ") ?? "";
@@ -38,6 +38,10 @@ export function assessModels(structure: Structure, sales: Map<string, { sold7: n
     const sizeRisks = variants.filter((v) => v.available === 0 && (sales.get(v.sourceVariantId)?.sold14 ?? 0) >= 3).map((v) => `${v.size} sold out`);
     const sizePositions = variants.map((v) => ({ variant: v, demand: sales.get(v.sourceVariantId)?.sold14 ?? 0, sellable: v.availableForSale ? (v.available ?? 0) : 0 }));
     const constrainedSizes = sizePositions.filter((s) => s.demand >= 3 && s.sellable <= 1).map((s) => s.variant.size);
+    const constrainedDemandUnits = sizePositions.filter((s) => s.sellable === 0).reduce((total, s) => total + s.demand, 0);
+    const constrainedDemandShare = demand.sold14 > 0 ? constrainedDemandUnits / demand.sold14 : 0;
+    const constrainedDemand = !incomplete && freshness === "current" && demand.sold14 >= 4 && constrainedDemandUnits >= 3 && constrainedDemandShare >= .5
+      ? { units: constrainedDemandUnits, share: Math.round(constrainedDemandShare * 100) } : null;
     const weakStock = sizePositions.filter((s) => s.demand <= 1).reduce((total, s) => total + s.sellable, 0);
     const weakStockShare = stock && stock > 0 ? weakStock / stock : 0;
     const stockImbalance = !incomplete && constrainedSizes.length > 0 && weakStockShare >= .5 ? { weakStockShare: Math.round(weakStockShare * 100), constrainedSizes } : null;
@@ -45,13 +49,14 @@ export function assessModels(structure: Structure, sales: Map<string, { sold7: n
     if (incomplete || freshness !== "current") priority = "watch"; else if (credible && (sizeRisks.length || (daysCover !== null && daysCover <= 7))) priority = "critical"; else if (credible && daysCover !== null && daysCover <= 14) priority = "high"; else if (demand.sold14 >= 3 && daysCover !== null && daysCover <= 28 && status !== "cooling") priority = "medium"; else if (status === "emerging" || status === "insufficient_data" || sizeRisks.length || daysCover === null || (daysCover !== null && daysCover <= 45)) priority = "watch";
     if (stockImbalance && priority === "none") priority = "watch";
     if (status === "cooling" && priority !== "critical") priority = daysCover !== null && daysCover <= 28 ? "watch" : stockImbalance ? "watch" : "none";
-    const explicitRisk = sizeRisks.length > 0 || stockImbalance !== null;
-    const attention: ModelAttentionClass = priority === "medium" || priority === "high" || priority === "critical" || (priority === "watch" && explicitRisk)
+    const explicitRisk = sizeRisks.length > 0 || stockImbalance !== null || constrainedDemand !== null;
+    const mediumStrongEvidence = c !== "low" || explicitRisk;
+    const attention: ModelAttentionClass = priority === "high" || priority === "critical" || (priority === "medium" && mediumStrongEvidence) || (priority === "watch" && explicitRisk)
       ? "actionable"
       : demand.sold14 === 0 && !explicitRisk && stock !== null && freshness === "current"
         ? "informational"
         : "monitor";
-    return { key, descriptor: variants[0].descriptor, status, confidence: c, ...demand, stock, daysCover, priority, sizeRisks, stockImbalance, attention, action: priority === "high" || priority === "critical" || priority === "medium" ? "Review Purchase Intelligence for verified reorder quantity." : priority === "watch" ? "Monitor stock and demand before increasing purchasing." : "No immediate reorder — adequate stock cover." };
+    return { key, descriptor: variants[0].descriptor, status, confidence: c, ...demand, stock, daysCover, priority, sizeRisks, stockImbalance, constrainedDemand, attention, action: priority === "high" || priority === "critical" || priority === "medium" ? "Review Purchase Intelligence for verified reorder quantity." : priority === "watch" ? "Monitor stock and demand before increasing purchasing." : "No immediate reorder — adequate stock cover." };
   });
 }
 

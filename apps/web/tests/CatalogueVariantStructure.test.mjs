@@ -47,3 +47,16 @@ test("diagnostic rollup fixture has no actionable risks and excludes zero-demand
   const models = assessModels(structure, new Map([["shop-early", { sold7: 1, sold14: 2, previous14: 0 }]]), "current");
   assert.deepEqual(summarizeModelAttention(models), { actionableModelCount: 0, monitorModelCount: 1, informationalModelCount: 1 });
 });
+test("low-confidence MEDIUM without explicit stock evidence is monitor, while stronger MEDIUM evidence is actionable", () => {
+  const one = (rows, sales) => assessModels(resolveCatalogueVariantStructure("p", rows), new Map(sales), "current")[0];
+  const early = one([v("m", "Early", "M", { available: 4 })], [["shop-m", { sold7: 3, sold14: 4, previous14: 0 }]]);
+  const established = one([v("m", "Established", "M", { available: 10 })], [["shop-m", { sold7: 4, sold14: 8, previous14: 4 }]]);
+  assert.equal(early.priority, "medium"); assert.equal(early.attention, "monitor");
+  assert.equal(established.priority, "medium"); assert.equal(established.attention, "actionable");
+});
+test("aggregate constrained demand makes emerging MEDIUM actionable without product-specific rules", () => {
+  const constrained = assessModels(resolveCatalogueVariantStructure("p", [v("s", "Design", "S", { available: 1 }), v("l", "Design", "L", { available: 0, availableForSale: false }), v("xl", "Design", "XL", { available: 0, availableForSale: false }), v("xxl", "Design", "2XL", { available: 0, availableForSale: false })]), new Map([["shop-s", { sold7: 1, sold14: 1, previous14: 0 }], ["shop-l", { sold7: 2, sold14: 2, previous14: 0 }], ["shop-xl", { sold7: 1, sold14: 1, previous14: 0 }], ["shop-xxl", { sold7: 1, sold14: 1, previous14: 0 }]]), "current")[0];
+  assert.equal(constrained.priority, "medium"); assert.deepEqual(constrained.constrainedDemand, { units: 4, share: 80 }); assert.equal(constrained.attention, "actionable");
+  const weak = assessModels(resolveCatalogueVariantStructure("p", [v("m", "Design", "M", { available: 4 }), v("l", "Design", "L", { available: 0, availableForSale: false })]), new Map([["shop-m", { sold7: 3, sold14: 3, previous14: 0 }], ["shop-l", { sold7: 1, sold14: 1, previous14: 0 }]]), "current")[0];
+  assert.equal(weak.constrainedDemand, null); assert.equal(weak.attention, "monitor");
+});
