@@ -133,6 +133,12 @@ Deno.serve(async (request: Request) => {
         sync_days: syncDays,
         orders_synced: orders.length,
         order_lines_synced: linesSynced,
+        created_from: requestInput.mode === "historical_backfill"
+          ? requestInput.createdFrom
+          : null,
+        created_before: requestInput.mode === "historical_backfill"
+          ? requestInput.createdBefore
+          : null,
         started_at: startedAt,
         completed_at: completedAt,
       })

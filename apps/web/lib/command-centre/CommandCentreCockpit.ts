@@ -18,6 +18,20 @@ export type TodayPerformance = {
   baselineSampleCount: number;
 };
 
+export type SevenDayForecast = {
+  forecastRevenue: number;
+  forecastOrders: number;
+  expectedAov: number | null;
+  averageRevenuePerDay: number;
+  strongestDay: string;
+  strongestRevenue: number;
+  weakestDay: string;
+  weakestRevenue: number;
+  minimumSampleCount: number;
+  maximumSampleCount: number;
+  coverageSampleCount: number;
+};
+
 export type CockpitValue<T> =
   | { state: "available" | "stale"; value: T; updatedAt: string | null }
   | { state: "unavailable" | "not_connected" | "pending"; value: null; updatedAt: null };
@@ -160,6 +174,7 @@ export type TodaysFocus =
 export type CommandCentreCockpitData = {
   profit: ProfitTodayData;
   todayPerformance: CockpitValue<TodayPerformance>;
+  sevenDayForecast: CockpitValue<SevenDayForecast>;
   generatedAt: string;
   systemStatus: "live" | "stale" | "partial" | "unavailable" | "error";
   latestSourceAt: string | null;

@@ -84,6 +84,21 @@ export type ShopifyTodayPerformance = {
   sourceAt: string | null;
 };
 
+export type ShopifySevenDayForecast = {
+  forecastRevenue: number;
+  forecastOrders: number;
+  expectedAov: number | null;
+  averageRevenuePerDay: number;
+  strongestDay: string;
+  strongestRevenue: number;
+  weakestDay: string;
+  weakestRevenue: number;
+  minimumSampleCount: number;
+  maximumSampleCount: number;
+  coverageSampleCount: number;
+  sourceAt: string | null;
+};
+
 export type ShopifyTopProduct = {
   productId: string;
   title: string;
@@ -304,6 +319,37 @@ async function getOrdersInRange(
 }
 
 export const ShopifyTradingRepository = {
+  async getSevenDayForecast(now = new Date()): Promise<ShopifySevenDayForecast | null> {
+    const { data, error } = await supabaseAdmin.rpc("get_shopify_seven_day_forecast", { target_at: now.toISOString() }).single<Record<string, unknown>>();
+    if (error || !data || data.availability !== "available") return null;
+    const number = (value: unknown, nullable = false) => {
+      if (nullable && value === null) return null;
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed < 0) throw new Error("Invalid Shopify forecast data");
+      return parsed;
+    };
+    const required = (value: unknown) => {
+      const parsed = number(value);
+      if (parsed === null) throw new Error("Missing Shopify forecast data");
+      return parsed;
+    };
+    const integer = (value: unknown) => {
+      const parsed = required(value);
+      if (!Number.isSafeInteger(parsed)) throw new Error("Invalid Shopify forecast sample count");
+      return parsed;
+    };
+    const date = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+    const sourceAt = typeof data.source_at === "string" && Number.isFinite(Date.parse(data.source_at)) ? data.source_at : null;
+    const strongestDay = date(data.strongest_day);
+    const weakestDay = date(data.weakest_day);
+    const minimumSampleCount = integer(data.minimum_sample_count);
+    const maximumSampleCount = integer(data.maximum_sample_count);
+    if (!sourceAt || !strongestDay || !weakestDay || minimumSampleCount < 4 || maximumSampleCount < minimumSampleCount) return null;
+    return { forecastRevenue: required(data.forecast_revenue_gbp), forecastOrders: required(data.forecast_orders),
+      expectedAov: number(data.expected_aov_gbp, true), averageRevenuePerDay: required(data.average_revenue_per_day_gbp),
+      strongestDay, strongestRevenue: required(data.strongest_revenue_gbp), weakestDay, weakestRevenue: required(data.weakest_revenue_gbp),
+      minimumSampleCount, maximumSampleCount, coverageSampleCount: integer(data.coverage_sample_count), sourceAt };
+  },
   async getTodayPerformance(now = new Date()): Promise<ShopifyTodayPerformance | null> {
     const { data, error } = await supabaseAdmin.rpc("get_shopify_today_performance", { target_at: now.toISOString() }).single<Record<string, unknown>>();
     if (error || !data || data.availability !== "available") return null;

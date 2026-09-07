@@ -279,6 +279,28 @@ function TodayPerformanceCard({ data }: DataProps) {
   </KpiCard>;
 }
 
+function SevenDayForecastCard({ data }: DataProps) {
+  const forecast = data.sevenDayForecast;
+  const values = forecast.value;
+  const metric = (value: number | null): CockpitValue<number> =>
+    value !== null && (forecast.state === "available" || forecast.state === "stale")
+      ? { state: forecast.state, value, updatedAt: forecast.updatedAt }
+      : { state: "unavailable", value: null, updatedAt: null };
+  const day = (value: string | undefined) => value
+    ? new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" }).format(new Date(`${value}T12:00:00Z`))
+    : "Unavailable";
+  return <KpiCard eyebrow="Forecast" icon="analytics" accent="violet" value={values ? formatMoney({ amount: values.forecastRevenue, currency: "GBP" }) : display(forecast)} valueLabel="Next 7 full London days" trendContent={false}>
+    <div className="cc-performance-support">
+      <MetricRow label="Forecast orders" value={metric(values?.forecastOrders ?? null)} formatter={(value) => Number(value).toFixed(1)} />
+      <MetricRow label="Expected AOV" value={metric(values?.expectedAov ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label="Average revenue/day" value={metric(values?.averageRevenuePerDay ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label={`Strongest · ${day(values?.strongestDay)}`} value={metric(values?.strongestRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label={`Weakest · ${day(values?.weakestDay)}`} value={metric(values?.weakestRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <p>{values ? `${values.minimumSampleCount}–${values.maximumSampleCount} matching weekdays · ${values.coverageSampleCount} verified samples · Europe/London` : "Each forecast weekday needs 4 verified matching weekdays"}</p>
+    </div>
+  </KpiCard>;
+}
+
 function Snapshot({ title, subtitle, icon, href, children }: {
   title: string; subtitle: string; icon: VaultIconName; href?: string; children: React.ReactNode;
 }) {
@@ -424,6 +446,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
         </KpiCard>
         <ProfitTodayCard data={data} />
         <TodayPerformanceCard data={data} />
+        <SevenDayForecastCard data={data} />
       </section>
 
       <section className="cc-middle-grid">
