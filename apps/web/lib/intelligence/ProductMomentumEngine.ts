@@ -1,10 +1,11 @@
 export type MomentumConfidence = "low" | "medium" | "high";
 export type MomentumOrder = { shopify_created_at: string };
-export type MomentumLine = { order_id: string; title: string; quantity: number; refunded_quantity: number; net_line_revenue: number | string };
+export type MomentumLine = { order_id: string; title: string; quantity: number; refunded_quantity: number; net_line_revenue: number | string; shopify_variant_id?: string | null };
 export type ProductMomentumRecommendation = {
   title: string; currentUnits: number; previousUnits: number; currentRevenue: number; previousRevenue: number;
   unitChange: number | null; direction: "up" | "down" | "flat" | "new"; confidence: MomentumConfidence;
   status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data"; evidence: string; recommendedAction: string;
+  variantIds: string[]; sold7: number;
 };
 
 const round = (value: number, digits = 2) => Math.round(value * 10 ** digits) / 10 ** digits;
@@ -25,13 +26,15 @@ function recommend(currentUnits: number, previousUnits: number, currentRevenue: 
 
 export function buildProductMomentum(lines: MomentumLine[], orderById: Map<string, MomentumOrder>, now: Date): ProductMomentumRecommendation[] {
   const currentStart = now.getTime() - 14 * 86400000, previousStart = now.getTime() - 28 * 86400000;
-  const products = new Map<string, { currentUnits: number; previousUnits: number; currentRevenue: number; previousRevenue: number }>();
+  const products = new Map<string, { currentUnits: number; previousUnits: number; currentRevenue: number; previousRevenue: number; variantIds: Set<string>; sold7: number }>();
   for (const line of lines) {
     if (!merchandise(line.title)) continue;
     const order = orderById.get(line.order_id); if (!order) continue;
     const time = new Date(order.shopify_created_at).getTime(); if (time < previousStart || time > now.getTime()) continue;
-    const product = products.get(line.title) ?? { currentUnits: 0, previousUnits: 0, currentRevenue: 0, previousRevenue: 0 };
+    const product = products.get(line.title) ?? { currentUnits: 0, previousUnits: 0, currentRevenue: 0, previousRevenue: 0, variantIds: new Set<string>(), sold7: 0 };
     const units = Math.max(0, Number(line.quantity ?? 0) - Number(line.refunded_quantity ?? 0));
+    if (line.shopify_variant_id) product.variantIds.add(line.shopify_variant_id);
+    if (time >= now.getTime() - 7 * 86400000) product.sold7 += units;
     if (time >= currentStart) { product.currentUnits += units; product.currentRevenue += amount(line.net_line_revenue); } else { product.previousUnits += units; product.previousRevenue += amount(line.net_line_revenue); }
     products.set(line.title, product);
   }
@@ -39,6 +42,6 @@ export function buildProductMomentum(lines: MomentumLine[], orderById: Map<strin
     const unitChange = percentageChange(value.currentUnits, value.previousUnits);
     const direction: ProductMomentumRecommendation["direction"] = value.previousUnits === 0 && value.currentUnits > 0 ? "new" : unitChange !== null && unitChange >= .2 ? "up" : unitChange !== null && unitChange <= -.2 ? "down" : "flat";
     const currentRevenue = round(value.currentRevenue), previousRevenue = round(value.previousRevenue);
-    return { title, ...value, currentRevenue, previousRevenue, unitChange, direction, ...recommend(value.currentUnits, value.previousUnits, currentRevenue, previousRevenue, unitChange) };
+    return { title, currentUnits: value.currentUnits, previousUnits: value.previousUnits, variantIds: [...value.variantIds], sold7: value.sold7, currentRevenue, previousRevenue, unitChange, direction, ...recommend(value.currentUnits, value.previousUnits, currentRevenue, previousRevenue, unitChange) };
   }).filter((item) => item.currentUnits + item.previousUnits >= 3).sort((a, b) => Math.abs(b.unitChange ?? (b.direction === "new" ? 1 : 0)) * (b.currentUnits + b.previousUnits) - Math.abs(a.unitChange ?? (a.direction === "new" ? 1 : 0)) * (a.currentUnits + a.previousUnits)).slice(0, 8);
 }

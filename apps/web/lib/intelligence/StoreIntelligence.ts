@@ -2,6 +2,8 @@ import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { buildProductMomentum as calculateProductMomentum } from "@/lib/intelligence/ProductMomentumEngine";
+import { assessInventory, type InventoryAssessment, type InventoryVariant } from "@/lib/intelligence/ProductInventoryIntelligence";
+import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 
 const ANALYTICS_START = "2026-05-04T00:00:00+01:00";
 const TIME_ZONE = "Europe/London";
@@ -35,6 +37,7 @@ type LineRow = {
   quantity: number;
   refunded_quantity: number;
   net_line_revenue: number | string;
+  shopify_variant_id: string | null;
 };
 
 export type WeekdayPerformance = {
@@ -85,6 +88,9 @@ export type ProductMomentum = {
   status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data";
   evidence: string;
   recommendedAction: string;
+  variantIds: string[];
+  sold7: number;
+  inventory: InventoryAssessment;
 };
 
 export type StoreInsight = {
@@ -315,6 +321,9 @@ function legacyBuildProductMomentum(
         previousRevenue: round(value.previousRevenue),
         unitChange,
         direction,
+        variantIds: [],
+        sold7: 0,
+        inventory: { state: "inventory_unavailable", stock: null, sold7: 0, sold14: value.currentUnits, dailyVelocity: null, daysCover: null, priority: "watch", missingSizes: [], lowSizes: [], freshness: "unavailable", action: "Inventory unavailable. No reorder recommendation made." } as InventoryAssessment,
         ...recommendation,
       };
     })
@@ -437,7 +446,7 @@ export const StoreIntelligence = {
     if (orderIds.length > 0) {
       const linesResult = await supabaseAdmin
         .from("vault_shopify_order_lines")
-        .select("order_id, title, quantity, refunded_quantity, net_line_revenue")
+        .select("order_id, title, quantity, refunded_quantity, net_line_revenue, shopify_variant_id")
         .in("order_id", orderIds)
         .limit(10000);
       if (linesResult.error) throw new Error(linesResult.error.message);
@@ -525,7 +534,31 @@ export const StoreIntelligence = {
       .slice(0, 8);
 
     const trends = [periodTrend(orders, 7, now), periodTrend(orders, 30, now)];
-    const momentum = calculateProductMomentum(lines, orderById, now);
+    const rawMomentum = calculateProductMomentum(lines, orderById, now);
+    const soldVariantIds = Array.from(new Set(rawMomentum.flatMap((item) => item.variantIds)));
+    const freshnessResult = await InventorySyncRepository.getFreshness(now).catch(() => null);
+    const inventoryFreshness = freshnessResult?.syncStatus === "current" ? "current" as const
+      : freshnessResult?.lastInventorySync ? "stale" as const : "unavailable" as const;
+    const soldVariantsResult = soldVariantIds.length
+      ? await supabaseAdmin.from("vault_variants").select("id, product_id, source_variant_id, option_2, available_for_sale").eq("source", "shopify").in("source_variant_id", soldVariantIds)
+      : { data: [] as unknown[], error: null };
+    const inventoryQueryFailed = Boolean(soldVariantsResult.error);
+    const mappedVariants = (soldVariantsResult.data ?? []) as Array<{ id: string; product_id: string; source_variant_id: string; option_2: string | null; available_for_sale: boolean }>;
+    const productIds = Array.from(new Set(mappedVariants.map((variant) => variant.product_id)));
+    const catalogueVariantsResult = productIds.length && !inventoryQueryFailed
+      ? await supabaseAdmin.from("vault_variants").select("id, product_id, source_variant_id, option_2, available_for_sale").eq("source", "shopify").in("product_id", productIds)
+      : { data: [] as unknown[], error: inventoryQueryFailed ? new Error("sold variant mapping unavailable") : null };
+    const catalogueQueryFailed = inventoryQueryFailed || Boolean(catalogueVariantsResult.error);
+    const allVariants = (catalogueVariantsResult.data ?? []) as typeof mappedVariants;
+    const variantIds = allVariants.map((variant) => variant.id);
+    const levelsResult = variantIds.length && !catalogueQueryFailed
+      ? await supabaseAdmin.from("vault_inventory_levels").select("variant_id, available_quantity").in("variant_id", variantIds)
+      : { data: [] as unknown[], error: catalogueQueryFailed ? new Error("catalogue inventory mapping unavailable") : null };
+    const levelsQueryFailed = catalogueQueryFailed || Boolean(levelsResult.error);
+    const levelsByVariant = new Map<string, number[]>();
+    for (const level of (levelsResult.data ?? []) as Array<{ variant_id: string; available_quantity: number }>) levelsByVariant.set(level.variant_id, [...(levelsByVariant.get(level.variant_id) ?? []), level.available_quantity]);
+    const inventoryVariants: InventoryVariant[] = allVariants.map((variant) => ({ sourceVariantId: variant.source_variant_id, productId: variant.product_id, size: variant.option_2, availableForSale: variant.available_for_sale, available: levelsByVariant.has(variant.id) ? levelsByVariant.get(variant.id)!.reduce((sum, value) => sum + value, 0) : null, sold14: 0 }));
+    const momentum = rawMomentum.map((item) => ({ ...item, inventory: assessInventory({ momentum: item, sold7: item.sold7, sold14: item.currentUnits, soldVariantIds: item.variantIds, variants: inventoryVariants, freshness: inventoryFreshness, queryFailed: levelsQueryFailed }) }));
     const bestWeekday = [...weekdays].sort((a, b) => b.averageRevenue - a.averageRevenue)[0] ?? null;
     const weakestWeekday = [...weekdays].filter((item) => item.observedDays > 0).sort((a, b) => a.averageRevenue - b.averageRevenue)[0] ?? null;
     const twoItemOrderShare = orders.length > 0 ? twoItemOrders / orders.length : 0;
