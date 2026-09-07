@@ -1,6 +1,7 @@
 import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { buildProductMomentum as calculateProductMomentum } from "@/lib/intelligence/ProductMomentumEngine";
 
 const ANALYTICS_START = "2026-05-04T00:00:00+01:00";
 const TIME_ZONE = "Europe/London";
@@ -81,6 +82,9 @@ export type ProductMomentum = {
   unitChange: number | null;
   direction: "up" | "down" | "flat" | "new";
   confidence: Confidence;
+  status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data";
+  evidence: string;
+  recommendedAction: string;
 };
 
 export type StoreInsight = {
@@ -159,6 +163,64 @@ function confidenceForSample(currentOrders: number, previousOrders: number): Con
   return "low";
 }
 
+function isMerchandiseProduct(title: string): boolean {
+  return !/vault\s*care|return\s*protection/i.test(title);
+}
+
+function momentumConfidence(currentUnits: number, previousUnits: number): Confidence {
+  const total = currentUnits + previousUnits;
+  if (total >= 24 && Math.min(currentUnits, previousUnits) >= 6) return "high";
+  if (total >= 12 && Math.min(currentUnits, previousUnits) >= 3) return "medium";
+  return "low";
+}
+
+function productRecommendation(value: {
+  currentUnits: number;
+  previousUnits: number;
+  currentRevenue: number;
+  previousRevenue: number;
+  unitChange: number | null;
+}): Pick<ProductMomentum, "status" | "confidence" | "evidence" | "recommendedAction"> {
+  const { currentUnits, previousUnits, currentRevenue, previousRevenue, unitChange } = value;
+  const totalUnits = currentUnits + previousUnits;
+  const confidence = momentumConfidence(currentUnits, previousUnits);
+  const revenueEvidence = `Net units: ${currentUnits} vs ${previousUnits}; net revenue: £${currentRevenue.toFixed(2)} vs £${previousRevenue.toFixed(2)}.`;
+
+  if (previousUnits === 0 && currentUnits > 0) {
+    return {
+      status: "emerging", confidence: currentUnits >= 12 ? "medium" : "low",
+      evidence: `${revenueEvidence} New demand has no prior 14-day unit baseline.`,
+      recommendedAction: "Monitor another 7–14 days before increasing purchasing.",
+    };
+  }
+  if (totalUnits < 6 || confidence === "low") {
+    return {
+      status: "insufficient_data", confidence,
+      evidence: `${revenueEvidence} Too few net units across both periods for a reliable decision.`,
+      recommendedAction: "Monitor another 7–14 days before increasing purchasing.",
+    };
+  }
+  if (unitChange !== null && unitChange >= 0.25) {
+    return {
+      status: "accelerating", confidence,
+      evidence: `${revenueEvidence} Net-unit demand is up ${round(unitChange * 100, 0)}% period over period.`,
+      recommendedAction: "Protect stock / consider increasing reorder quantity. Consider prioritising this product for promotion; Meta spend remains locked.",
+    };
+  }
+  if (unitChange !== null && unitChange <= -0.25) {
+    return {
+      status: "cooling", confidence,
+      evidence: `${revenueEvidence} Net-unit demand is down ${round(Math.abs(unitChange) * 100, 0)}% period over period.`,
+      recommendedAction: "Review declining demand before reordering.",
+    };
+  }
+  return {
+    status: "stable", confidence,
+    evidence: `${revenueEvidence} Net-unit demand is broadly unchanged period over period.`,
+    recommendedAction: "Maintain current stock level.",
+  };
+}
+
 function periodTrend(orders: OrderRow[], days: 7 | 30, now: Date): PeriodTrend {
   const dayMs = 24 * 60 * 60 * 1000;
   const currentStart = new Date(now.getTime() - days * dayMs);
@@ -193,7 +255,7 @@ function periodTrend(orders: OrderRow[], days: 7 | 30, now: Date): PeriodTrend {
   };
 }
 
-function productMomentum(
+function legacyBuildProductMomentum(
   lines: LineRow[],
   orderById: Map<string, OrderRow>,
   now: Date,
@@ -209,6 +271,7 @@ function productMomentum(
   }>();
 
   for (const line of lines) {
+    if (!isMerchandiseProduct(line.title)) continue;
     const order = orderById.get(line.order_id);
     if (!order) continue;
     const orderTime = new Date(order.shopify_created_at).getTime();
@@ -240,6 +303,10 @@ function productMomentum(
       else if (unitChange !== null && unitChange >= 0.2) direction = "up";
       else if (unitChange !== null && unitChange <= -0.2) direction = "down";
 
+      const recommendation = productRecommendation({
+        currentUnits: value.currentUnits, previousUnits: value.previousUnits,
+        currentRevenue: round(value.currentRevenue), previousRevenue: round(value.previousRevenue), unitChange,
+      });
       return {
         title,
         currentUnits: value.currentUnits,
@@ -248,7 +315,7 @@ function productMomentum(
         previousRevenue: round(value.previousRevenue),
         unitChange,
         direction,
-        confidence: confidenceForSample(value.currentUnits, value.previousUnits),
+        ...recommendation,
       };
     })
     .filter((item) => item.currentUnits + item.previousUnits >= 3)
@@ -458,7 +525,7 @@ export const StoreIntelligence = {
       .slice(0, 8);
 
     const trends = [periodTrend(orders, 7, now), periodTrend(orders, 30, now)];
-    const momentum = productMomentum(lines, orderById, now);
+    const momentum = calculateProductMomentum(lines, orderById, now);
     const bestWeekday = [...weekdays].sort((a, b) => b.averageRevenue - a.averageRevenue)[0] ?? null;
     const weakestWeekday = [...weekdays].filter((item) => item.observedDays > 0).sort((a, b) => a.averageRevenue - b.averageRevenue)[0] ?? null;
     const twoItemOrderShare = orders.length > 0 ? twoItemOrders / orders.length : 0;
