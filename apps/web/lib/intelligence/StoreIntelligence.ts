@@ -16,6 +16,7 @@ const WEEKDAYS = [
 ] as const;
 
 type Weekday = (typeof WEEKDAYS)[number];
+type Confidence = "low" | "medium" | "high";
 
 type OrderRow = {
   id: string;
@@ -57,12 +58,38 @@ export type ProductPerformance = {
   revenue: number;
 };
 
+export type PeriodTrend = {
+  label: "7 days" | "30 days";
+  currentOrders: number;
+  previousOrders: number;
+  currentRevenue: number;
+  previousRevenue: number;
+  currentAov: number;
+  previousAov: number;
+  orderChange: number | null;
+  revenueChange: number | null;
+  aovChange: number | null;
+  confidence: Confidence;
+};
+
+export type ProductMomentum = {
+  title: string;
+  currentUnits: number;
+  previousUnits: number;
+  currentRevenue: number;
+  previousRevenue: number;
+  unitChange: number | null;
+  direction: "up" | "down" | "flat" | "new";
+  confidence: Confidence;
+};
+
 export type StoreInsight = {
   id: string;
   severity: "positive" | "neutral" | "watch";
   title: string;
   summary: string;
   evidence: string;
+  confidence?: Confidence;
 };
 
 export type StoreIntelligenceSnapshot = {
@@ -76,8 +103,11 @@ export type StoreIntelligenceSnapshot = {
   refundRate: number;
   weekdays: WeekdayPerformance[];
   bestWeekday: WeekdayPerformance | null;
+  weakestWeekday: WeekdayPerformance | null;
   bestSundayWindow: HourWindowPerformance | null;
+  trends: PeriodTrend[];
   topProducts: ProductPerformance[];
+  productMomentum: ProductMomentum[];
   insights: StoreInsight[];
   metaStatus: "pending";
 };
@@ -117,10 +147,125 @@ function round(value: number, digits = 2): number {
   return Math.round(value * factor) / factor;
 }
 
+function percentageChange(current: number, previous: number): number | null {
+  if (previous <= 0) return current > 0 ? null : 0;
+  return round((current - previous) / previous, 4);
+}
+
+function confidenceForSample(currentOrders: number, previousOrders: number): Confidence {
+  const total = currentOrders + previousOrders;
+  if (total >= 40) return "high";
+  if (total >= 18) return "medium";
+  return "low";
+}
+
+function periodTrend(orders: OrderRow[], days: 7 | 30, now: Date): PeriodTrend {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const currentStart = new Date(now.getTime() - days * dayMs);
+  const previousStart = new Date(now.getTime() - days * 2 * dayMs);
+
+  const current = orders.filter((order) => {
+    const time = new Date(order.shopify_created_at).getTime();
+    return time >= currentStart.getTime() && time <= now.getTime();
+  });
+  const previous = orders.filter((order) => {
+    const time = new Date(order.shopify_created_at).getTime();
+    return time >= previousStart.getTime() && time < currentStart.getTime();
+  });
+
+  const currentRevenue = current.reduce((sum, order) => sum + amount(order.net_revenue), 0);
+  const previousRevenue = previous.reduce((sum, order) => sum + amount(order.net_revenue), 0);
+  const currentAov = current.length > 0 ? currentRevenue / current.length : 0;
+  const previousAov = previous.length > 0 ? previousRevenue / previous.length : 0;
+
+  return {
+    label: days === 7 ? "7 days" : "30 days",
+    currentOrders: current.length,
+    previousOrders: previous.length,
+    currentRevenue: round(currentRevenue),
+    previousRevenue: round(previousRevenue),
+    currentAov: round(currentAov),
+    previousAov: round(previousAov),
+    orderChange: percentageChange(current.length, previous.length),
+    revenueChange: percentageChange(currentRevenue, previousRevenue),
+    aovChange: percentageChange(currentAov, previousAov),
+    confidence: confidenceForSample(current.length, previous.length),
+  };
+}
+
+function productMomentum(
+  lines: LineRow[],
+  orderById: Map<string, OrderRow>,
+  now: Date,
+): ProductMomentum[] {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const currentStart = new Date(now.getTime() - 14 * dayMs);
+  const previousStart = new Date(now.getTime() - 28 * dayMs);
+  const products = new Map<string, {
+    currentUnits: number;
+    previousUnits: number;
+    currentRevenue: number;
+    previousRevenue: number;
+  }>();
+
+  for (const line of lines) {
+    const order = orderById.get(line.order_id);
+    if (!order) continue;
+    const orderTime = new Date(order.shopify_created_at).getTime();
+    if (orderTime < previousStart.getTime() || orderTime > now.getTime()) continue;
+
+    const netUnits = Math.max(0, Number(line.quantity ?? 0) - Number(line.refunded_quantity ?? 0));
+    const product = products.get(line.title) ?? {
+      currentUnits: 0,
+      previousUnits: 0,
+      currentRevenue: 0,
+      previousRevenue: 0,
+    };
+
+    if (orderTime >= currentStart.getTime()) {
+      product.currentUnits += netUnits;
+      product.currentRevenue += amount(line.net_line_revenue);
+    } else {
+      product.previousUnits += netUnits;
+      product.previousRevenue += amount(line.net_line_revenue);
+    }
+    products.set(line.title, product);
+  }
+
+  return [...products.entries()]
+    .map(([title, value]) => {
+      const unitChange = percentageChange(value.currentUnits, value.previousUnits);
+      let direction: ProductMomentum["direction"] = "flat";
+      if (value.previousUnits === 0 && value.currentUnits > 0) direction = "new";
+      else if (unitChange !== null && unitChange >= 0.2) direction = "up";
+      else if (unitChange !== null && unitChange <= -0.2) direction = "down";
+
+      return {
+        title,
+        currentUnits: value.currentUnits,
+        previousUnits: value.previousUnits,
+        currentRevenue: round(value.currentRevenue),
+        previousRevenue: round(value.previousRevenue),
+        unitChange,
+        direction,
+        confidence: confidenceForSample(value.currentUnits, value.previousUnits),
+      };
+    })
+    .filter((item) => item.currentUnits + item.previousUnits >= 3)
+    .sort((a, b) => {
+      const aScore = Math.abs(a.unitChange ?? (a.direction === "new" ? 1 : 0)) * (a.currentUnits + a.previousUnits);
+      const bScore = Math.abs(b.unitChange ?? (b.direction === "new" ? 1 : 0)) * (b.currentUnits + b.previousUnits);
+      return bScore - aScore || b.currentUnits - a.currentUnits;
+    })
+    .slice(0, 8);
+}
+
 function buildInsights(
   weekdays: WeekdayPerformance[],
   twoItemOrderShare: number,
   bestSundayWindow: HourWindowPerformance | null,
+  trends: PeriodTrend[],
+  momentum: ProductMomentum[],
 ): StoreInsight[] {
   const best = [...weekdays].sort((a, b) => b.averageRevenue - a.averageRevenue)[0];
   const others = weekdays.filter((item) => item.day !== best?.day && item.observedDays > 0);
@@ -141,6 +286,20 @@ function buildInsights(
       evidence: otherAverage > 0
         ? `${round(uplift, 0)}% above the average revenue of the other weekdays.`
         : "Highest average weekday revenue in the current canonical dataset.",
+      confidence: best.observedDays >= 12 ? "high" : best.observedDays >= 6 ? "medium" : "low",
+    });
+  }
+
+  const sevenDay = trends.find((trend) => trend.label === "7 days");
+  if (sevenDay?.revenueChange !== null && Math.abs(sevenDay.revenueChange) >= 0.12) {
+    const improving = sevenDay.revenueChange > 0;
+    insights.push({
+      id: "seven-day-momentum",
+      severity: improving ? "positive" : "watch",
+      title: improving ? "7-day revenue momentum is rising" : "7-day revenue momentum has softened",
+      summary: `Revenue is ${Math.abs(round(sevenDay.revenueChange * 100, 0))}% ${improving ? "higher" : "lower"} than the previous 7-day period.`,
+      evidence: `${sevenDay.currentOrders} orders / £${sevenDay.currentRevenue.toFixed(2)} now versus ${sevenDay.previousOrders} orders / £${sevenDay.previousRevenue.toFixed(2)} previously.`,
+      confidence: sevenDay.confidence,
     });
   }
 
@@ -151,6 +310,21 @@ function buildInsights(
       title: "Two-item baskets dominate",
       summary: `${round(twoItemOrderShare * 100, 0)}% of orders contain exactly two net items.`,
       evidence: "The basket pattern is consistent with the store's multi-buy offer influencing order composition.",
+      confidence: "high",
+    });
+  }
+
+  const strongestMover = momentum.find((item) => item.direction === "up" && item.confidence !== "low");
+  if (strongestMover) {
+    insights.push({
+      id: `product-momentum-${strongestMover.title}`,
+      severity: "positive",
+      title: `${strongestMover.title} is gaining momentum`,
+      summary: `${strongestMover.currentUnits} net units sold in the last 14 days versus ${strongestMover.previousUnits} in the prior 14 days.`,
+      evidence: strongestMover.unitChange === null
+        ? "Recent sales emerged from a zero-unit prior period."
+        : `${round(strongestMover.unitChange * 100, 0)}% unit growth period over period.`,
+      confidence: strongestMover.confidence,
     });
   }
 
@@ -161,6 +335,7 @@ function buildInsights(
       title: "Sunday peak window detected",
       summary: `${bestSundayWindow.label} is the strongest Sunday purchase window in the canonical dataset.`,
       evidence: `${bestSundayWindow.orders} orders generating £${bestSundayWindow.revenue.toFixed(2)} net revenue.`,
+      confidence: bestSundayWindow.orders >= 12 ? "high" : bestSundayWindow.orders >= 6 ? "medium" : "low",
     });
   }
 
@@ -172,7 +347,7 @@ function buildInsights(
     evidence: "This prevents Vault OS from recommending budget changes from Shopify revenue alone.",
   });
 
-  return insights;
+  return insights.slice(0, 6);
 }
 
 export const StoreIntelligence = {
@@ -282,11 +457,14 @@ export const StoreIntelligence = {
       .sort((a, b) => b.units - a.units || b.revenue - a.revenue)
       .slice(0, 8);
 
+    const trends = [periodTrend(orders, 7, now), periodTrend(orders, 30, now)];
+    const momentum = productMomentum(lines, orderById, now);
     const bestWeekday = [...weekdays].sort((a, b) => b.averageRevenue - a.averageRevenue)[0] ?? null;
+    const weakestWeekday = [...weekdays].filter((item) => item.observedDays > 0).sort((a, b) => a.averageRevenue - b.averageRevenue)[0] ?? null;
     const twoItemOrderShare = orders.length > 0 ? twoItemOrders / orders.length : 0;
 
     return {
-      generatedAt: new Date().toISOString(),
+      generatedAt: now.toISOString(),
       analyticsStart: ANALYTICS_START,
       sourceOrderCount: orders.length,
       netRevenue: round(netRevenue),
@@ -296,11 +474,14 @@ export const StoreIntelligence = {
       refundRate: grossRevenue > 0 ? round(refunds / grossRevenue, 4) : 0,
       weekdays,
       bestWeekday,
+      weakestWeekday,
       bestSundayWindow: bestSundayWindow
         ? { label: bestSundayWindow.label, orders: bestSundayWindow.orders, revenue: round(bestSundayWindow.revenue) }
         : null,
+      trends,
       topProducts,
-      insights: buildInsights(weekdays, twoItemOrderShare, bestSundayWindow),
+      productMomentum: momentum,
+      insights: buildInsights(weekdays, twoItemOrderShare, bestSundayWindow, trends, momentum),
       metaStatus: "pending",
     };
   },
