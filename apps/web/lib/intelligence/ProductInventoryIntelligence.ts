@@ -10,7 +10,7 @@ export function assessInventory(input: { momentum: ProductMomentumRecommendation
   const mapped = new Map(variants.map((variant) => [variant.sourceVariantId, variant]));
   if (soldVariantIds.some((id) => !mapped.has(id))) return { state: "mapping_incomplete", stock: null, sold7, sold14, dailyVelocity: null, daysCover: null, priority: "watch", missingSizes: [], lowSizes: [], freshness, action: "Inventory mapping incomplete. No reorder recommendation made." };
   const productIds = new Set(soldVariantIds.map((id) => mapped.get(id)!.productId));
-  if (productIds.size !== 1 || variants.some((variant) => productIds.has(variant.productId) && variant.available === null)) return { state: "inventory_unavailable", stock: null, sold7, sold14, dailyVelocity: null, daysCover: null, priority: "watch", missingSizes: [], lowSizes: [], freshness, action: "Inventory unavailable. No reorder recommendation made." };
+  if (productIds.size !== 1 || variants.some((variant) => productIds.has(variant.productId) && variant.availableForSale && variant.available === null)) return { state: "inventory_unavailable", stock: null, sold7, sold14, dailyVelocity: null, daysCover: null, priority: "watch", missingSizes: [], lowSizes: [], freshness, action: "Inventory unavailable. No reorder recommendation made." };
   const productVariants = variants.filter((variant) => productIds.has(variant.productId) && variant.availableForSale);
   const stock = productVariants.reduce((sum, variant) => sum + (variant.available ?? 0), 0);
   const velocity = sold14 > 0 ? sold14 / 14 : null;

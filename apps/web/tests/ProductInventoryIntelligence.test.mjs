@@ -14,6 +14,10 @@ test("maps Shopify variant IDs to one canonical product and includes every activ
   assert.equal(result.daysCover, 17);
 });
 test("never turns a missing inventory row into zero stock", () => assert.equal(assess({ variants: variants([{ sourceVariantId: "shopify-v3", productId: "p1", size: "XL", availableForSale: true, available: null, sold14: 0 }]) }).state, "inventory_unavailable"));
+test("does not let an obsolete inactive variant with no inventory row poison active product completeness", () => {
+  const result = assess({ variants: variants([{ sourceVariantId: "obsolete", productId: "p1", size: "S", availableForSale: false, available: null, sold14: 0 }]) });
+  assert.equal(result.state, "available");
+});
 test("marks unresolved sold variants as mapping incomplete", () => assert.equal(assess({ soldVariantIds: ["missing"] }).state, "mapping_incomplete"));
 test("variant, product mapping, and inventory query failures are unavailable rather than zero-stock recommendations", () => {
   for (const failure of ["variant", "product", "levels"]) {
