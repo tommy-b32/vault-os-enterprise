@@ -291,7 +291,7 @@ function buildInsights(
   }
 
   const sevenDay = trends.find((trend) => trend.label === "7 days");
-  if (sevenDay?.revenueChange !== null && Math.abs(sevenDay.revenueChange) >= 0.12) {
+  if (sevenDay && sevenDay.revenueChange !== null && Math.abs(sevenDay.revenueChange) >= 0.12) {
     const improving = sevenDay.revenueChange > 0;
     insights.push({
       id: "seven-day-momentum",
