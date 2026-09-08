@@ -26,7 +26,16 @@ type MetaInsightsResponse = {
     type?: string;
     code?: number;
     error_subcode?: number;
+    fbtrace_id?: string;
   };
+};
+
+type MetaApiError = {
+  message?: unknown;
+  type?: unknown;
+  code?: unknown;
+  error_subcode?: unknown;
+  fbtrace_id?: unknown;
 };
 
 export type MetaDailyInsight = {
@@ -104,6 +113,37 @@ function getRequiredEnvironmentVariable(name: string): string {
   return value;
 }
 
+function redactMetaDiagnosticValue(value: string, accessToken: string): string {
+  return value
+    .replaceAll(accessToken, "[REDACTED]")
+    .replace(/access_token=[^&\s"']+/gi, "[REDACTED]")
+    .replace(/authorization\s*[:=]\s*(?:bearer\s+)?[^\s,"']+/gi, "[REDACTED]");
+}
+
+function diagnosticValue(value: unknown, accessToken: string): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+
+  return redactMetaDiagnosticValue(String(value), accessToken);
+}
+
+function formatMetaApiError(
+  status: number,
+  error: MetaApiError | undefined,
+  accessToken: string,
+): string {
+  const fields = [
+    ["message", diagnosticValue(error?.message, accessToken)],
+    ["type", diagnosticValue(error?.type, accessToken)],
+    ["code", diagnosticValue(error?.code, accessToken)],
+    ["error_subcode", diagnosticValue(error?.error_subcode, accessToken)],
+    ["fbtrace_id", diagnosticValue(error?.fbtrace_id, accessToken)],
+    ["http_status", String(status)],
+  ].filter(([, value]) => value !== null)
+    .map(([name, value]) => `${name}=${JSON.stringify(value)}`);
+
+  return `Meta API error: ${fields.join(" ")}`;
+}
+
 async function fetchMetaAccountDetails(
   accessToken: string,
   adAccountId: string,
@@ -116,14 +156,18 @@ async function fetchMetaAccountDetails(
   url.searchParams.set("access_token", accessToken);
 
   const response = await fetch(url);
-  const payload = await response.json();
+  const payload = await response.json() as {
+    currency?: unknown;
+    timezone_name?: unknown;
+    error?: MetaApiError;
+  };
 
   if (!response.ok || payload?.error) {
-    const message =
-      payload?.error?.message ??
-      `Meta account request failed with status ${response.status}`;
-
-    throw new Error(`Meta API error: ${message}`);
+    throw new Error(formatMetaApiError(
+      response.status,
+      payload?.error,
+      accessToken,
+    ));
   }
 
   if (!payload.currency || !payload.timezone_name) {
@@ -190,11 +234,11 @@ export async function fetchMetaDailyInsights(
   const payload = await response.json() as MetaInsightsResponse;
 
   if (!response.ok || payload.error) {
-    const message =
-      payload.error?.message ??
-      `Meta insights request failed with status ${response.status}`;
-
-    throw new Error(`Meta API error: ${message}`);
+    throw new Error(formatMetaApiError(
+      response.status,
+      payload.error,
+      accessToken,
+    ));
   }
 
   if (!Array.isArray(payload.data)) {
