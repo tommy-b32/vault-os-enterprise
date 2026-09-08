@@ -1,13 +1,12 @@
+import { normalizeShopifySize } from "../../../../supabase/functions/_shared/shopify/option-roles.ts";
+
 export type CatalogueVariant = { id: string; productId: string; sourceVariantId: string; option1: string | null; option2: string | null; option3: string | null; sourceActive: boolean; availableForSale: boolean; available: number | null };
 export type Structure = { state: "resolved"; sizePosition: 1 | 2 | 3; descriptorPosition: 1 | 2 | 3; variants: ResolvedVariant[] } | { state: "ambiguous"; variants: CatalogueVariant[] };
 export type ResolvedVariant = CatalogueVariant & { size: string; descriptor: string; key: string };
 export type ModelAttentionClass = "actionable" | "monitor" | "informational";
 export type ModelAssessment = { key: string; descriptor: string; status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data"; confidence: "low" | "medium" | "high"; sold7: number; sold14: number; previous14: number; stock: number | null; daysCover: number | null; priority: "none" | "watch" | "medium" | "high" | "critical"; sizeRisks: string[]; stockImbalance: { weakStockShare: number; constrainedSizes: string[] } | null; constrainedDemand: { units: number; share: number } | null; attention: ModelAttentionClass; action: string };
 
-const normalizeSize = (value: string | null) => {
-  const v = value?.trim().toUpperCase().replace(/\s+/g, " ") ?? "";
-  return ({ S: "S", SMALL: "S", M: "M", MEDIUM: "M", L: "L", LARGE: "L", XL: "XL", "X-LARGE": "XL", "EXTRA LARGE": "XL", XXL: "2XL", "2XL": "2XL", "2X": "2XL", XXXL: "3XL", "3XL": "3XL" } as Record<string, string>)[v] ?? null;
-};
+const normalizeSize = normalizeShopifySize;
 const option = (v: CatalogueVariant, position: 1 | 2 | 3) => position === 1 ? v.option1 : position === 2 ? v.option2 : v.option3;
 const confidence = (now: number, before: number): "low" | "medium" | "high" => now + before >= 24 && Math.min(now, before) >= 6 ? "high" : now + before >= 12 && Math.min(now, before) >= 3 ? "medium" : "low";
 

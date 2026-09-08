@@ -8,6 +8,7 @@ import {
   classifyCatalogueWrites,
   findStaleCanonicalVariantIds,
 } from "../_shared/shopify/catalogue-reconciliation.ts";
+import { resolveShopifyOptionIdentity } from "../_shared/shopify/option-roles.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -160,6 +161,7 @@ Deno.serve(async (request: Request) => {
       productsSynced += 1;
 
       for (const variant of product.variants.nodes) {
+        const identity = resolveShopifyOptionIdentity(variant.selectedOptions);
         const { error: variantError } =
           await supabase
             .from("vault_variants")
@@ -188,6 +190,12 @@ Deno.serve(async (request: Request) => {
                   variant.selectedOptions,
                   2,
                 ),
+                option_1_name: identity.optionNames[0],
+                option_2_name: identity.optionNames[1],
+                option_3_name: identity.optionNames[2],
+                model_design: identity.modelDesign,
+                normalized_size: identity.normalizedSize,
+                identity_resolution_status: identity.resolution,
                 price:
                   Number(variant.price || 0),
                 compare_at_price:
