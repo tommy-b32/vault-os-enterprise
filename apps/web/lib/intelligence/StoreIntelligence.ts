@@ -3,7 +3,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { buildProductMomentum as calculateProductMomentum } from "@/lib/intelligence/ProductMomentumEngine";
 import { assessInventory, type InventoryAssessment, type InventoryVariant } from "@/lib/intelligence/ProductInventoryIntelligence";
-import { assessModels, resolveCatalogueVariantStructure, type ModelAssessment } from "@/lib/intelligence/CatalogueVariantStructure";
+import { assessModels, resolveCanonicalCatalogueVariantStructure, type ModelAssessment } from "@/lib/intelligence/CatalogueVariantStructure";
 import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 
 const ANALYTICS_START = "2026-05-04T00:00:00+01:00";
@@ -95,6 +95,24 @@ export type ProductMomentum = {
   models: ModelAssessment[];
   modelGrouping: "resolved" | "ambiguous" | "unavailable";
 };
+
+type ShopifyVariantRow = {
+  id: string;
+  product_id: string;
+  source_variant_id: string;
+  option_1: string | null;
+  option_2: string | null;
+  option_3: string | null;
+  model_design: string | null;
+  normalized_size: string | null;
+  identity_resolution_status: string | null;
+  available_for_sale: boolean;
+  source_active: boolean;
+};
+
+function hasResolvedSemanticIdentity(variant: ShopifyVariantRow): variant is ShopifyVariantRow & { model_design: string; normalized_size: string; identity_resolution_status: "resolved" } {
+  return variant.identity_resolution_status === "resolved" && Boolean(variant.model_design?.trim()) && Boolean(variant.normalized_size?.trim());
+}
 
 export type StoreInsight = {
   id: string;
@@ -545,16 +563,16 @@ export const StoreIntelligence = {
     const inventoryFreshness = freshnessResult?.syncStatus === "current" ? "current" as const
       : freshnessResult?.lastInventorySync ? "stale" as const : "unavailable" as const;
     const soldVariantsResult = soldVariantIds.length
-      ? await supabaseAdmin.from("vault_variants").select("id, product_id, source_variant_id, option_1, option_2, option_3, available_for_sale, source_active").eq("source", "shopify").in("source_variant_id", soldVariantIds)
+      ? await supabaseAdmin.from("vault_variants").select("id, product_id, source_variant_id, option_1, option_2, option_3, model_design, normalized_size, identity_resolution_status, available_for_sale, source_active").eq("source", "shopify").in("source_variant_id", soldVariantIds)
       : { data: [] as unknown[], error: null };
     const inventoryQueryFailed = Boolean(soldVariantsResult.error);
-    const mappedVariants = (soldVariantsResult.data ?? []) as Array<{ id: string; product_id: string; source_variant_id: string; option_1: string | null; option_2: string | null; option_3: string | null; available_for_sale: boolean; source_active: boolean }>;
+    const mappedVariants = (soldVariantsResult.data ?? []) as ShopifyVariantRow[];
     const productIds = Array.from(new Set(mappedVariants.map((variant) => variant.product_id)));
     const catalogueVariantsResult = productIds.length && !inventoryQueryFailed
-      ? await supabaseAdmin.from("vault_variants").select("id, product_id, source_variant_id, option_1, option_2, option_3, available_for_sale, source_active").eq("source", "shopify").in("product_id", productIds)
+      ? await supabaseAdmin.from("vault_variants").select("id, product_id, source_variant_id, option_1, option_2, option_3, model_design, normalized_size, identity_resolution_status, available_for_sale, source_active").eq("source", "shopify").in("product_id", productIds)
       : { data: [] as unknown[], error: inventoryQueryFailed ? new Error("sold variant mapping unavailable") : null };
     const catalogueQueryFailed = inventoryQueryFailed || Boolean(catalogueVariantsResult.error);
-    const allVariants = (catalogueVariantsResult.data ?? []) as typeof mappedVariants;
+    const allVariants = (catalogueVariantsResult.data ?? []) as ShopifyVariantRow[];
     const variantIds = allVariants.map((variant) => variant.id);
     const levelsResult = variantIds.length && !catalogueQueryFailed
       ? await supabaseAdmin.from("vault_inventory_levels").select("variant_id, available_quantity").in("variant_id", variantIds)
@@ -562,10 +580,11 @@ export const StoreIntelligence = {
     const levelsQueryFailed = catalogueQueryFailed || Boolean(levelsResult.error);
     const levelsByVariant = new Map<string, number[]>();
     for (const level of (levelsResult.data ?? []) as Array<{ variant_id: string; available_quantity: number }>) levelsByVariant.set(level.variant_id, [...(levelsByVariant.get(level.variant_id) ?? []), level.available_quantity]);
-    const inventoryVariants: InventoryVariant[] = allVariants.map((variant) => ({ sourceVariantId: variant.source_variant_id, productId: variant.product_id, size: variant.option_2, availableForSale: variant.available_for_sale, available: levelsByVariant.has(variant.id) ? levelsByVariant.get(variant.id)!.reduce((sum, value) => sum + value, 0) : null, sold14: 0 }));
+    const semanticVariants = allVariants.filter(hasResolvedSemanticIdentity);
+    const inventoryVariants: InventoryVariant[] = semanticVariants.map((variant) => ({ sourceVariantId: variant.source_variant_id, productId: variant.product_id, size: variant.normalized_size, availableForSale: variant.available_for_sale, available: levelsByVariant.has(variant.id) ? levelsByVariant.get(variant.id)!.reduce((sum, value) => sum + value, 0) : null, sold14: 0 }));
     const modelSales = new Map<string, { sold7: number; sold14: number; previous14: number }>();
     for (const line of lines) { if (!line.shopify_variant_id || !orderById.has(line.order_id)) continue; const time = new Date(orderById.get(line.order_id)!.shopify_created_at).getTime(); const net = Math.max(0, Number(line.quantity) - Number(line.refunded_quantity)); if (time < now.getTime() - 28 * 86400000 || time > now.getTime()) continue; const value = modelSales.get(line.shopify_variant_id) ?? { sold7: 0, sold14: 0, previous14: 0 }; if (time >= now.getTime() - 7 * 86400000) value.sold7 += net; if (time >= now.getTime() - 14 * 86400000) value.sold14 += net; else value.previous14 += net; modelSales.set(line.shopify_variant_id, value); }
-    const structures = new Map(productIds.map((productId) => [productId, resolveCatalogueVariantStructure(productId, allVariants.filter((v) => v.product_id === productId).map((v) => ({ id: v.id, productId: v.product_id, sourceVariantId: v.source_variant_id, option1: v.option_1, option2: v.option_2, option3: v.option_3, sourceActive: v.source_active === true, availableForSale: v.available_for_sale, available: levelsByVariant.has(v.id) ? levelsByVariant.get(v.id)!.reduce((sum, value) => sum + value, 0) : null })))]));
+    const structures = new Map(productIds.map((productId) => [productId, resolveCanonicalCatalogueVariantStructure(productId, allVariants.filter((v) => v.product_id === productId).map((v) => ({ id: v.id, productId: v.product_id, sourceVariantId: v.source_variant_id, option1: v.option_1, option2: v.option_2, option3: v.option_3, modelDesign: v.model_design, normalizedSize: v.normalized_size, identityResolutionStatus: v.identity_resolution_status, sourceActive: v.source_active === true, availableForSale: v.available_for_sale, available: levelsByVariant.has(v.id) ? levelsByVariant.get(v.id)!.reduce((sum, value) => sum + value, 0) : null })))]));
     const momentum = rawMomentum.map((item) => { const ids = new Set(item.variantIds.map((id) => mappedVariants.find((v) => v.source_variant_id === id)?.product_id).filter(Boolean)); const productId = ids.size === 1 ? [...ids][0]! : null; const structure = productId ? structures.get(productId) : undefined; return { ...item, inventory: assessInventory({ momentum: item, sold7: item.sold7, sold14: item.currentUnits, soldVariantIds: item.variantIds, variants: inventoryVariants, freshness: inventoryFreshness, queryFailed: levelsQueryFailed }), models: structure ? assessModels(structure, modelSales, inventoryFreshness, levelsQueryFailed) : [], modelGrouping: !structure ? "unavailable" as const : structure.state, }; });
     const bestWeekday = [...weekdays].sort((a, b) => b.averageRevenue - a.averageRevenue)[0] ?? null;
     const weakestWeekday = [...weekdays].filter((item) => item.observedDays > 0).sort((a, b) => a.averageRevenue - b.averageRevenue)[0] ?? null;

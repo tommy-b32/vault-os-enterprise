@@ -1,7 +1,8 @@
 import { normalizeShopifySize } from "../../../../supabase/functions/_shared/shopify/option-roles.ts";
 
 export type CatalogueVariant = { id: string; productId: string; sourceVariantId: string; option1: string | null; option2: string | null; option3: string | null; sourceActive: boolean; availableForSale: boolean; available: number | null };
-export type Structure = { state: "resolved"; sizePosition: 1 | 2 | 3; descriptorPosition: 1 | 2 | 3; variants: ResolvedVariant[] } | { state: "ambiguous"; variants: CatalogueVariant[] };
+export type CanonicalCatalogueVariant = CatalogueVariant & { modelDesign: string | null; normalizedSize: string | null; identityResolutionStatus: string | null };
+export type Structure = { state: "resolved"; sizePosition: 1 | 2 | 3 | "canonical"; descriptorPosition: 1 | 2 | 3 | "canonical"; variants: ResolvedVariant[] } | { state: "ambiguous"; variants: CatalogueVariant[] };
 export type ResolvedVariant = CatalogueVariant & { size: string; descriptor: string; key: string };
 export type ModelAttentionClass = "actionable" | "monitor" | "informational";
 export type ModelAssessment = { key: string; descriptor: string; status: "accelerating" | "emerging" | "stable" | "cooling" | "insufficient_data"; confidence: "low" | "medium" | "high"; sold7: number; sold14: number; previous14: number; stock: number | null; daysCover: number | null; priority: "none" | "watch" | "medium" | "high" | "critical"; sizeRisks: string[]; stockImbalance: { weakStockShare: number; constrainedSizes: string[] } | null; constrainedDemand: { units: number; share: number } | null; attention: ModelAttentionClass; action: string };
@@ -25,6 +26,20 @@ export function resolveCatalogueVariantStructure(productId: string, variants: Ca
     const descriptor = option(v, descriptorPosition)!.trim();
     return { ...v, size: normalizeSize(option(v, sizePosition))!, descriptor, key: `${productId}:${descriptorPosition}:${descriptor.toLocaleLowerCase("en-GB")}` };
   }) };
+}
+
+export function resolveCanonicalCatalogueVariantStructure(productId: string, variants: CanonicalCatalogueVariant[]): Structure {
+  const active = variants.filter((v) => v.sourceActive && v.identityResolutionStatus === "resolved" && Boolean(v.modelDesign?.trim()) && Boolean(v.normalizedSize?.trim()));
+  if (!active.length) return { state: "ambiguous", variants: active };
+  return {
+    state: "resolved",
+    sizePosition: "canonical",
+    descriptorPosition: "canonical",
+    variants: active.map((v) => {
+      const descriptor = v.modelDesign!.trim();
+      return { ...v, size: v.normalizedSize!.trim(), descriptor, key: `${productId}:canonical:${descriptor.toLocaleLowerCase("en-GB")}` };
+    }),
+  };
 }
 
 export function assessModels(structure: Structure, sales: Map<string, { sold7: number; sold14: number; previous14: number }>, freshness: "current" | "stale" | "unavailable", queryFailed = false): ModelAssessment[] {
