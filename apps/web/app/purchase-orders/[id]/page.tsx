@@ -45,8 +45,9 @@ type ReceivingVariant = {
   source_variant_id: string;
   source_inventory_item_id: string;
   title: string | null;
-  option_1: string | null;
-  option_2: string | null;
+  model_design: string | null;
+  normalized_size: string | null;
+  identity_resolution_status: "resolved" | "unresolved";
 };
 
 type ReceivingLocation = {
@@ -514,11 +515,14 @@ export default async function PurchaseOrderDetailPage({
               nonSellableQuantity: nonSellableByLine.get(line.id) ?? 0,
               variants: receivingVariants
                 .filter((variant) =>
-                  `${variant.product_id}::${variant.option_1?.trim() || "Default"}` === line.style_id)
+                  variant.identity_resolution_status === "resolved" &&
+                  Boolean(variant.model_design?.trim()) &&
+                  Boolean(variant.normalized_size?.trim()) &&
+                  `${variant.product_id}::${variant.model_design?.trim()}` === line.style_id)
                 .map((variant) => ({
                   id: variant.id,
                   title: variant.title,
-                  size: variant.option_2,
+                  size: variant.normalized_size,
                   sourceVariantId: variant.source_variant_id,
                   inventoryItemId: variant.source_inventory_item_id,
                 })),
@@ -544,7 +548,7 @@ export default async function PurchaseOrderDetailPage({
                 allocations: (line.vault_purchase_order_receipt_allocations ?? []).map((allocation) => ({
                   id: allocation.id,
                   variantId: allocation.variant_id,
-                  size: receivingVariantById.get(allocation.variant_id)?.option_2 ?? "Unknown size",
+                  size: receivingVariantById.get(allocation.variant_id)?.normalized_size ?? "Unknown size",
                   quantityReceived: allocation.quantity_received,
                   postedQuantity: postedByAllocation.get(allocation.id) ?? 0,
                   postingBlocked: blockedPostingAllocations.has(allocation.id),

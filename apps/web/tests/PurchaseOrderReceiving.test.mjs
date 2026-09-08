@@ -6,14 +6,15 @@ const root = new URL("../", import.meta.url);
 const baseMigration = await readFile(new URL("../../supabase/migrations/20260823000000_purchase_order_receiving.sql", root), "utf8");
 const allocationMigration = await readFile(new URL("../../supabase/migrations/20260824000000_purchase_order_receipt_variant_allocations.sql", root), "utf8");
 const physicalAccountingMigration = await readFile(new URL("../../supabase/migrations/20260829000000_purchase_order_receiving_physical_accounting.sql", root), "utf8");
-const migration = [baseMigration, allocationMigration, physicalAccountingMigration].join("\n");
+const semanticReceivingMigration = await readFile(new URL("../../supabase/migrations/20260911000000_semantic_purchase_order_receiving.sql", root), "utf8");
+const migration = [baseMigration, allocationMigration, physicalAccountingMigration, semanticReceivingMigration].join("\n");
 const repository = await readFile(new URL("lib/purchase-orders/PurchaseOrderRepository.ts", root), "utf8");
 const actions = await readFile(new URL("app/purchase-orders/actions.ts", root), "utf8");
 const page = await readFile(new URL("app/purchase-orders/[id]/page.tsx", root), "utf8");
 const component = await readFile(new URL("components/purchase-orders/PurchaseOrderReceiving.tsx", root), "utf8");
-const receivingFunction = physicalAccountingMigration.slice(
-  physicalAccountingMigration.indexOf("create or replace function public.record_vault_purchase_order_receipt"),
-  physicalAccountingMigration.indexOf("revoke all on function public.record_vault_purchase_order_receipt"),
+const receivingFunction = semanticReceivingMigration.slice(
+  semanticReceivingMigration.indexOf("create or replace function public.record_vault_purchase_order_receipt"),
+  semanticReceivingMigration.indexOf("revoke all on function public.record_vault_purchase_order_receipt"),
 );
 
 function applyReceipt(ordered, previousSellable, previousNonSellable, sellable, nonSellable) {

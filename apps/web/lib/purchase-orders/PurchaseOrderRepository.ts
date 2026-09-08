@@ -835,7 +835,7 @@ export async function getPurchaseOrder(
     productIds.length
       ? supabaseAdmin
           .from("vault_variants")
-          .select("id, product_id, source_variant_id, source_inventory_item_id, title, option_1, option_2")
+          .select("id, product_id, source_variant_id, source_inventory_item_id, title, model_design, normalized_size, identity_resolution_status")
           .eq("source", "shopify")
           .eq("source_active", true)
           .not("source_variant_id", "is", null)

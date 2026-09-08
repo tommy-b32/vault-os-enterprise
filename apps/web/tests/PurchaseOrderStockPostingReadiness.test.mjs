@@ -5,7 +5,8 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const allocationMigration = await readFile(new URL("../../supabase/migrations/20260824000000_purchase_order_receipt_variant_allocations.sql", root), "utf8");
 const physicalAccountingMigration = await readFile(new URL("../../supabase/migrations/20260829000000_purchase_order_receiving_physical_accounting.sql", root), "utf8");
-const migration = [allocationMigration, physicalAccountingMigration].join("\n");
+const semanticReceivingMigration = await readFile(new URL("../../supabase/migrations/20260911000000_semantic_purchase_order_receiving.sql", root), "utf8");
+const migration = [allocationMigration, physicalAccountingMigration, semanticReceivingMigration].join("\n");
 const repository = await readFile(new URL("lib/purchase-orders/PurchaseOrderRepository.ts", root), "utf8");
 const actions = await readFile(new URL("app/purchase-orders/actions.ts", root), "utf8");
 const page = await readFile(new URL("app/purchase-orders/[id]/page.tsx", root), "utf8");
@@ -13,11 +14,11 @@ const component = await readFile(new URL("components/purchase-orders/PurchaseOrd
 const inventorySync = await readFile(new URL("../../supabase/functions/shopify-inventory-sync/index.ts", root), "utf8");
 const inventorySchema = await readFile(new URL("../../database/008_shopify_catalog_sync.sql", root), "utf8");
 
-test("current PO identity is style-level while Shopify stock identity is size-variant-level", () => {
+test("current PO identity is canonical style-level while Shopify stock identity is size-variant-level", () => {
   assert.match(migration, /po_line\.style_id/);
   assert.match(inventorySchema, /option_1 text[\s\S]*option_2 text/);
-  assert.match(page, /variant\.option_2/);
-  assert.match(page, /variant\.product_id.*variant\.option_1/s);
+  assert.match(page, /variant\.normalized_size/);
+  assert.match(page, /variant\.product_id.*variant\.model_design/s);
 });
 
 test("preparatory receipt evidence binds exact variant, inventory item, and Shopify location", () => {
@@ -36,8 +37,10 @@ test("preparatory receipt evidence binds exact variant, inventory item, and Shop
 });
 
 test("database validation prevents cross-style variant leakage", () => {
-  assert.match(migration, /variant\.product_id::text \|\| '::' \|\| coalesce\(nullif\(trim\(variant\.option_1\), ''\), 'Default'\) = po_line\.style_id/);
-  assert.match(migration, /Variant allocation does not exactly match the persisted PO style/);
+  assert.match(semanticReceivingMigration, /variant\.identity_resolution_status = 'resolved'/);
+  assert.match(semanticReceivingMigration, /variant\.product_id::text \|\| '::' \|\| trim\(variant\.model_design\) = po_line\.style_id/);
+  assert.doesNotMatch(semanticReceivingMigration, /variant\.option_[123]/);
+  assert.match(semanticReceivingMigration, /Variant allocation does not exactly match the persisted PO style/);
   assert.match(migration, /unique \(receipt_line_id, variant_id\)/);
 });
 
