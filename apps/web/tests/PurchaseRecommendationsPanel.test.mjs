@@ -35,3 +35,20 @@ test("positive recommendation ordering and nullable display are deterministic", 
   assert.match(source, /localeCompare/);
   assert.doesNotMatch(source, /product.*title|title.*pack/i);
 });
+
+test("positive recommendations render exact pack composition from the size transport", () => {
+  assert.match(source, /recommendation\.sizes\.map\(\(size\) => `\$\{size\.normalizedSize\} ×\$\{size\.unitsPerPack\}`\)/);
+  assert.match(source, /Pack composition/);
+  assert.doesNotMatch(source, /STANDARD_5|S ×1 · M ×1 · L ×1 · XL ×1 · 2XL ×1|six-unit polo/i);
+  assert.doesNotMatch(source, /recommendation\.sizes\.reduce/);
+});
+
+test("positive recommendations provide expandable direct size evidence without write paths", () => {
+  assert.match(source, /View size evidence/);
+  assert.match(source, /aria-expanded=\{expanded\}/);
+  for (const field of ["normalizedSize", "netAvailableStock", "incomingStock", "sales7DayUnits", "sales14DayUnits", "sales30DayUnits", "targetStockUnits", "idealSizeNeed", "unitsPerPack", "purchasedUnits", "projectedStock", "remainingShortage", "projectedExcess"]) assert.match(source, new RegExp(`size\\.${field}`));
+  assert.doesNotMatch(source, /supabase|fetch\(|purchase order|draft po|createPurchase|submitPurchase/i);
+  assert.match(source, /buyNothing = recommendations\.filter/);
+  assert.match(source, /unavailable = results\.filter/);
+  assert.match(source, /notApplicable = results\.filter/);
+});
