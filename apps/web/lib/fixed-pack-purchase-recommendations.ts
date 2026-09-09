@@ -8,11 +8,13 @@ import {
   type FixedPackPurchaseReasonCode,
 } from "./brain/FixedPackPurchaseRecommendationEngine.ts";
 
-export type FixedPackStyleCatalogueRow = { styleId: string; parentProductId: string; supplierId: string; targetStockDays: number | null };
+export type FixedPackStyleCatalogueRow = { styleId: string; parentProductId: string; supplierId: string; targetStockDays: number | null; inventoryStrategy: string | null; restockEnabled: boolean | null };
 export type FixedPackStyleReplenishmentRow = { styleId: string; parentProductId: string; sales7DayUnits: number | null; sales14DayUnits: number | null; sales30DayUnits: number | null; targetStockDays: number | null; supplierLeadTimeDays: number | null };
+export type FixedPackPurchaseServiceReasonCode = FixedPackPurchaseReasonCode | "RESTOCK_DISABLED";
 export type FixedPackPurchaseRecommendationServiceResult =
   | { kind: "recommendation"; recommendation: FixedPackPurchaseRecommendation }
-  | { kind: "unavailable"; status: "unavailable"; supplierId: string | null; styleId: string; parentProductId: string | null; modelDesign: string | null; packDefinitionId: string | null; recommendedPackCount: null; recommendedTotalUnits: null; blockers: FixedPackPurchaseReasonCode[]; warnings: FixedPackPurchaseReasonCode[]; reasons: FixedPackPurchaseReasonCode[] };
+  | { kind: "unavailable"; status: "unavailable"; supplierId: string | null; styleId: string; parentProductId: string | null; modelDesign: string | null; packDefinitionId: string | null; recommendedPackCount: null; recommendedTotalUnits: null; blockers: FixedPackPurchaseServiceReasonCode[]; warnings: FixedPackPurchaseServiceReasonCode[]; reasons: FixedPackPurchaseServiceReasonCode[] }
+  | { kind: "not_applicable"; status: "not_applicable"; supplierId: string; styleId: string; parentProductId: string; modelDesign: string; packDefinitionId: null; recommendedPackCount: null; recommendedTotalUnits: null; blockers: ["RESTOCK_DISABLED"]; warnings: []; reasons: ["RESTOCK_DISABLED"] };
 export type FixedPackPurchaseRecommendationDependencies = {
   loadModelSizeEvidence: () => Promise<ModelSizeReplenishmentEvidence[]>;
   loadPackComposition: () => Promise<SupplierStylePackCompositionIntelligence[]>;
@@ -21,6 +23,7 @@ export type FixedPackPurchaseRecommendationDependencies = {
 };
 
 const unavailable = (styleId: string, parentProductId: string | null, modelDesign: string | null, supplierId: string | null, packDefinitionId: string | null, blockers: FixedPackPurchaseReasonCode[]): FixedPackPurchaseRecommendationServiceResult => ({ kind: "unavailable", status: "unavailable", supplierId, styleId, parentProductId, modelDesign, packDefinitionId, recommendedPackCount: null, recommendedTotalUnits: null, blockers, warnings: [], reasons: blockers });
+const notApplicable = (styleId: string, parentProductId: string, modelDesign: string, supplierId: string): FixedPackPurchaseRecommendationServiceResult => ({ kind: "not_applicable", status: "not_applicable", supplierId, styleId, parentProductId, modelDesign, packDefinitionId: null, recommendedPackCount: null, recommendedTotalUnits: null, blockers: ["RESTOCK_DISABLED"], warnings: [], reasons: ["RESTOCK_DISABLED"] });
 const key = (supplierId: string, styleId: string) => `${supplierId}\u0000${styleId}`;
 const sizeOrder = ["S", "M", "L", "XL", "2XL", "3XL"];
 
@@ -37,6 +40,7 @@ export async function loadFixedPackPurchaseRecommendationsFrom(deps: FixedPackPu
     if (owners.length === 0) { results.push(unavailable(styleId, parentProductId, modelDesigns[0], null, null, ["SUPPLIER_MISSING"])); continue; }
     if (owners.length !== 1) { results.push(unavailable(styleId, parentProductId, modelDesigns[0], null, null, ["SUPPLIER_STYLE_OWNERSHIP_AMBIGUOUS"])); continue; }
     const owner = owners[0];
+    if (owner.inventoryStrategy === "do_not_restock" || owner.restockEnabled === false) { results.push(notApplicable(styleId, parentProductId, modelDesigns[0], owner.supplierId)); continue; }
     const packRows = packs.filter((row) => row.supplier_id === owner.supplierId && row.style_id === styleId);
     if (packRows.length === 0) { results.push(unavailable(styleId, parentProductId, modelDesigns[0], owner.supplierId, null, ["PACK_COMPOSITION_MISSING"])); continue; }
     const definition = packRows[0];
@@ -71,7 +75,7 @@ export async function loadFixedPackPurchaseRecommendations(): Promise<FixedPackP
   return loadFixedPackPurchaseRecommendationsFrom({
     loadModelSizeEvidence: loadModelSizeReplenishmentEvidence,
     loadPackComposition: loadSupplierStylePackCompositionIntelligence,
-    loadStyleCatalogue: async () => { const r = await supabaseAdmin.from("vault_style_catalogue_intelligence").select("style_id,parent_product_id,supplier_id,target_stock_days"); if (r.error) throw r.error; return (r.data ?? []).map((x) => ({ styleId: x.style_id, parentProductId: x.parent_product_id, supplierId: x.supplier_id, targetStockDays: x.target_stock_days })); },
+    loadStyleCatalogue: async () => { const r = await supabaseAdmin.from("vault_style_catalogue_intelligence").select("style_id,parent_product_id,supplier_id,target_stock_days,inventory_strategy,restock_enabled"); if (r.error) throw r.error; return (r.data ?? []).map((x) => ({ styleId: x.style_id, parentProductId: x.parent_product_id, supplierId: x.supplier_id, targetStockDays: x.target_stock_days, inventoryStrategy: x.inventory_strategy, restockEnabled: x.restock_enabled })); },
     loadStyleReplenishment: async () => { const r = await supabaseAdmin.from("vault_style_replenishment_intelligence").select("style_id,parent_product_id,sales_7_day_units,sales_14_day_units,sales_30_day_units,target_stock_days,supplier_lead_time_days"); if (r.error) throw r.error; return (r.data ?? []).map((x) => ({ styleId: x.style_id, parentProductId: x.parent_product_id, sales7DayUnits: x.sales_7_day_units, sales14DayUnits: x.sales_14_day_units, sales30DayUnits: x.sales_30_day_units, targetStockDays: x.target_stock_days, supplierLeadTimeDays: x.supplier_lead_time_days })); },
   });
 }
