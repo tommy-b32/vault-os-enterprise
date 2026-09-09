@@ -10,9 +10,30 @@ import {
 
 export type FixedPackStyleCatalogueRow = { styleId: string; parentProductId: string; supplierId: string; targetStockDays: number | null; inventoryStrategy: string | null; restockEnabled: boolean | null };
 export type FixedPackStyleReplenishmentRow = { styleId: string; parentProductId: string; sales7DayUnits: number | null; sales14DayUnits: number | null; sales30DayUnits: number | null; targetStockDays: number | null; supplierLeadTimeDays: number | null };
+export type FixedPackPurchaseRecommendationSizeDetail = {
+  normalizedSize: string;
+  availableStock: number;
+  committedStock: number;
+  incomingStock: number;
+  netAvailableStock: number;
+  sales7DayUnits: number | null;
+  sales14DayUnits: number | null;
+  sales30DayUnits: number | null;
+  unitsPerPack: number;
+  purchasedUnits: number;
+  calculatedDailyDemand: number;
+  targetStockUnits: number;
+  idealSizeNeed: number;
+  projectedStock: number;
+  remainingShortage: number;
+  projectedExcess: number;
+};
+export type FixedPackPurchaseRecommendationTransport = Omit<FixedPackPurchaseRecommendation, "sizes"> & {
+  sizes: readonly FixedPackPurchaseRecommendationSizeDetail[];
+};
 export type FixedPackPurchaseServiceReasonCode = FixedPackPurchaseReasonCode | "RESTOCK_DISABLED";
 export type FixedPackPurchaseRecommendationServiceResult =
-  | { kind: "recommendation"; recommendation: FixedPackPurchaseRecommendation }
+  | { kind: "recommendation"; recommendation: FixedPackPurchaseRecommendationTransport }
   | { kind: "unavailable"; status: "unavailable"; supplierId: string | null; styleId: string; parentProductId: string | null; modelDesign: string | null; packDefinitionId: string | null; recommendedPackCount: null; recommendedTotalUnits: null; blockers: FixedPackPurchaseServiceReasonCode[]; warnings: FixedPackPurchaseServiceReasonCode[]; reasons: FixedPackPurchaseServiceReasonCode[] }
   | { kind: "not_applicable"; status: "not_applicable"; supplierId: string; styleId: string; parentProductId: string; modelDesign: string; packDefinitionId: null; recommendedPackCount: null; recommendedTotalUnits: null; blockers: ["RESTOCK_DISABLED"]; warnings: []; reasons: ["RESTOCK_DISABLED"] };
 export type FixedPackPurchaseRecommendationDependencies = {
@@ -60,7 +81,14 @@ export async function loadFixedPackPurchaseRecommendationsFrom(deps: FixedPackPu
       const selection = selectFixedPackPurchaseCandidate({ candidates, styleSales7DayUnits: style.sales7DayUnits ?? 0, commercialPackConsistent: definition.commercial_pack_consistent, historyEligibility: needs[0].historyEligibility });
       if (selection.status === "unavailable" || !selection.selectedCandidate) { results.push(unavailable(styleId, parentProductId, modelDesigns[0], owner.supplierId, definition.id, selection.blockers)); continue; }
       const selected = selection.selectedCandidate;
-      results.push({ kind: "recommendation", recommendation: { recommendationId: key(owner.supplierId, styleId), supplierId: owner.supplierId, styleId, parentProductId, modelDesign: modelDesigns[0], packDefinitionId: definition.id, declaredUnitsPerPack: definition.declared_units_per_pack, commercialUnitsPerPack: definition.commercial_units_per_pack, applicableMoqPacks: null, recommendedPackCount: selection.recommendedPackCount, recommendedTotalUnits: selection.recommendedTotalUnits, status: selection.status, trusted: selection.trusted, blockers: selection.blockers, warnings: selection.warnings, reasonCodes: selection.reasonCodes, totalIdealNeedUnits: selected.totalIdealNeedUnits, totalShortageRemainingUnits: selected.totalShortageRemainingUnits, totalProjectedExcessUnits: selected.totalProjectedExcessUnits, totalPackShapeExcessUnits: selected.totalPackShapeExcessUnits, sizes: [] } });
+      const sizes = selected.sizeImpacts.map((impact) => {
+        const matches = rows.filter((row) => row.style_id === styleId && row.parent_product_id === parentProductId && row.model_design === modelDesigns[0] && row.normalized_size === impact.normalizedSize);
+        if (matches.length !== 1) return null;
+        const row = matches[0];
+        return { normalizedSize: row.normalized_size, availableStock: row.available_stock, committedStock: row.committed_stock, incomingStock: row.incoming_stock, netAvailableStock: row.net_available_stock, sales7DayUnits: row.sales_7_day_units, sales14DayUnits: row.sales_14_day_units, sales30DayUnits: row.sales_30_day_units, unitsPerPack: impact.unitsPerPack, purchasedUnits: impact.purchasedUnitsFromPacks, calculatedDailyDemand: impact.calculatedDailyDemand, targetStockUnits: impact.targetStockUnits, idealSizeNeed: impact.idealNeedUnits, projectedStock: impact.projectedStockUnits, remainingShortage: impact.projectedShortageUnits, projectedExcess: impact.projectedExcessUnits };
+      });
+      if (sizes.some((size) => size === null) || (selection.recommendedPackCount !== null && selection.recommendedPackCount > 0 && sizes.reduce((total, size) => total + (size?.purchasedUnits ?? 0), 0) !== selection.recommendedTotalUnits)) { results.push(unavailable(styleId, parentProductId, modelDesigns[0], owner.supplierId, definition.id, ["PACK_SIZE_EVIDENCE_MISSING"])); continue; }
+      results.push({ kind: "recommendation", recommendation: { recommendationId: key(owner.supplierId, styleId), supplierId: owner.supplierId, styleId, parentProductId, modelDesign: modelDesigns[0], packDefinitionId: definition.id, declaredUnitsPerPack: definition.declared_units_per_pack, commercialUnitsPerPack: definition.commercial_units_per_pack, applicableMoqPacks: null, recommendedPackCount: selection.recommendedPackCount, recommendedTotalUnits: selection.recommendedTotalUnits, status: selection.status, trusted: selection.trusted, blockers: selection.blockers, warnings: selection.warnings, reasonCodes: selection.reasonCodes, totalIdealNeedUnits: selected.totalIdealNeedUnits, totalShortageRemainingUnits: selected.totalShortageRemainingUnits, totalProjectedExcessUnits: selected.totalProjectedExcessUnits, totalPackShapeExcessUnits: selected.totalPackShapeExcessUnits, sizes: sizes as FixedPackPurchaseRecommendationSizeDetail[] } });
     } catch { results.push(unavailable(styleId, parentProductId, modelDesigns[0], owner.supplierId, definition.id, ["PACK_SIZE_EVIDENCE_MISSING"])); }
   }
   return results.sort((a, b) => {
