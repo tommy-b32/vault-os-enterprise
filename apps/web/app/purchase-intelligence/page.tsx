@@ -11,6 +11,8 @@ import { ReplenishmentDecisionExplanationEngine } from "@/lib/brain/Replenishmen
 import { getCatalogueData } from "@/lib/catalogue";
 import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { loadFixedPackPurchaseRecommendations } from "@/lib/fixed-pack-purchase-recommendations";
+import PurchaseRecommendationsPanel from "./PurchaseRecommendationsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,7 @@ function DemandDecisionDetails({ demand }: { demand: DemandIntelligenceResult })
 
 export default async function PurchaseIntelligencePage() {
   await requireAuthenticatedOperator();
+  const fixedPackResults = await loadFixedPackPurchaseRecommendations().catch(() => null);
   const [catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
     getCatalogueData(),
     InventorySyncRepository.getFreshness(),
@@ -69,6 +72,7 @@ export default async function PurchaseIntelligencePage() {
           <div><p className="vault-eyebrow">TRUSTED PURCHASE INTELLIGENCE</p><h1>Purchase Intelligence</h1><p>Deterministic, supplier-grouped recommendations from canonical live business data.</p></div>
           <span>{recommendations.length > 0 ? "Demand recommendations" : "No demand recommendations"}</span>
         </header>
+        {fixedPackResults === null ? <section className="purchase-intelligence-notice"><strong>Fixed-pack recommendations unavailable</strong><span>Purchase Intelligence remains available while the fixed-pack recommendation service is unavailable.</span></section> : <PurchaseRecommendationsPanel results={fixedPackResults} />}
         <section className="purchase-intelligence-notice"><strong>Read-only intelligence</strong><span>No purchase orders are created and no purchases are approved from this page.</span></section>
         <section className="purchase-intelligence-diagnostics">
           <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">SUPPLIER SUMMARY</p><h2>Basket intelligence</h2></div><span>Advisory only</span></div>
