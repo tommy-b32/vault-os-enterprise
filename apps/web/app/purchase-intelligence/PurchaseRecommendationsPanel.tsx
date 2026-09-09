@@ -5,6 +5,22 @@ import type { FixedPackPurchaseRecommendationServiceResult } from "@/lib/fixed-p
 
 type Props = { results: FixedPackPurchaseRecommendationServiceResult[] };
 
+const REASON_EXPLANATIONS: Readonly<Record<string, string>> = {
+  ALL_SIZES_ABOVE_TARGET: "Stock is already above target across the size range, so no pack is needed.",
+  SINGLE_SIZE_NEED_WAIT: "Only one size currently needs stock. A full pack would create unnecessary excess in other sizes.",
+  TWO_SIZE_NEED_WAIT: "Only two sizes currently need stock. Wait until demand is broader before buying another full pack.",
+  RESTOCK_DISABLED: "This style is intentionally set to do not restock.",
+  PACK_COMPOSITION_MISSING: "No approved supplier pack composition is configured for this style.",
+  PACK_SIZE_EVIDENCE_MISSING: "Canonical size evidence is incomplete or ambiguous, so Vault OS will not make a purchase recommendation.",
+  SEMANTIC_IDENTITY_UNRESOLVED: "Product model or size identity is unresolved, so Vault OS has failed closed.",
+  SUPPLIER_MISSING: "No supplier is assigned to this style.",
+};
+
+function ReasonList({ reasons }: { reasons: readonly string[] }) {
+  if (reasons.length === 0) return <>—</>;
+  return <div>{reasons.map((reason) => <div key={reason}><strong>{REASON_EXPLANATIONS[reason] ?? reason}</strong><small>{reason}</small></div>)}</div>;
+}
+
 export default function PurchaseRecommendationsPanel({ results }: Props) {
   const [expandedEvidence, setExpandedEvidence] = useState<ReadonlySet<string>>(new Set());
   const recommendations = results.filter((result) => result.kind === "recommendation");
@@ -42,13 +58,13 @@ export default function PurchaseRecommendationsPanel({ results }: Props) {
           else next.add(recommendation.recommendationId);
           return next;
         });
-        return <Fragment key={recommendation.recommendationId}><tr><td><strong>{recommendation.parentProductId}</strong><small>{recommendation.styleId}</small></td><td>{recommendation.modelDesign}</td><td>{recommendation.supplierId}</td><td><strong>{recommendation.recommendedPackCount}</strong></td><td><strong>{recommendation.recommendedTotalUnits}</strong></td><td>{composition || "—"}</td><td>{recommendation.reasonCodes.join(", ") || "—"}</td><td><button type="button" aria-expanded={expanded} onClick={toggleEvidence}>View size evidence</button></td></tr>{expanded ? <tr><td colSpan={8}><div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Size</th><th>Stock now</th><th>Incoming</th><th>Sold 7d</th><th>Sold 14d</th><th>Sold 30d</th><th>Target</th><th>Ideal need</th><th>Units/pack</th><th>Buying</th><th>Projected stock</th><th>Shortage</th><th>Excess</th></tr></thead><tbody>{recommendation.sizes.map((size) => <tr key={size.normalizedSize}><td>{size.normalizedSize}</td><td>{size.netAvailableStock ?? "—"}</td><td>{size.incomingStock ?? "—"}</td><td>{size.sales7DayUnits ?? "—"}</td><td>{size.sales14DayUnits ?? "—"}</td><td>{size.sales30DayUnits ?? "—"}</td><td>{size.targetStockUnits ?? "—"}</td><td>{size.idealSizeNeed ?? "—"}</td><td>{size.unitsPerPack ?? "—"}</td><td>{size.purchasedUnits ?? "—"}</td><td>{size.projectedStock ?? "—"}</td><td>{size.remainingShortage ?? "—"}</td><td>{size.projectedExcess ?? "—"}</td></tr>)}</tbody></table></div></td></tr> : null}</Fragment>;
+        return <Fragment key={recommendation.recommendationId}><tr><td><strong>{recommendation.parentProductId}</strong><small>{recommendation.styleId}</small></td><td>{recommendation.modelDesign}</td><td>{recommendation.supplierId}</td><td><strong>{recommendation.recommendedPackCount}</strong></td><td><strong>{recommendation.recommendedTotalUnits}</strong></td><td>{composition || "—"}</td><td><ReasonList reasons={recommendation.reasonCodes} /></td><td><button type="button" aria-expanded={expanded} onClick={toggleEvidence}>View size evidence</button></td></tr>{expanded ? <tr><td colSpan={8}><div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Size</th><th>Stock now</th><th>Incoming</th><th>Sold 7d</th><th>Sold 14d</th><th>Sold 30d</th><th>Target</th><th>Ideal need</th><th>Units/pack</th><th>Buying</th><th>Projected stock</th><th>Shortage</th><th>Excess</th></tr></thead><tbody>{recommendation.sizes.map((size) => <tr key={size.normalizedSize}><td>{size.normalizedSize}</td><td>{size.netAvailableStock ?? "—"}</td><td>{size.incomingStock ?? "—"}</td><td>{size.sales7DayUnits ?? "—"}</td><td>{size.sales14DayUnits ?? "—"}</td><td>{size.sales30DayUnits ?? "—"}</td><td>{size.targetStockUnits ?? "—"}</td><td>{size.idealSizeNeed ?? "—"}</td><td>{size.unitsPerPack ?? "—"}</td><td>{size.purchasedUnits ?? "—"}</td><td>{size.projectedStock ?? "—"}</td><td>{size.remainingShortage ?? "—"}</td><td>{size.projectedExcess ?? "—"}</td></tr>)}</tbody></table></div></td></tr> : null}</Fragment>;
       })}</tbody></table></div>}
     </section>
     <div className="purchase-intelligence-diagnostic-grid">
-      <article className="purchase-intelligence-diagnostic"><header><div><span>Buy Nothing</span><h3>{buyNothing.length}</h3></div></header><p>Valid calculations with zero packs required.</p></article>
-      <article className="purchase-intelligence-diagnostic is-blocked"><header><div><span>Needs Attention</span><h3>{unavailable.length}</h3></div></header><p>{[...new Set(unavailable.flatMap((result) => result.reasons))].join(", ") || "No blockers"}</p></article>
-      <article className="purchase-intelligence-diagnostic"><header><div><span>Do Not Restock</span><h3>{notApplicable.length}</h3></div></header><p>Intentionally excluded from replenishment.</p></article>
+      <article className="purchase-intelligence-diagnostic"><header><div><span>Buy Nothing</span><h3>{buyNothing.length}</h3></div></header><p>Valid calculations with zero packs required.</p><ReasonList reasons={buyNothing.flatMap((result) => result.recommendation.reasonCodes)} /></article>
+      <article className="purchase-intelligence-diagnostic is-blocked"><header><div><span>Needs Attention</span><h3>{unavailable.length}</h3></div></header><ReasonList reasons={[...new Set(unavailable.flatMap((result) => result.reasons))]} /></article>
+      <article className="purchase-intelligence-diagnostic"><header><div><span>Do Not Restock</span><h3>{notApplicable.length}</h3></div></header><ReasonList reasons={[...new Set(notApplicable.flatMap((result) => result.reasons))]} /></article>
     </div>
   </section>;
 }

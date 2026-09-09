@@ -52,3 +52,31 @@ test("positive recommendations provide expandable direct size evidence without w
   assert.match(source, /unavailable = results\.filter/);
   assert.match(source, /notApplicable = results\.filter/);
 });
+
+test("panel translates known reason codes while retaining exact-code fallback and raw codes", () => {
+  for (const [reason, explanation] of [
+    ["ALL_SIZES_ABOVE_TARGET", "Stock is already above target"],
+    ["SINGLE_SIZE_NEED_WAIT", "Only one size currently needs stock"],
+    ["TWO_SIZE_NEED_WAIT", "Only two sizes currently need stock"],
+    ["RESTOCK_DISABLED", "intentionally set to do not restock"],
+    ["PACK_COMPOSITION_MISSING", "No approved supplier pack composition"],
+    ["PACK_SIZE_EVIDENCE_MISSING", "Canonical size evidence is incomplete or ambiguous"],
+    ["SEMANTIC_IDENTITY_UNRESOLVED", "identity is unresolved"],
+    ["SUPPLIER_MISSING", "No supplier is assigned"],
+  ]) {
+    assert.match(source, new RegExp(`${reason}:\\s*"[^"]*${explanation}`));
+  }
+  assert.match(source, /REASON_EXPLANATIONS\[reason\] \?\? reason/);
+  assert.match(source, /<small>\{reason\}<\/small>/);
+  assert.doesNotMatch(source, /includes\(reason\)|startsWith\(reason\)|endsWith\(reason\)|\.match\(reason\)/);
+});
+
+test("reason presentation reuses the mapper without replacing transport UI or adding writes", () => {
+  assert.match(source, /<ReasonList reasons=\{recommendation\.reasonCodes\}/);
+  assert.match(source, /buyNothing\.flatMap\(\(result\) => result\.recommendation\.reasonCodes\)/);
+  assert.match(source, /unavailable\.flatMap\(\(result\) => result\.reasons\)/);
+  assert.match(source, /notApplicable\.flatMap\(\(result\) => result\.reasons\)/);
+  assert.match(source, /View size evidence/);
+  assert.match(source, /recommendation\.sizes\.map/);
+  assert.doesNotMatch(source, /supabase|fetch\(|purchase order|draft po|createPurchase|submitPurchase/i);
+});
