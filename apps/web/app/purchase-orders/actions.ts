@@ -16,8 +16,30 @@ import {
   recordPurchaseOrderReceipt,
   type CreatePurchaseOrderDraftInput,
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
+import { addFixedPackRecommendationToDraft, type AddFixedPackRecommendationInput, type FixedPackDraftResult } from "@/lib/purchase-orders/FixedPackDraftRepository";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function addFixedPackRecommendationToDraftAction(input: AddFixedPackRecommendationInput): Promise<FixedPackDraftResult> {
+  try {
+    const styleId = typeof input?.styleId === "string" ? input.styleId.trim() : "";
+    const parentProductId = typeof input?.parentProductId === "string" ? input.parentProductId.trim() : "";
+    const idempotencyKey = typeof input?.idempotencyKey === "string" ? input.idempotencyKey.trim() : "";
+    const targetDraftId = input?.targetDraftId === null || input?.targetDraftId === undefined ? null : typeof input.targetDraftId === "string" ? input.targetDraftId.trim() : "";
+    if (!styleId || !UUID_PATTERN.test(parentProductId) || !idempotencyKey || idempotencyKey.length > 200 || (targetDraftId !== null && !UUID_PATTERN.test(targetDraftId))) return { success: false, code: "request_invalid", message: "The fixed-pack draft request is invalid." };
+    const operator = await requireAuthenticatedOperator();
+    const result = await addFixedPackRecommendationToDraft(operator.id, { styleId, parentProductId, idempotencyKey, targetDraftId });
+    if (result.success) {
+      revalidatePath("/purchase-intelligence");
+      revalidatePath("/purchase-orders");
+      revalidatePath(`/purchase-orders/${result.purchaseOrderId}`);
+    }
+    return result;
+  } catch (error) {
+    console.error("Unable to add fixed-pack recommendation to draft", error);
+    return { success: false, code: "operation_failed", message: "The recommendation could not be added to a draft." };
+  }
+}
 
 export type CancelPurchaseOrderState = {
   status: "idle" | "success" | "error";
