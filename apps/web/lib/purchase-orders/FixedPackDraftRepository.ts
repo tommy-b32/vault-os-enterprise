@@ -14,7 +14,50 @@ export class FixedPackDraftError extends Error { constructor(public readonly cod
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const fail = (code: FixedPackDraftError["code"], message: string): never => { throw new FixedPackDraftError(code, message); };
 
-export async function addFixedPackRecommendationToDraftFrom(operatorId: string, input: AddFixedPackRecommendationInput, dependencies: FixedPackDraftDependencies): Promise<FixedPackDraftResult> {
+type AuthoritativeFixedPackDraftPayload = { operator_id: string; style_id: string; parent_product_id: string; supplier_id: string; currency: string; idempotency_key: string; target_draft_id?: string; product_name: string; recommended_packs: number; recommended_units: number; units_per_pack: number; product_moq_packs: number; pack_cost_gbp: number; line_cost_gbp: number; expected_profit_gbp: number; source_snapshot: Record<string, unknown>; allocations: Array<{ normalized_size: string; model_design: string; variant_id: string; shopify_variant_id_snapshot: string; shopify_inventory_item_id_snapshot: string; units_per_pack: number; ordered_units: number }> };
+type FixedPackDraftMatch = { purchaseOrderId: string };
+
+export function buildB4CanonicalSnapshot(payload: AuthoritativeFixedPackDraftPayload) {
+  return {
+    source_type: "fixed_pack_purchase_recommendation",
+    supplier_id: payload.supplier_id,
+    style_id: payload.style_id,
+    parent_product_id: payload.parent_product_id,
+    model_design: payload.style_id.split("::")[1] ?? "",
+    product_name: payload.product_name,
+    pack_definition_id: payload.source_snapshot.pack_definition_id,
+    recommended_packs: payload.recommended_packs,
+    recommended_units: payload.recommended_units,
+    units_per_pack: payload.units_per_pack,
+    allocations: payload.allocations.map((allocation) => ({ normalized_size: allocation.normalized_size, model_design: allocation.model_design, variant_id: allocation.variant_id, shopify_variant_id_snapshot: allocation.shopify_variant_id_snapshot, shopify_inventory_item_id_snapshot: allocation.shopify_inventory_item_id_snapshot, units_per_pack: allocation.units_per_pack, ordered_units: allocation.ordered_units })).sort((left, right) => left.normalized_size < right.normalized_size ? -1 : left.normalized_size > right.normalized_size ? 1 : 0),
+    pack_cost_gbp: payload.pack_cost_gbp,
+    line_cost_gbp: payload.line_cost_gbp,
+    expected_profit_gbp: payload.expected_profit_gbp,
+    product_moq_packs: payload.product_moq_packs,
+    currency: payload.currency,
+    supplier_purchasing_rule: payload.source_snapshot.supplier_purchasing_rule ?? {},
+    recommendation_evidence: payload.source_snapshot.recommendation_evidence ?? {},
+  };
+}
+
+export function matchesB4CanonicalSnapshot(payload: AuthoritativeFixedPackDraftPayload, persistedSnapshot: unknown): boolean {
+  if (!persistedSnapshot || typeof persistedSnapshot !== "object" || Array.isArray(persistedSnapshot)) return false;
+  const { fingerprint: _fingerprint, ...persisted } = persistedSnapshot as Record<string, unknown>;
+  return sameCanonicalJson(persisted, buildB4CanonicalSnapshot(payload));
+}
+
+function sameCanonicalJson(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) || Array.isArray(right)) return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => sameCanonicalJson(value, right[index]));
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
+  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && sameCanonicalJson(leftRecord[key], rightRecord[key]));
+}
+
+export async function buildAuthoritativeFixedPackDraftPayloadFrom(operatorId: string, input: AddFixedPackRecommendationInput, dependencies: FixedPackDraftDependencies): Promise<AuthoritativeFixedPackDraftPayload> {
   try {
     const recommendations = await dependencies.loadRecommendations();
     const matches = recommendations.filter((result) => result.kind === "recommendation").filter((result) => result.recommendation.styleId === input.styleId && result.recommendation.parentProductId === input.parentProductId);
@@ -48,7 +91,17 @@ export async function addFixedPackRecommendationToDraftFrom(operatorId: string, 
       return { normalized_size: size.normalizedSize, model_design: recommendation.modelDesign, variant_id: variant.id, shopify_variant_id_snapshot: variant.source_variant_id!, shopify_inventory_item_id_snapshot: variant.source_inventory_item_id!, units_per_pack: size.unitsPerPack, ordered_units: size.purchasedUnits };
     });
     if (allocations.reduce((sum, allocation) => sum + allocation.ordered_units, 0) !== recommendation.recommendedTotalUnits || allocations.reduce((sum, allocation) => sum + allocation.units_per_pack, 0) !== recommendation.declaredUnitsPerPack) fail("canonical_data_incomplete", "Canonical pack quantities do not conserve.");
-    const payload = { operator_id: operatorId, style_id: recommendation.styleId, parent_product_id: recommendation.parentProductId, supplier_id: recommendation.supplierId, currency: canonicalSupplier.currency_code!, idempotency_key: input.idempotencyKey, ...(input.targetDraftId ? { target_draft_id: input.targetDraftId } : {}), product_name: product[0].product_name, recommended_packs: recommendation.recommendedPackCount!, recommended_units: recommendation.recommendedTotalUnits!, units_per_pack: recommendation.declaredUnitsPerPack, product_moq_packs: product[0].supplier_moq_packs!, pack_cost_gbp: money(canonicalPackCost), line_cost_gbp: money(canonicalPackCost * recommendation.recommendedPackCount!), expected_profit_gbp: money(canonicalProfitPerUnit * recommendation.recommendedTotalUnits!), source_snapshot: { pack_definition_id: recommendation.packDefinitionId, supplier_purchasing_rule: { minimum_order_packs: canonicalRule.minimum_order_packs }, recommendation_evidence: { trusted: recommendation.trusted, reason_codes: recommendation.reasonCodes, warnings: recommendation.warnings, total_ideal_need_units: recommendation.totalIdealNeedUnits, total_shortage_remaining_units: recommendation.totalShortageRemainingUnits } }, allocations };
+    const payload: AuthoritativeFixedPackDraftPayload = { operator_id: operatorId, style_id: recommendation.styleId, parent_product_id: recommendation.parentProductId, supplier_id: recommendation.supplierId, currency: canonicalSupplier.currency_code!, idempotency_key: input.idempotencyKey, ...(input.targetDraftId ? { target_draft_id: input.targetDraftId } : {}), product_name: product[0].product_name, recommended_packs: recommendation.recommendedPackCount!, recommended_units: recommendation.recommendedTotalUnits!, units_per_pack: recommendation.declaredUnitsPerPack, product_moq_packs: product[0].supplier_moq_packs!, pack_cost_gbp: money(canonicalPackCost), line_cost_gbp: money(canonicalPackCost * recommendation.recommendedPackCount!), expected_profit_gbp: money(canonicalProfitPerUnit * recommendation.recommendedTotalUnits!), source_snapshot: { pack_definition_id: recommendation.packDefinitionId, supplier_purchasing_rule: { minimum_order_packs: canonicalRule.minimum_order_packs }, recommendation_evidence: { trusted: recommendation.trusted, reason_codes: recommendation.reasonCodes, warnings: recommendation.warnings, total_ideal_need_units: recommendation.totalIdealNeedUnits, total_shortage_remaining_units: recommendation.totalShortageRemainingUnits } }, allocations };
+    return payload;
+  } catch (error) {
+    if (error instanceof FixedPackDraftError) throw error;
+    throw error;
+  }
+}
+
+export async function addFixedPackRecommendationToDraftFrom(operatorId: string, input: AddFixedPackRecommendationInput, dependencies: FixedPackDraftDependencies): Promise<FixedPackDraftResult> {
+  try {
+    const payload = await buildAuthoritativeFixedPackDraftPayloadFrom(operatorId, input, dependencies);
     const { data, error } = await dependencies.client.rpc("add_fixed_pack_recommendation_to_draft", { authoritative_payload: payload });
     if (error) {
       const message = error.message;
@@ -67,6 +120,31 @@ export async function addFixedPackRecommendationToDraftFrom(operatorId: string, 
     console.error("Unable to add fixed-pack recommendation to draft", error);
     return { success: false, code: "operation_failed", message: "The recommendation could not be added to a draft." };
   }
+}
+
+type PersistedDraftLine = { style_id: string; source_recommendation_type: string; source_snapshot: unknown };
+type PersistedDraft = { id: string; supplier_id: string; currency: string; status: string; created_by_operator_id: string; vault_purchase_order_lines: PersistedDraftLine[] | null };
+
+export async function loadCurrentFixedPackDraftMatchesFrom(operatorId: string, recommendations: Awaited<ReturnType<typeof loadFixedPackPurchaseRecommendations>>, dependencies: FixedPackDraftDependencies): Promise<Map<string, FixedPackDraftMatch>> {
+  const orders = await dependencies.client.from("vault_purchase_orders").select("id,supplier_id,currency,status,created_by_operator_id,vault_purchase_order_lines(style_id,source_recommendation_type,source_snapshot)").eq("created_by_operator_id", operatorId).eq("status", "draft");
+  if (orders.error) throw orders.error;
+  const drafts = (orders.data ?? []) as PersistedDraft[];
+  const matches = new Map<string, FixedPackDraftMatch>();
+  for (const result of recommendations) {
+    if (result.kind !== "recommendation") continue;
+    try {
+      const payload = await buildAuthoritativeFixedPackDraftPayloadFrom(operatorId, { styleId: result.recommendation.styleId, parentProductId: result.recommendation.parentProductId, idempotencyKey: "draft-match-read" }, { ...dependencies, loadRecommendations: async () => recommendations });
+      const exactMatches = drafts.filter((draft) => draft.created_by_operator_id === operatorId && draft.status === "draft" && draft.supplier_id === payload.supplier_id && draft.currency === payload.currency && (draft.vault_purchase_order_lines ?? []).every((line) => line.source_recommendation_type === "fixed_pack_purchase_recommendation")).flatMap((draft) => (draft.vault_purchase_order_lines ?? []).filter((line) => line.style_id === payload.style_id && line.source_recommendation_type === "fixed_pack_purchase_recommendation" && matchesB4CanonicalSnapshot(payload, line.source_snapshot)).map(() => ({ purchaseOrderId: draft.id })));
+      if (exactMatches.length === 1) matches.set(result.recommendation.recommendationId, exactMatches[0]);
+    } catch {
+      // A missing or ambiguous current canonical record must never suppress the add action.
+    }
+  }
+  return matches;
+}
+
+export function loadCurrentFixedPackDraftMatches(operatorId: string, recommendations: Awaited<ReturnType<typeof loadFixedPackPurchaseRecommendations>>): Promise<Map<string, FixedPackDraftMatch>> {
+  return loadCurrentFixedPackDraftMatchesFrom(operatorId, recommendations, productionDependencies);
 }
 
 export function addFixedPackRecommendationToDraft(operatorId: string, input: AddFixedPackRecommendationInput): Promise<FixedPackDraftResult> {

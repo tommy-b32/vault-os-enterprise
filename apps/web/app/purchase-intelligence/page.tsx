@@ -12,6 +12,7 @@ import { getCatalogueData } from "@/lib/catalogue";
 import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadFixedPackPurchaseRecommendations } from "@/lib/fixed-pack-purchase-recommendations";
+import { loadCurrentFixedPackDraftMatches } from "@/lib/purchase-orders/FixedPackDraftRepository";
 import PurchaseRecommendationsPanel from "./PurchaseRecommendationsPanel";
 
 export const dynamic = "force-dynamic";
@@ -37,8 +38,9 @@ function DemandDecisionDetails({ demand }: { demand: DemandIntelligenceResult })
 }
 
 export default async function PurchaseIntelligencePage() {
-  await requireAuthenticatedOperator();
+  const operator = await requireAuthenticatedOperator();
   const fixedPackResults = await loadFixedPackPurchaseRecommendations().catch(() => null);
+  const draftMatches = fixedPackResults === null ? new Map() : await loadCurrentFixedPackDraftMatches(operator.id, fixedPackResults).catch(() => new Map());
   const [catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
     getCatalogueData(),
     InventorySyncRepository.getFreshness(),
@@ -72,6 +74,7 @@ export default async function PurchaseIntelligencePage() {
         ...result.recommendation,
         productName: products.length === 1 ? products[0].product_name : null,
         supplierName: supplierNameById.get(result.recommendation.supplierId) ?? null,
+        draftMatch: draftMatches.get(result.recommendation.recommendationId) ?? null,
       },
     };
   });

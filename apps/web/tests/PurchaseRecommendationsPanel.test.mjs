@@ -18,7 +18,7 @@ test("only trusted, positive recommendations render the add-to-draft CTA", () =>
 test("recommendation actions reuse the established primary and secondary Vault OS controls", () => {
   assert.match(source, /className="vault-secondary-button" type="button" aria-expanded=\{expanded\}/);
   assert.match(source, /className="vault-primary-button" type="button" disabled=\{pending\}/);
-  assert.match(source, /<Link className="vault-secondary-button" href=\{`\/purchase-orders\/\$\{purchaseOrderId\}`\}/);
+  assert.match(source, /<Link className="vault-secondary-button" href=\{`\/purchase-orders\/\$\{matchedPurchaseOrderId\}`\}/);
   assert.match(source, /aria-expanded=\{expanded\}/);
   assert.match(source, /pending \? "Adding…" : "Add to Draft PO"/);
 });
@@ -67,8 +67,22 @@ test("submission is idempotent per intended retry and prevents duplicate pending
 test("success, including idempotent success, provides a draft link", () => {
   assert.match(source, /if \(result\.success\) setPurchaseOrderId\(result\.purchaseOrderId\)/);
   assert.match(source, /Added to Draft PO/);
-  assert.match(source, /href=\{`\/purchase-orders\/\$\{purchaseOrderId\}`\}/);
+  assert.match(source, /href=\{`\/purchase-orders\/\$\{matchedPurchaseOrderId\}`\}/);
   assert.match(source, /View Draft PO →/);
+});
+
+test("a server-derived persisted draft match replaces the add CTA", () => {
+  assert.match(source, /draftMatch: \{ purchaseOrderId: string \} \| null/);
+  assert.match(source, /const matchedPurchaseOrderId = draftMatch\?\.purchaseOrderId \?\? purchaseOrderId/);
+  assert.match(source, /draftMatch \? "In Draft PO" : "Added to Draft PO"/);
+  assert.match(source, /draftMatch=\{recommendation\.draftMatch\}/);
+  assert.doesNotMatch(source, /localStorage|sessionStorage/);
+});
+
+test("the page obtains persisted draft state only through the server read model", () => {
+  assert.match(pageSource, /loadCurrentFixedPackDraftMatches/);
+  assert.match(pageSource, /loadCurrentFixedPackDraftMatches\(operator\.id, fixedPackResults\)/);
+  assert.match(pageSource, /draftMatch: draftMatches\.get\(result\.recommendation\.recommendationId\) \?\? null/);
 });
 
 test("safe failure classifications are mapped and raw server errors are suppressed", () => {
