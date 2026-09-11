@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../app/purchase-intelligence/PurchaseRecommendationsPanel.tsx", import.meta.url), "utf8");
+const pageSource = await readFile(new URL("../app/purchase-intelligence/page.tsx", import.meta.url), "utf8");
 
 test("only trusted, positive recommendations render the add-to-draft CTA", () => {
   assert.match(source, /result\.recommendation\.trusted/);
@@ -20,6 +21,32 @@ test("the client uses only the existing server action with the minimal request",
   assert.match(source, /crypto\.randomUUID\(\)/);
   for (const forbidden of ["supplierId:", "recommendedPackCount:", "recommendedTotalUnits:", "packCost", "expectedProfit", "currency:", "variantId", "shopify"]) assert.doesNotMatch(source, new RegExp(forbidden));
   assert.doesNotMatch(source, /\.rpc\(|supabase|fetch\(/i);
+});
+
+test("page enriches names from canonical exact-ID lookups without new queries", () => {
+  assert.match(pageSource, /fixedPackProductKey\(product\.style_id, product\.parent_product_id, product\.supplier_id \?\? ""\)/);
+  assert.match(pageSource, /fixedPackProductKey\(result\.recommendation\.styleId, result\.recommendation\.parentProductId, result\.recommendation\.supplierId\)/);
+  assert.match(pageSource, /products\.length === 1 \? products\[0\]\.product_name : null/);
+  assert.match(pageSource, /new Map\(suppliers\.map\(\(supplier\) => \[supplier\.id, supplier\.name\]\)\)/);
+  assert.match(pageSource, /supplierName: supplierNameById\.get\(result\.recommendation\.supplierId\) \?\? null/);
+  assert.doesNotMatch(pageSource, /product_name.*split|supplier_name.*split/i);
+});
+
+test("panel renders canonical names with a safe identity fallback", () => {
+  assert.match(source, /recommendation\.productName \?\? "Identity unavailable"/);
+  assert.match(source, /recommendation\.supplierName \?\? "Identity unavailable"/);
+  assert.match(source, /<td>\{recommendation\.modelDesign\}<\/td>/);
+  assert.doesNotMatch(source, /<strong>\{recommendation\.parentProductId\}<\/strong>/);
+  assert.doesNotMatch(source, /<td>\{recommendation\.supplierId\}<\/td>/);
+});
+
+test("human-readable names are excluded from the action request", () => {
+  const request = source.match(/addFixedPackRecommendationToDraftAction\((\{[^}]+\})\)/)?.[1] ?? "";
+  assert.match(request, /styleId/);
+  assert.match(request, /parentProductId/);
+  assert.match(request, /idempotencyKey/);
+  assert.match(request, /targetDraftId: null/);
+  assert.doesNotMatch(request, /productName|supplierName/);
 });
 
 test("submission is idempotent per intended retry and prevents duplicate pending clicks", () => {

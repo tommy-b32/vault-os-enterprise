@@ -20,6 +20,10 @@ function currency(value: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(value);
 }
 
+function fixedPackProductKey(styleId: string, parentProductId: string, supplierId: string) {
+  return `${styleId}\u0000${parentProductId}\u0000${supplierId}`;
+}
+
 function DemandDecisionDetails({ demand }: { demand: DemandIntelligenceResult }) {
   const explanation = ReplenishmentDecisionExplanationEngine.explain(demand);
   return <div key={demand.styleId}>
@@ -53,6 +57,24 @@ export default async function PurchaseIntelligencePage() {
     minimumOrderValue: supplier.minimum_order_value,
     minimumOrderPacks: rules.get(supplier.id) ?? null,
   }));
+  const productsByFixedPackIdentity = new Map<string, typeof catalogue.products>();
+  for (const product of catalogue.products) {
+    const key = fixedPackProductKey(product.style_id, product.parent_product_id, product.supplier_id ?? "");
+    productsByFixedPackIdentity.set(key, [...(productsByFixedPackIdentity.get(key) ?? []), product]);
+  }
+  const supplierNameById = new Map(suppliers.map((supplier) => [supplier.id, supplier.name]));
+  const presentedFixedPackResults = fixedPackResults === null ? null : fixedPackResults.map((result) => {
+    if (result.kind !== "recommendation") return result;
+    const products = productsByFixedPackIdentity.get(fixedPackProductKey(result.recommendation.styleId, result.recommendation.parentProductId, result.recommendation.supplierId)) ?? [];
+    return {
+      ...result,
+      recommendation: {
+        ...result.recommendation,
+        productName: products.length === 1 ? products[0].product_name : null,
+        supplierName: supplierNameById.get(result.recommendation.supplierId) ?? null,
+      },
+    };
+  });
   const evaluation = PurchaseIntelligenceEngine.evaluate({
     products: catalogue.products,
     suppliers,
@@ -72,7 +94,7 @@ export default async function PurchaseIntelligencePage() {
           <div><p className="vault-eyebrow">TRUSTED PURCHASE INTELLIGENCE</p><h1>Purchase Intelligence</h1><p>Deterministic, supplier-grouped recommendations from canonical live business data.</p></div>
           <span>{recommendations.length > 0 ? "Demand recommendations" : "No demand recommendations"}</span>
         </header>
-        {fixedPackResults === null ? <section className="purchase-intelligence-notice"><strong>Fixed-pack recommendations unavailable</strong><span>Purchase Intelligence remains available while the fixed-pack recommendation service is unavailable.</span></section> : <PurchaseRecommendationsPanel results={fixedPackResults} />}
+        {presentedFixedPackResults === null ? <section className="purchase-intelligence-notice"><strong>Fixed-pack recommendations unavailable</strong><span>Purchase Intelligence remains available while the fixed-pack recommendation service is unavailable.</span></section> : <PurchaseRecommendationsPanel results={presentedFixedPackResults} />}
         <section className="purchase-intelligence-notice"><strong>Read-only intelligence</strong><span>No purchase orders are created and no purchases are approved from this page.</span></section>
         <section className="purchase-intelligence-diagnostics">
           <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">SUPPLIER SUMMARY</p><h2>Basket intelligence</h2></div><span>Advisory only</span></div>
