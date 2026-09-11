@@ -24,7 +24,31 @@ type SavedPurchaseOrderLine = {
   line_cost_gbp: number | null;
   source_recommendation_type: string;
   recommendation_priority: string | null;
+  vault_purchase_order_line_size_allocations: Array<{
+    normalized_size: string | null;
+    ordered_units: number | null;
+  }> | null;
 };
+
+const APPAREL_SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL"];
+
+export function savedSizeAllocationDisplay(line: SavedPurchaseOrderLine): string | null {
+  if (line.source_recommendation_type !== "fixed_pack_purchase_recommendation") return null;
+  const allocations = line.vault_purchase_order_line_size_allocations ?? [];
+  if (allocations.length === 0) return null;
+  const seenSizes = new Set<string>();
+  const normalized = allocations.map((allocation) => ({ size: allocation.normalized_size?.trim() ?? "", orderedUnits: allocation.ordered_units }));
+  for (const allocation of normalized) {
+    if (!allocation.size || typeof allocation.orderedUnits !== "number" || !Number.isInteger(allocation.orderedUnits) || allocation.orderedUnits <= 0 || seenSizes.has(allocation.size)) return "Size allocation unavailable";
+    seenSizes.add(allocation.size);
+  }
+  return normalized.sort((left, right) => {
+    const leftIndex = APPAREL_SIZE_ORDER.indexOf(left.size);
+    const rightIndex = APPAREL_SIZE_ORDER.indexOf(right.size);
+    if (leftIndex !== -1 || rightIndex !== -1) return (leftIndex === -1 ? APPAREL_SIZE_ORDER.length : leftIndex) - (rightIndex === -1 ? APPAREL_SIZE_ORDER.length : rightIndex) || left.size.localeCompare(right.size);
+    return left.size.localeCompare(right.size);
+  }).map((allocation) => `${allocation.size} ×${allocation.orderedUnits}`).join(" · ");
+}
 
 type SavedReceiptLine = {
   id: string;
@@ -361,7 +385,9 @@ export default async function PurchaseOrderDetailPage({
             </div>
 
             {lines.map(
-              (line: SavedPurchaseOrderLine) => (
+              (line: SavedPurchaseOrderLine) => {
+                const sizeAllocation = savedSizeAllocationDisplay(line);
+                return (
                 <article
                   className="purchase-order-editable-line"
                   key={line.id}
@@ -376,6 +402,13 @@ export default async function PurchaseOrderDetailPage({
                         line.source_recommendation_type,
                       )}
                     </span>
+
+                    {sizeAllocation ? (
+                      <small>
+                        <strong>SIZE ALLOCATION</strong>
+                        {sizeAllocation}
+                      </small>
+                    ) : null}
                   </div>
 
                   <div>
@@ -453,7 +486,8 @@ export default async function PurchaseOrderDetailPage({
                     </strong>
                   </div>
                 </article>
-              ),
+                );
+              },
             )}
           </div>
 

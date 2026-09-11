@@ -732,7 +732,11 @@ export async function getPurchaseOrder(
       .select(`
         *,
         vault_purchase_order_lines (
-          *
+          *,
+          vault_purchase_order_line_size_allocations (
+            normalized_size,
+            ordered_units
+          )
         ),
         vault_purchase_order_payments (
           id,
