@@ -174,6 +174,8 @@ Deno.serve(async (request: Request) => {
                 source_inventory_item_id:
                   variant.inventoryItem?.id ??
                   null,
+                shopify_image_url:
+                  variant.image?.url ?? null,
                 title: variant.title,
                 sku: variant.sku || null,
                 barcode:

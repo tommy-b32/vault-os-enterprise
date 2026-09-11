@@ -3,6 +3,9 @@ import { shopifyGraphQL } from "./graphql.ts";
 export type ShopifyVariantNode = {
   id: string;
   title: string;
+  image?: {
+    url?: string | null;
+  } | null;
   sku: string | null;
   barcode: string | null;
   price: string;
@@ -80,6 +83,9 @@ const PRODUCT_QUERY = `
           nodes {
             id
             title
+            image {
+              url
+            }
             sku
             barcode
             price
