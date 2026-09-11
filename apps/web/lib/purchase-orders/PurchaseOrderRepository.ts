@@ -723,6 +723,33 @@ export async function getPurchaseOrders() {
   }));
 }
 
+async function getCanonicalPurchaseOrderImages(lines: Array<{ id: string; product_name: string; vault_purchase_order_line_size_allocations?: Array<{ parent_product_id: string | null; model_design: string | null }> | null }>) {
+  const identities = new Map<string, { parentProductId: string; modelDesign: string }>();
+  for (const line of lines) {
+    const values = Array.from(new Map((line.vault_purchase_order_line_size_allocations ?? []).filter(a => a.parent_product_id && a.model_design?.trim()).map(a => [`${a.parent_product_id}|${a.model_design!.trim()}`, { parentProductId: a.parent_product_id!, modelDesign: a.model_design!.trim() }])).values());
+    if (values.length === 1) identities.set(line.id, values[0]);
+  }
+  const productIds = Array.from(new Set(Array.from(identities.values()).map(value => value.parentProductId)));
+  const result = new Map<string, { productImageUrl: string | null; productImageAlt: string }>();
+  if (!productIds.length) return result;
+  const [variantsResult, productsResult] = await Promise.all([
+    supabaseAdmin.from("vault_variants").select("product_id, model_design, shopify_image_url").eq("source", "shopify").eq("source_active", true).eq("available_for_sale", true).eq("identity_resolution_status", "resolved").in("product_id", productIds),
+    supabaseAdmin.from("vault_products").select("id, featured_image_url").eq("source", "shopify").in("id", productIds),
+  ]);
+  if (variantsResult.error) throw variantsResult.error;
+  if (productsResult.error) throw productsResult.error;
+  const parentImages = new Map((productsResult.data ?? []).map(product => [product.id, product.featured_image_url as string | null]));
+  for (const line of lines) {
+    const identity = identities.get(line.id), productImageAlt = identity ? `${line.product_name} — ${identity.modelDesign}` : line.product_name;
+    if (!identity) { result.set(line.id, { productImageUrl: null, productImageAlt }); continue; }
+    const relevant = (variantsResult.data ?? []).filter(v => v.product_id === identity.parentProductId && v.model_design?.trim() === identity.modelDesign);
+    const urls = Array.from(new Set(relevant.map(v => typeof v.shopify_image_url === "string" ? v.shopify_image_url.trim() : "").filter(Boolean)));
+    const exact = relevant.length > 0 && urls.length === 1 && relevant.length === relevant.filter(v => typeof v.shopify_image_url === "string" && v.shopify_image_url.trim()).length;
+    result.set(line.id, { productImageUrl: exact ? urls[0] : parentImages.get(identity.parentProductId) ?? null, productImageAlt });
+  }
+  return result;
+}
+
 export async function getPurchaseOrder(
   id: string,
 ) {
@@ -734,6 +761,8 @@ export async function getPurchaseOrder(
         vault_purchase_order_lines (
           *,
           vault_purchase_order_line_size_allocations (
+            parent_product_id,
+            model_design,
             normalized_size,
             ordered_units
           )
@@ -860,6 +889,7 @@ export async function getPurchaseOrder(
   if (cancellingOperator.error) throw cancellingOperator.error;
   if (receivingVariants.error) throw receivingVariants.error;
   if (receivingLocations.error) throw receivingLocations.error;
+  const lineImages = await getCanonicalPurchaseOrderImages(data.vault_purchase_order_lines ?? []);
 
   return {
     ...data,
@@ -877,6 +907,7 @@ export async function getPurchaseOrder(
     receiving_variants: receivingVariants.data ?? [],
     receiving_locations: receivingLocations.data ?? [],
     inventory_posting_lines: inventoryPostings.data ?? [],
+    vault_purchase_order_lines: (data.vault_purchase_order_lines ?? []).map((line: { id: string; product_name: string }) => ({ ...line, ...(lineImages.get(line.id) ?? { productImageUrl: null, productImageAlt: line.product_name }) })),
   };
 }
 

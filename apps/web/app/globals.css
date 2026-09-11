@@ -3010,6 +3010,16 @@ input:focus-visible {
   text-transform: capitalize;
 }
 
+.purchase-order-product-cell { display: flex; gap: 10px; align-items: flex-start; }
+.purchase-order-image-control { display: grid; gap: 4px; flex: 0 0 56px; }
+.purchase-order-thumbnail, .purchase-order-image-placeholder { width: 56px; height: 56px; border: 1px solid var(--vault-border); border-radius: 8px; background: #101210; color: var(--vault-muted); font-size: 8px; display: grid; place-items: center; overflow: hidden; }
+.purchase-order-thumbnail { padding: 0; cursor: pointer; }
+.purchase-order-thumbnail img { width: 100%; height: 100%; object-fit: contain; }
+.purchase-order-enlarge { min-height: 24px; padding: 3px 5px; font-size: 8px; }
+.purchase-order-image-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0,0,0,.72); }
+.purchase-order-image-modal { max-width: min(90vw, 720px); max-height: 90vh; padding: 16px; border: 1px solid var(--vault-border); border-radius: 12px; background: #101210; display: grid; gap: 12px; }
+.purchase-order-image-modal img { width: min(80vw, 640px); max-height: 70vh; object-fit: contain; }
+
 .purchase-order-product-cell > span,
 .purchase-order-editable-line small {
   display: block;

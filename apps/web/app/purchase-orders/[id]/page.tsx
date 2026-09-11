@@ -9,6 +9,7 @@ import { PurchaseOrderPayment } from "@/components/purchase-orders/PurchaseOrder
 import { PurchaseOrderReceiving } from "@/components/purchase-orders/PurchaseOrderReceiving";
 import { PurchaseOrderShipping } from "@/components/purchase-orders/PurchaseOrderShipping";
 import { ManualFixedPackAddPanel } from "@/components/purchase-orders/ManualFixedPackAddPanel";
+import { PurchaseOrderProductImage } from "@/components/purchase-orders/PurchaseOrderProductImage";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { loadManualFixedPackCandidates } from "@/lib/purchase-orders/ManualFixedPackCandidates";
@@ -26,6 +27,8 @@ type SavedPurchaseOrderLine = {
   line_cost_gbp: number | null;
   source_recommendation_type: string;
   recommendation_priority: string | null;
+  productImageUrl: string | null;
+  productImageAlt: string;
   vault_purchase_order_line_size_allocations: Array<{
     normalized_size: string | null;
     ordered_units: number | null;
@@ -397,6 +400,8 @@ export default async function PurchaseOrderDetailPage({
                   key={line.id}
                 >
                   <div className="purchase-order-product-cell">
+                    <PurchaseOrderProductImage productImageUrl={line.productImageUrl} productImageAlt={line.productImageAlt} />
+                    <div>
                     <strong>
                       {line.product_name}
                     </strong>
@@ -413,6 +418,7 @@ export default async function PurchaseOrderDetailPage({
                         {sizeAllocation}
                       </small>
                     ) : null}
+                    </div>
                   </div>
 
                   <div>

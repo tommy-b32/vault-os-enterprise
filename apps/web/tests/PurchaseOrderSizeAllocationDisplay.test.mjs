@@ -20,6 +20,7 @@ new Function("require", "exports", output)((name) => ({
   "@/components/purchase-orders/PurchaseOrderReceiving": { PurchaseOrderReceiving: () => null },
   "@/components/purchase-orders/PurchaseOrderShipping": { PurchaseOrderShipping: () => null },
   "@/components/purchase-orders/ManualFixedPackAddPanel": { ManualFixedPackAddPanel: () => null },
+  "@/components/purchase-orders/PurchaseOrderProductImage": { PurchaseOrderProductImage: () => null },
   "@/lib/auth/operators": { requireAuthenticatedOperator: async () => ({}) },
   "@/lib/purchase-orders/PurchaseOrderRepository": { getPurchaseOrder: async () => null },
   "@/lib/purchase-orders/ManualFixedPackCandidates": { loadManualFixedPackCandidates: async () => ({ status: "incompatible", reason: "po_not_found" }) },
