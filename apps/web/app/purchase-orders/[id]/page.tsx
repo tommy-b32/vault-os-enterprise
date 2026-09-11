@@ -8,8 +8,10 @@ import { SupplierOrderPreparation } from "@/components/purchase-orders/SupplierO
 import { PurchaseOrderPayment } from "@/components/purchase-orders/PurchaseOrderPayment";
 import { PurchaseOrderReceiving } from "@/components/purchase-orders/PurchaseOrderReceiving";
 import { PurchaseOrderShipping } from "@/components/purchase-orders/PurchaseOrderShipping";
+import { ManualFixedPackAddPanel } from "@/components/purchase-orders/ManualFixedPackAddPanel";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
+import { loadManualFixedPackCandidates } from "@/lib/purchase-orders/ManualFixedPackCandidates";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,7 @@ type SavedPurchaseOrderLine = {
 const APPAREL_SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL"];
 
 export function savedSizeAllocationDisplay(line: SavedPurchaseOrderLine): string | null {
-  if (line.source_recommendation_type !== "fixed_pack_purchase_recommendation") return null;
+  if (!["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"].includes(line.source_recommendation_type)) return null;
   const allocations = line.vault_purchase_order_line_size_allocations ?? [];
   if (allocations.length === 0) return null;
   const seenSizes = new Set<string>();
@@ -105,6 +107,7 @@ function money(
 function readableSource(
   source: string,
 ) {
+  if (source === "manual_fixed_pack_purchase") return "Manual Fixed Pack";
   if (
     source ===
     "purchase_intelligence_required"
@@ -146,6 +149,7 @@ export default async function PurchaseOrderDetailPage({
   const lines =
     (draft.vault_purchase_order_lines ??
       []) as SavedPurchaseOrderLine[];
+  const manualCandidates = await loadManualFixedPackCandidates(draft.id);
 
   const totalUnits =
     lines.reduce(
@@ -490,6 +494,8 @@ export default async function PurchaseOrderDetailPage({
               },
             )}
           </div>
+
+          {manualCandidates.status === "compatible" ? <ManualFixedPackAddPanel purchaseOrderId={manualCandidates.purchaseOrderId} supplierName={manualCandidates.supplierName} supplierMinimumOrderPacks={manualCandidates.supplierMinimumOrderPacks} currentBasketPacks={manualCandidates.currentBasketPacks} remainingPacksToMinimum={manualCandidates.remainingPacksToMinimum} candidates={manualCandidates.candidates} /> : null}
 
           {draft.reasoning ? (
             <p className="purchase-order-capital-guidance">
