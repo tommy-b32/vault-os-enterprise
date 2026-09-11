@@ -15,6 +15,14 @@ test("only trusted, positive recommendations render the add-to-draft CTA", () =>
   assert.match(source, /notApplicable = results\.filter/);
 });
 
+test("recommendation actions reuse the established primary and secondary Vault OS controls", () => {
+  assert.match(source, /className="vault-secondary-button" type="button" aria-expanded=\{expanded\}/);
+  assert.match(source, /className="vault-primary-button" type="button" disabled=\{pending\}/);
+  assert.match(source, /<Link className="vault-secondary-button" href=\{`\/purchase-orders\/\$\{purchaseOrderId\}`\}/);
+  assert.match(source, /aria-expanded=\{expanded\}/);
+  assert.match(source, /pending \? "Adding…" : "Add to Draft PO"/);
+});
+
 test("the client uses only the existing server action with the minimal request", () => {
   assert.match(source, /addFixedPackRecommendationToDraftAction/);
   assert.match(source, /\{ styleId, parentProductId, idempotencyKey: idempotencyKey\.current, targetDraftId: null \}/);
