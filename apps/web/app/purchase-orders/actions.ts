@@ -17,6 +17,7 @@ import {
   type CreatePurchaseOrderDraftInput,
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { addFixedPackRecommendationToDraft, type AddFixedPackRecommendationInput, type FixedPackDraftResult } from "@/lib/purchase-orders/FixedPackDraftRepository";
+import { addManualFixedPackToDraft, type AddManualFixedPackInput, type ManualFixedPackDraftResult } from "@/lib/purchase-orders/ManualFixedPackDraftRepository";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -39,6 +40,10 @@ export async function addFixedPackRecommendationToDraftAction(input: AddFixedPac
     console.error("Unable to add fixed-pack recommendation to draft", error);
     return { success: false, code: "operation_failed", message: "The recommendation could not be added to a draft." };
   }
+}
+
+export async function addManualFixedPackToDraftAction(input: AddManualFixedPackInput): Promise<ManualFixedPackDraftResult> {
+  try { const purchaseOrderId = typeof input?.purchaseOrderId === "string" ? input.purchaseOrderId.trim() : ""; const parentProductId = typeof input?.parentProductId === "string" ? input.parentProductId.trim() : ""; const styleId = typeof input?.styleId === "string" ? input.styleId.trim() : ""; const idempotencyKey = typeof input?.idempotencyKey === "string" ? input.idempotencyKey.trim() : ""; if (!UUID_PATTERN.test(purchaseOrderId) || !UUID_PATTERN.test(parentProductId) || !styleId || !idempotencyKey || idempotencyKey.length > 200 || !Number.isSafeInteger(input?.packCount) || input.packCount <= 0) return { success: false, code: "request_invalid", message: "The manual fixed-pack request is invalid." }; const operator = await requireAuthenticatedOperator(); const result = await addManualFixedPackToDraft(operator.id, { purchaseOrderId, parentProductId, styleId, packCount: input.packCount, idempotencyKey }); if (result.success) { revalidatePath("/purchase-orders"); revalidatePath(`/purchase-orders/${result.purchaseOrderId}`); } return result; } catch (error) { console.error("Unable to add manual fixed-pack to draft", error); return { success: false, code: "operation_failed", message: "The manual fixed-pack addition could not be completed." }; }
 }
 
 export type CancelPurchaseOrderState = {
