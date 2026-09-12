@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const migration = await readFile(new URL("../../../supabase/migrations/20260920000000_fixed_pack_exact_size_receiving.sql", import.meta.url), "utf8");
+const advisorCompatibility = await readFile(new URL("../../../supabase/migrations/20260921000000_historical_receipt_source_compatibility.sql", import.meta.url), "utf8");
 const container = `vault-b22c-${process.pid}`;
 const id = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 let started = false;
@@ -23,4 +24,11 @@ test("B22C exact fixed-pack receipts preserve missing sizes as outstanding", asy
   assert.equal(sql(receipt("finish", [{ purchase_order_line_size_allocation_id: id(201), quantity_received: 1 }])), "received|true");
   assert.equal(sql(receipt("finish", [{ purchase_order_line_size_allocation_id: id(201), quantity_received: 1 }])), "received|true");
   assert.match(fails(receipt("over", [{ purchase_order_line_size_allocation_id: id(201), quantity_received: 1 }])), /cannot be received from status/);
+  sql(advisorCompatibility);
+  sql(`insert into public.vault_purchase_orders values('${id(11)}','ordered',null);insert into public.vault_purchase_order_lines values('${id(21)}','${id(11)}','advisor','${id(50)}::Blue',2,2,1);`);
+  const advisorReceipt = (key, quantity, nonSellable = 0) => sql(`select status||'|'||fully_received from public.record_vault_purchase_order_receipt('${id(11)}','${id(1)}','2026-09-12','${id(2)}','${key}',$json$[{"purchase_order_line_id":"${id(21)}","non_sellable_quantity":${nonSellable},"allocations":${quantity ? `[{"variant_id":"${id(101)}","quantity_received":${quantity}}]` : "[]"}}]$json$::jsonb);`);
+  assert.equal(advisorReceipt("advisor-partial", 1), "ordered|false");
+  assert.equal(sql(`select purchase_order_line_size_allocation_id is null from public.vault_purchase_order_receipt_allocations a join public.vault_purchase_order_receipt_lines l on l.id=a.receipt_line_id where l.purchase_order_line_id='${id(21)}'`), "t");
+  assert.equal(advisorReceipt("advisor-complete", 0, 1), "received|true");
+  assert.match(fails(`select * from public.record_vault_purchase_order_receipt('${id(11)}','${id(1)}','2026-09-12','${id(2)}','bad',$json$[{"purchase_order_line_id":"${id(21)}","allocations":[{"variant_id":"${id(102)}","quantity_received":1}]}]$json$::jsonb);`), /cannot be received from status/);
 });
