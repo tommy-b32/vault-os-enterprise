@@ -23,15 +23,15 @@ test("approval qualification loads persisted line sources and classifies them", 
   const fixedPackLines = source.indexOf('.select("id, supplier_id, style_id, recommended_packs, recommended_units, units_per_pack, pack_cost_gbp, line_cost_gbp, source_recommendation_type, source_snapshot")', fixedPackGuard);
   const fixedPackAllocations = source.indexOf('vault_purchase_order_line_size_allocations', fixedPackLines);
   const conservation = source.indexOf("validateFixedPackAllocationConservation(", fixedPackAllocations);
-  const unsupportedError = source.indexOf("FIXED_PACK_APPROVAL_NOT_IMPLEMENTED", fixedPackGuard);
+  const fixedPackQualification = source.indexOf('source_family: "fixed_pack"', fixedPackGuard);
   const piInputs = source.indexOf("const [catalogue, freshness, walletResult, suppliersResult, rulesResult]", qualificationStart);
   const piEvaluation = source.indexOf("PurchaseIntelligenceEngine.evaluate(", qualificationStart);
-  assert.ok(qualificationStart >= 0); assert.ok(linesQuery > qualificationStart); assert.ok(sourceSelect > linesQuery); assert.ok(classifierCall > sourceSelect); assert.ok(fixedPackGuard > classifierCall); assert.ok(fixedPackLines > fixedPackGuard); assert.ok(fixedPackAllocations > fixedPackLines); assert.ok(conservation > fixedPackAllocations); assert.ok(unsupportedError > conservation); assert.ok(piInputs > unsupportedError); assert.ok(piEvaluation > piInputs);
+  assert.ok(qualificationStart >= 0); assert.ok(linesQuery > qualificationStart); assert.ok(sourceSelect > linesQuery); assert.ok(classifierCall > sourceSelect); assert.ok(fixedPackGuard > classifierCall); assert.ok(fixedPackLines > fixedPackGuard); assert.ok(fixedPackAllocations > fixedPackLines); assert.ok(conservation > fixedPackAllocations); assert.ok(fixedPackQualification > conservation); assert.ok(piInputs > fixedPackQualification); assert.ok(piEvaluation > piInputs);
 });
 
 test("fixed-pack routing does not change the existing legacy PI path", () => {
   const fixedPackGuard = source.indexOf('if (sourceFamily === "fixed_pack")');
-  const fixedPackThrow = source.indexOf('throw new Error("FIXED_PACK_APPROVAL_NOT_IMPLEMENTED")', fixedPackGuard);
+  const fixedPackReturn = source.indexOf('source_family: "fixed_pack"', fixedPackGuard);
   const legacyPiWork = source.indexOf("PurchaseIntelligenceEngine.evaluate(", fixedPackGuard);
-  assert.ok(fixedPackGuard >= 0); assert.ok(fixedPackThrow > fixedPackGuard); assert.ok(legacyPiWork > fixedPackThrow); assert.equal(source.match(/PurchaseIntelligenceEngine.evaluate\(/g)?.length, 1);
+  assert.ok(fixedPackGuard >= 0); assert.ok(fixedPackReturn > fixedPackGuard); assert.ok(legacyPiWork > fixedPackReturn); assert.equal(source.match(/PurchaseIntelligenceEngine.evaluate\(/g)?.length, 1);
 });

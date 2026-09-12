@@ -155,7 +155,19 @@ type CanonicalApprovalQualification = {
   }>;
 };
 
-export type FixedPackApprovalQualification = { sourceFamily: "fixed_pack"; purchaseOrderId: string; supplierId: string; currencyCode: string; sourceTypes: Array<"fixed_pack_purchase_recommendation" | "manual_fixed_pack_purchase">; lines: Array<{ purchaseOrderLineId: string; styleId: string; sourceRecommendationType: "fixed_pack_purchase_recommendation" | "manual_fixed_pack_purchase" }> };
+export type FixedPackApprovalQualification = {
+  source_family: "fixed_pack";
+  purchase_order_id: string;
+  supplier_id: string;
+  currency_code: "GBP";
+  expected_total_packs: number;
+  expected_total_gbp: number;
+  lines: Array<{
+    purchase_order_line_id: string;
+    source_recommendation_type: "fixed_pack_purchase_recommendation" | "manual_fixed_pack_purchase";
+    provenance_fingerprint: string;
+  }>;
+};
 export function classifyPurchaseOrderApprovalSources(sources: string[]): "legacy_pi" | "fixed_pack" {
   const legacy = new Set(["purchase_intelligence_required", "purchase_intelligence_bring_forward"]);
   const fixed = new Set(["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"]);
@@ -674,7 +686,10 @@ function approvalMoney(value: number): number {
 
 async function getCurrentApprovalQualification(
   purchaseOrderId: string,
-): Promise<CanonicalApprovalQualification | Record<string, never>> {
+): Promise<{
+  sourceFamily: "legacy_pi" | "fixed_pack";
+  canonicalQualification: CanonicalApprovalQualification | FixedPackApprovalQualification | Record<string, never>;
+}> {
   const order = await supabaseAdmin
     .from("vault_purchase_orders")
     .select("id, supplier_id, status, currency, total_packs, estimated_total_gbp")
@@ -683,8 +698,7 @@ async function getCurrentApprovalQualification(
 
   if (order.error) throw order.error;
   if (!order.data) throw new Error("Purchase order was not found.");
-  if (order.data.status === "approved") return {};
-  if (order.data.status !== "draft") {
+  if (order.data.status !== "approved" && order.data.status !== "draft") {
     throw new Error(`Purchase order cannot be approved from status '${order.data.status}'.`);
   }
   const orderData = order.data;
@@ -703,6 +717,10 @@ async function getCurrentApprovalQualification(
         : "",
     ),
   );
+
+  if (order.data.status === "approved") {
+    return { sourceFamily, canonicalQualification: {} };
+  }
 
   if (sourceFamily === "fixed_pack") {
     const fixedPackLines = await supabaseAdmin
@@ -779,7 +797,25 @@ async function getCurrentApprovalQualification(
       fixedPackProvenance.data ?? [],
       fixedPackEvents.data ?? [],
     );
-    throw new Error("FIXED_PACK_APPROVAL_NOT_IMPLEMENTED");
+    return {
+      sourceFamily,
+      canonicalQualification: {
+        source_family: "fixed_pack",
+        purchase_order_id: purchaseOrderId,
+        supplier_id: orderData.supplier_id,
+        currency_code: "GBP",
+        expected_total_packs: orderData.total_packs,
+        expected_total_gbp: orderData.estimated_total_gbp,
+        lines: (fixedPackLines.data ?? []).map((line) => {
+          const source = line.source_snapshot as Record<string, unknown>;
+          return {
+            purchase_order_line_id: line.id as string,
+            source_recommendation_type: line.source_recommendation_type as "fixed_pack_purchase_recommendation" | "manual_fixed_pack_purchase",
+            provenance_fingerprint: source.fingerprint as string,
+          };
+        }),
+      },
+    };
   }
 
   const [catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
@@ -897,18 +933,21 @@ async function getCurrentApprovalQualification(
   }
 
   return {
-    evaluated_at: new Date().toISOString(),
-    supplier_id: orderData.supplier_id,
-    supplier_currency: canonicalSupplier.currency,
-    supplier_minimum_packs: canonicalSupplier.minimumOrderPacks,
-    supplier_minimum_value: canonicalSupplier.minimumOrderValue,
-    qualification_state: qualification.state,
-    qualification_blockers: qualification.blockers,
-    basket_state: basket.purchasing_state,
-    total_packs: totalPacks,
-    total_units: totalUnits,
-    total_gbp: totalGbp,
-    lines: canonicalLines,
+    sourceFamily,
+    canonicalQualification: {
+      evaluated_at: new Date().toISOString(),
+      supplier_id: orderData.supplier_id,
+      supplier_currency: canonicalSupplier.currency,
+      supplier_minimum_packs: canonicalSupplier.minimumOrderPacks,
+      supplier_minimum_value: canonicalSupplier.minimumOrderValue,
+      qualification_state: qualification.state,
+      qualification_blockers: qualification.blockers,
+      basket_state: basket.purchasing_state,
+      total_packs: totalPacks,
+      total_units: totalUnits,
+      total_gbp: totalGbp,
+      lines: canonicalLines,
+    },
   };
 }
 
@@ -1543,17 +1582,17 @@ export async function approvePurchaseOrderDraft(input: {
   purchaseOrderId: string;
   operatorId: string;
 }): Promise<PurchaseOrderApprovalResult> {
-  const canonicalQualification = await getCurrentApprovalQualification(
+  const { sourceFamily, canonicalQualification } = await getCurrentApprovalQualification(
     input.purchaseOrderId,
   );
-  const { data, error } = await supabaseAdmin.rpc(
-    "approve_vault_purchase_order",
-    {
-      target_purchase_order_id: input.purchaseOrderId,
-      target_operator_id: input.operatorId,
-      canonical_qualification: canonicalQualification,
-    },
-  );
+  const rpcInput = {
+    target_purchase_order_id: input.purchaseOrderId,
+    target_operator_id: input.operatorId,
+    canonical_qualification: canonicalQualification,
+  };
+  const { data, error } = sourceFamily === "fixed_pack"
+    ? await supabaseAdmin.rpc("approve_fixed_pack_vault_purchase_order", rpcInput)
+    : await supabaseAdmin.rpc("approve_vault_purchase_order", rpcInput);
 
   if (error) throw new Error(error.message);
   const result = data?.[0];
