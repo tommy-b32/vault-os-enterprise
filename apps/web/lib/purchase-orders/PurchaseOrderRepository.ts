@@ -6,6 +6,7 @@ import { CapitalEngine } from "@/lib/brain/CapitalEngine";
 import { PurchaseIntelligenceEngine } from "@/lib/brain/PurchaseIntelligenceEngine";
 import { getCatalogueData } from "@/lib/catalogue";
 import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository";
+import { loadSupplierStylePackCompositionIntelligence } from "@/lib/supplier-style-pack-composition";
 import {
   createSupplierOrderText,
   readSupplierImageSnapshot,
@@ -154,6 +155,519 @@ type CanonicalApprovalQualification = {
   }>;
 };
 
+export type FixedPackApprovalQualification = { sourceFamily: "fixed_pack"; purchaseOrderId: string; supplierId: string; currencyCode: string; sourceTypes: Array<"fixed_pack_purchase_recommendation" | "manual_fixed_pack_purchase">; lines: Array<{ purchaseOrderLineId: string; styleId: string; sourceRecommendationType: "fixed_pack_purchase_recommendation" | "manual_fixed_pack_purchase" }> };
+export function classifyPurchaseOrderApprovalSources(sources: string[]): "legacy_pi" | "fixed_pack" {
+  const legacy = new Set(["purchase_intelligence_required", "purchase_intelligence_bring_forward"]);
+  const fixed = new Set(["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"]);
+  if (!sources.length || sources.some((source) => !legacy.has(source) && !fixed.has(source))) throw new Error("PO_SOURCE_MIX_INVALID");
+  const family = legacy.has(sources[0]) ? legacy : fixed;
+  if (sources.some((source) => !family.has(source))) throw new Error("PO_SOURCE_MIX_INVALID");
+  return family === legacy ? "legacy_pi" : "fixed_pack";
+}
+
+export type FixedPackAllocationConservationLine = {
+  id: unknown;
+  recommended_packs: unknown;
+  recommended_units: unknown;
+  units_per_pack: unknown;
+  source_recommendation_type: unknown;
+};
+
+export type FixedPackAllocationConservationAllocation = {
+  purchase_order_line_id: unknown;
+  variant_id?: unknown;
+  parent_product_id?: unknown;
+  model_design?: unknown;
+  normalized_size: unknown;
+  shopify_variant_id_snapshot?: unknown;
+  shopify_inventory_item_id_snapshot?: unknown;
+  units_per_pack: unknown;
+  ordered_units: unknown;
+};
+
+export type FixedPackCurrentPackContractLine = FixedPackAllocationConservationLine & {
+  supplier_id: unknown;
+  style_id: unknown;
+  source_snapshot: unknown;
+};
+
+export type FixedPackCurrentPackContractRow = {
+  id: unknown;
+  supplier_id: unknown;
+  style_id: unknown;
+  normalized_size: unknown;
+  units_per_pack: unknown;
+  declared_units_per_pack: unknown;
+  composition_units_per_pack: unknown;
+  composition_complete: unknown;
+  composition_valid: unknown;
+  commercial_pack_consistent: unknown;
+  active: unknown;
+};
+
+export type FixedPackCurrentVariantIdentityRow = {
+  id: unknown;
+  product_id: unknown;
+  model_design: unknown;
+  normalized_size: unknown;
+  source: unknown;
+  source_active: unknown;
+  identity_resolution_status: unknown;
+  source_variant_id: unknown;
+  source_inventory_item_id: unknown;
+};
+
+export type FixedPackCommercialPolicyLine = FixedPackAllocationConservationLine & {
+  supplier_id: unknown;
+  style_id: unknown;
+  source_snapshot: unknown;
+  pack_cost_gbp: unknown;
+  line_cost_gbp: unknown;
+};
+
+export type FixedPackCurrentProductCommercial = {
+  style_id: unknown;
+  supplier_id: unknown;
+  supplier_moq_packs: unknown;
+  restock_enabled: unknown;
+  inventory_strategy: unknown;
+  commercial_cost: unknown;
+};
+
+export type FixedPackCommercialPolicyOrder = {
+  supplier_id: unknown;
+  currency: unknown;
+  total_packs: unknown;
+  estimated_total_gbp: unknown;
+};
+
+export type FixedPackCommercialPolicySupplier = {
+  id: unknown;
+  currency_code: unknown;
+  minimum_order_value: unknown;
+};
+
+export type FixedPackCommercialPolicyRule = {
+  supplier_id: unknown;
+  minimum_order_packs: unknown;
+};
+
+export type FixedPackProvenanceRecord = {
+  fingerprint: unknown;
+  style_id: unknown;
+  purchase_order_id: unknown;
+  purchase_order_line_id: unknown;
+};
+
+export type FixedPackProvenanceEvent = {
+  purchase_order_line_id: unknown;
+  event_type: unknown;
+  event_snapshot: unknown;
+};
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value > 0;
+}
+
+export function validateFixedPackAllocationConservation(
+  lines: FixedPackAllocationConservationLine[],
+  allocations: FixedPackAllocationConservationAllocation[],
+): void {
+  const allocationsByLineId = new Map<string, FixedPackAllocationConservationAllocation[]>();
+  const lineIds = new Set<string>();
+
+  for (const line of lines) {
+    if (typeof line.id !== "string" || !line.id.trim()) {
+      throw new Error("FIXED_PACK_ALLOCATION_INVALID");
+    }
+    lineIds.add(line.id);
+  }
+
+  for (const allocation of allocations) {
+    if (
+      typeof allocation.purchase_order_line_id !== "string" ||
+      !lineIds.has(allocation.purchase_order_line_id)
+    ) {
+      throw new Error("FIXED_PACK_ALLOCATION_INVALID");
+    }
+    const lineAllocations = allocationsByLineId.get(allocation.purchase_order_line_id) ?? [];
+    lineAllocations.push(allocation);
+    allocationsByLineId.set(allocation.purchase_order_line_id, lineAllocations);
+  }
+
+  for (const line of lines) {
+    const lineId = line.id;
+    if (
+      typeof lineId !== "string" ||
+      !isPositiveInteger(line.recommended_packs) ||
+      !isPositiveInteger(line.recommended_units) ||
+      !isPositiveInteger(line.units_per_pack) ||
+      line.recommended_units !== line.recommended_packs * line.units_per_pack
+    ) {
+      throw new Error("FIXED_PACK_ALLOCATION_INVALID");
+    }
+
+    const lineAllocations = allocationsByLineId.get(lineId);
+    if (!lineAllocations?.length) {
+      throw new Error("FIXED_PACK_ALLOCATION_MISSING");
+    }
+
+    let allocatedUnitsPerPack = 0;
+    let allocatedOrderedUnits = 0;
+    for (const allocation of lineAllocations) {
+      if (
+        typeof allocation.normalized_size !== "string" ||
+        !allocation.normalized_size.trim() ||
+        !isPositiveInteger(allocation.units_per_pack) ||
+        !isPositiveInteger(allocation.ordered_units) ||
+        allocation.ordered_units !== line.recommended_packs * allocation.units_per_pack
+      ) {
+        throw new Error("FIXED_PACK_ALLOCATION_INVALID");
+      }
+      allocatedUnitsPerPack += allocation.units_per_pack;
+      allocatedOrderedUnits += allocation.ordered_units;
+    }
+
+    if (
+      allocatedUnitsPerPack !== line.units_per_pack ||
+      allocatedOrderedUnits !== line.recommended_units
+    ) {
+      throw new Error("FIXED_PACK_ALLOCATION_INVALID");
+    }
+  }
+}
+
+function persistedPackDefinitionId(sourceSnapshot: unknown): string | null {
+  if (!sourceSnapshot || typeof sourceSnapshot !== "object" || Array.isArray(sourceSnapshot)) {
+    return null;
+  }
+  const packDefinitionId = (sourceSnapshot as Record<string, unknown>).pack_definition_id;
+  return typeof packDefinitionId === "string" && packDefinitionId.trim()
+    ? packDefinitionId
+    : null;
+}
+
+export function validateFixedPackCurrentPackContract(
+  lines: FixedPackCurrentPackContractLine[],
+  allocations: FixedPackAllocationConservationAllocation[],
+  contracts: FixedPackCurrentPackContractRow[],
+): void {
+  const allocationsByLineId = new Map<string, FixedPackAllocationConservationAllocation[]>();
+  for (const allocation of allocations) {
+    if (typeof allocation.purchase_order_line_id !== "string") {
+      throw new Error("PACK_CONTRACT_CHANGED");
+    }
+    const lineAllocations = allocationsByLineId.get(allocation.purchase_order_line_id) ?? [];
+    lineAllocations.push(allocation);
+    allocationsByLineId.set(allocation.purchase_order_line_id, lineAllocations);
+  }
+
+  for (const line of lines) {
+    if (
+      typeof line.id !== "string" ||
+      typeof line.supplier_id !== "string" || !line.supplier_id.trim() ||
+      typeof line.style_id !== "string" || !line.style_id.trim() ||
+      !isPositiveInteger(line.units_per_pack)
+    ) {
+      throw new Error("PACK_CONTRACT_CHANGED");
+    }
+
+    const matchingRows = contracts.filter((contract) =>
+      contract.supplier_id === line.supplier_id && contract.style_id === line.style_id,
+    );
+    const definitionIds = new Set(
+      matchingRows.filter((contract) => typeof contract.id === "string" && contract.id.trim())
+        .map((contract) => contract.id as string),
+    );
+    const persistedDefinitionId = persistedPackDefinitionId(line.source_snapshot);
+    if (
+      definitionIds.size !== 1 ||
+      (persistedDefinitionId !== null && !definitionIds.has(persistedDefinitionId)) ||
+      matchingRows.some((contract) =>
+        contract.active !== true ||
+        contract.composition_complete !== true ||
+        contract.composition_valid !== true ||
+        contract.commercial_pack_consistent !== true ||
+        !isPositiveInteger(contract.units_per_pack) ||
+        typeof contract.normalized_size !== "string" || !contract.normalized_size.trim(),
+      )
+    ) {
+      throw new Error("PACK_CONTRACT_CHANGED");
+    }
+
+    const currentComposition = new Map<string, number>();
+    for (const contract of matchingRows) {
+      if (currentComposition.has(contract.normalized_size as string)) {
+        throw new Error("PACK_CONTRACT_CHANGED");
+      }
+      currentComposition.set(contract.normalized_size as string, contract.units_per_pack as number);
+    }
+
+    const persistedAllocations = allocationsByLineId.get(line.id);
+    if (!persistedAllocations?.length || persistedAllocations.length !== currentComposition.size) {
+      throw new Error("PACK_CONTRACT_CHANGED");
+    }
+    let currentUnitsPerPack = 0;
+    for (const [normalizedSize, unitsPerPack] of currentComposition) {
+      currentUnitsPerPack += unitsPerPack;
+      const persisted = persistedAllocations.filter((allocation) => allocation.normalized_size === normalizedSize);
+      if (persisted.length !== 1 || persisted[0].units_per_pack !== unitsPerPack) {
+        throw new Error("PACK_CONTRACT_CHANGED");
+      }
+    }
+
+    if (
+      currentUnitsPerPack !== line.units_per_pack ||
+      matchingRows.some((contract) =>
+        contract.declared_units_per_pack !== currentUnitsPerPack ||
+        contract.composition_units_per_pack !== currentUnitsPerPack,
+      )
+    ) {
+      throw new Error("PACK_CONTRACT_CHANGED");
+    }
+  }
+}
+
+export function validateFixedPackCurrentVariantIdentity(
+  allocations: FixedPackAllocationConservationAllocation[],
+  variants: FixedPackCurrentVariantIdentityRow[],
+): void {
+  const allocationsByVariantId = new Map<string, FixedPackAllocationConservationAllocation>();
+  for (const allocation of allocations) {
+    if (
+      typeof allocation.variant_id !== "string" || !allocation.variant_id.trim() ||
+      typeof allocation.parent_product_id !== "string" || !allocation.parent_product_id.trim() ||
+      typeof allocation.model_design !== "string" || !allocation.model_design.trim() ||
+      typeof allocation.normalized_size !== "string" || !allocation.normalized_size.trim() ||
+      typeof allocation.shopify_variant_id_snapshot !== "string" || !allocation.shopify_variant_id_snapshot.trim() ||
+      typeof allocation.shopify_inventory_item_id_snapshot !== "string" || !allocation.shopify_inventory_item_id_snapshot.trim() ||
+      allocationsByVariantId.has(allocation.variant_id)
+    ) {
+      throw new Error("VARIANT_IDENTITY_CHANGED");
+    }
+    allocationsByVariantId.set(allocation.variant_id, allocation);
+  }
+
+  if (variants.length !== allocations.length) {
+    throw new Error("VARIANT_IDENTITY_CHANGED");
+  }
+
+  const variantsById = new Map<string, FixedPackCurrentVariantIdentityRow>();
+  for (const variant of variants) {
+    if (
+      typeof variant.id !== "string" ||
+      variantsById.has(variant.id) ||
+      !allocationsByVariantId.has(variant.id)
+    ) {
+      throw new Error("VARIANT_IDENTITY_CHANGED");
+    }
+    variantsById.set(variant.id, variant);
+  }
+
+  for (const [variantId, allocation] of allocationsByVariantId) {
+    const variant = variantsById.get(variantId);
+    if (
+      !variant ||
+      variant.source !== "shopify" ||
+      variant.source_active !== true ||
+      variant.identity_resolution_status !== "resolved" ||
+      variant.product_id !== allocation.parent_product_id ||
+      variant.model_design !== allocation.model_design ||
+      variant.normalized_size !== allocation.normalized_size ||
+      variant.source_variant_id !== allocation.shopify_variant_id_snapshot ||
+      variant.source_inventory_item_id !== allocation.shopify_inventory_item_id_snapshot
+    ) {
+      throw new Error("VARIANT_IDENTITY_CHANGED");
+    }
+  }
+}
+
+export function validateFixedPackCurrentCommercialPolicy(
+  lines: FixedPackCommercialPolicyLine[],
+  products: FixedPackCurrentProductCommercial[],
+  purchaseOrderSupplierId: unknown,
+): void {
+  if (typeof purchaseOrderSupplierId !== "string" || !purchaseOrderSupplierId.trim()) {
+    throw new Error("SOURCE_PROVENANCE_INVALID");
+  }
+
+  for (const line of lines) {
+    if (
+      typeof line.supplier_id !== "string" || line.supplier_id !== purchaseOrderSupplierId ||
+      typeof line.style_id !== "string" || !line.style_id.trim() ||
+      !isPositiveInteger(line.recommended_packs)
+    ) {
+      throw new Error("SOURCE_PROVENANCE_INVALID");
+    }
+    const matchingProducts = products.filter((product) =>
+      product.style_id === line.style_id && product.supplier_id === purchaseOrderSupplierId,
+    );
+    if (matchingProducts.length !== 1) {
+      throw new Error("SOURCE_PROVENANCE_INVALID");
+    }
+    const product = matchingProducts[0];
+    if (product.restock_enabled !== true || product.inventory_strategy === "do_not_restock") {
+      throw new Error("RESTOCK_DISABLED");
+    }
+    if (
+      product.supplier_moq_packs != null &&
+      (!isPositiveInteger(product.supplier_moq_packs) && product.supplier_moq_packs !== 0)
+    ) {
+      throw new Error("PRODUCT_MOQ_NOT_MET");
+    }
+    if (typeof product.supplier_moq_packs === "number" && line.recommended_packs < product.supplier_moq_packs) {
+      throw new Error("PRODUCT_MOQ_NOT_MET");
+    }
+    const commercialCost = product.commercial_cost as { landed_cost_per_pack_gbp?: unknown } | null;
+    const currentPackCost = commercialCost?.landed_cost_per_pack_gbp;
+    if (
+      typeof line.pack_cost_gbp !== "number" || !Number.isFinite(line.pack_cost_gbp) || line.pack_cost_gbp <= 0 ||
+      typeof line.line_cost_gbp !== "number" || !Number.isFinite(line.line_cost_gbp) || line.line_cost_gbp <= 0 ||
+      typeof currentPackCost !== "number" || !Number.isFinite(currentPackCost) || currentPackCost <= 0 ||
+      line.pack_cost_gbp !== currentPackCost ||
+      line.line_cost_gbp !== line.recommended_packs * currentPackCost
+    ) {
+      throw new Error("COMMERCIAL_COST_CHANGED");
+    }
+  }
+}
+
+export function validateFixedPackBasketCommercialPolicy(
+  order: FixedPackCommercialPolicyOrder,
+  lines: FixedPackCommercialPolicyLine[],
+  supplier: FixedPackCommercialPolicySupplier | null,
+  rule: FixedPackCommercialPolicyRule | null,
+): void {
+  if (order.currency !== "GBP" || supplier?.currency_code !== "GBP") {
+    throw new Error("CURRENCY_NOT_GBP");
+  }
+  if (!supplier || supplier.id !== order.supplier_id) {
+    throw new Error("SOURCE_PROVENANCE_INVALID");
+  }
+  const basketPacks = lines.reduce((sum, line) => sum + (typeof line.recommended_packs === "number" ? line.recommended_packs : Number.NaN), 0);
+  const basketUnits = lines.reduce((sum, line) => sum + (typeof line.recommended_units === "number" ? line.recommended_units : Number.NaN), 0);
+  const basketValue = lines.reduce((sum, line) => sum + (typeof line.line_cost_gbp === "number" ? line.line_cost_gbp : Number.NaN), 0);
+  if (
+    !isPositiveInteger(basketPacks) || !isPositiveInteger(basketUnits) ||
+    !Number.isFinite(basketValue) || basketValue <= 0 ||
+    !isPositiveInteger(order.total_packs) || order.total_packs !== basketPacks ||
+    typeof order.estimated_total_gbp !== "number" || !Number.isFinite(order.estimated_total_gbp) ||
+    order.estimated_total_gbp !== basketValue
+  ) {
+    throw new Error("HEADER_TOTAL_MISMATCH");
+  }
+  if (rule && rule.minimum_order_packs != null) {
+    if (rule.supplier_id !== order.supplier_id || (!isPositiveInteger(rule.minimum_order_packs) && rule.minimum_order_packs !== 0)) {
+      throw new Error("SUPPLIER_PACK_MOQ_NOT_MET");
+    }
+    if (basketPacks < rule.minimum_order_packs) {
+      throw new Error("SUPPLIER_PACK_MOQ_NOT_MET");
+    }
+  }
+  if (supplier.minimum_order_value == null) {
+    return;
+  }
+  if (
+    typeof supplier.minimum_order_value !== "number" ||
+    !Number.isFinite(supplier.minimum_order_value) ||
+    supplier.minimum_order_value < 0 ||
+    basketValue < supplier.minimum_order_value
+  ) {
+    throw new Error("SUPPLIER_MIN_VALUE_NOT_MET");
+  }
+}
+
+const PRESENTATION_PROVENANCE_FIELDS = new Set([
+  "productImageUrl", "productImageSource", "productImageCapturedAt",
+  "supplierImageUrl", "supplierImageSource", "supplierImageCapturedAt",
+  "shopify_image_url",
+]);
+
+function provenanceJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(provenanceJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !PRESENTATION_PROVENANCE_FIELDS.has(key))
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${provenanceJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function snapshotAllocationsMatch(
+  snapshot: Record<string, unknown>,
+  allocations: FixedPackAllocationConservationAllocation[],
+): boolean {
+  if (!Array.isArray(snapshot.allocations) || snapshot.allocations.length !== allocations.length) return false;
+  const bySize = new Map<string, FixedPackAllocationConservationAllocation>();
+  for (const allocation of allocations) {
+    if (typeof allocation.normalized_size !== "string" || bySize.has(allocation.normalized_size)) return false;
+    bySize.set(allocation.normalized_size, allocation);
+  }
+  return snapshot.allocations.every((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const allocation = bySize.get((item as Record<string, unknown>).normalized_size as string);
+    return !!allocation &&
+      (item as Record<string, unknown>).model_design === allocation.model_design &&
+      (item as Record<string, unknown>).variant_id === allocation.variant_id &&
+      (item as Record<string, unknown>).shopify_variant_id_snapshot === allocation.shopify_variant_id_snapshot &&
+      (item as Record<string, unknown>).shopify_inventory_item_id_snapshot === allocation.shopify_inventory_item_id_snapshot &&
+      (item as Record<string, unknown>).units_per_pack === allocation.units_per_pack &&
+      (item as Record<string, unknown>).ordered_units === allocation.ordered_units;
+  });
+}
+
+export function validateFixedPackSourceProvenance(
+  purchaseOrderId: unknown,
+  lines: FixedPackCommercialPolicyLine[],
+  allocations: FixedPackAllocationConservationAllocation[],
+  records: FixedPackProvenanceRecord[],
+  events: FixedPackProvenanceEvent[],
+): void {
+  for (const line of lines) {
+    const lineAllocations = allocations.filter((allocation) => allocation.purchase_order_line_id === line.id);
+    const snapshot = line.source_snapshot;
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || typeof line.id !== "string") {
+      throw new Error("SOURCE_PROVENANCE_INVALID");
+    }
+    const source = snapshot as Record<string, unknown>;
+    const expectedEventType = line.source_recommendation_type === "fixed_pack_purchase_recommendation"
+      ? "fixed_pack_recommendation_added_to_draft"
+      : line.source_recommendation_type === "manual_fixed_pack_purchase"
+        ? "manual_fixed_pack_added_to_draft"
+        : null;
+    const fingerprint = source.fingerprint;
+    if (
+      !expectedEventType ||
+      source.source_type !== line.source_recommendation_type ||
+      typeof fingerprint !== "string" || !/^[a-f0-9]{32}$/.test(fingerprint) ||
+      source.supplier_id !== line.supplier_id || source.style_id !== line.style_id ||
+      source.recommended_packs !== line.recommended_packs ||
+      source.recommended_units !== line.recommended_units || source.units_per_pack !== line.units_per_pack ||
+      source.pack_cost_gbp !== line.pack_cost_gbp || source.line_cost_gbp !== line.line_cost_gbp ||
+      source.currency !== "GBP" || !snapshotAllocationsMatch(source, lineAllocations) ||
+      (line.source_recommendation_type === "fixed_pack_purchase_recommendation" &&
+        (!source.recommendation_evidence || typeof source.recommendation_evidence !== "object" || "purchase_order_id" in source)) ||
+      (line.source_recommendation_type === "manual_fixed_pack_purchase" &&
+        (source.purchase_order_id !== purchaseOrderId || typeof source.pack_definition_updated_at !== "string" || !source.pack_definition_updated_at))
+    ) {
+      throw new Error("SOURCE_PROVENANCE_INVALID");
+    }
+    const matchingRecords = records.filter((record) =>
+      record.purchase_order_line_id === line.id && record.purchase_order_id === purchaseOrderId &&
+      record.style_id === line.style_id && record.fingerprint === fingerprint,
+    );
+    const matchingEvents = events.filter((event) =>
+      event.purchase_order_line_id === line.id && event.event_type === expectedEventType &&
+      provenanceJson(event.event_snapshot) === provenanceJson(snapshot),
+    );
+    if (matchingRecords.length !== 1 || matchingEvents.length !== 1) {
+      throw new Error("SOURCE_PROVENANCE_INVALID");
+    }
+  }
+}
+
 function approvalMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -163,7 +677,7 @@ async function getCurrentApprovalQualification(
 ): Promise<CanonicalApprovalQualification | Record<string, never>> {
   const order = await supabaseAdmin
     .from("vault_purchase_orders")
-    .select("id, supplier_id, status")
+    .select("id, supplier_id, status, currency, total_packs, estimated_total_gbp")
     .eq("id", purchaseOrderId)
     .maybeSingle();
 
@@ -174,6 +688,99 @@ async function getCurrentApprovalQualification(
     throw new Error(`Purchase order cannot be approved from status '${order.data.status}'.`);
   }
   const orderData = order.data;
+
+  const approvalLines = await supabaseAdmin
+    .from("vault_purchase_order_lines")
+    .select("source_recommendation_type")
+    .eq("purchase_order_id", purchaseOrderId);
+
+  if (approvalLines.error) throw approvalLines.error;
+
+  const sourceFamily = classifyPurchaseOrderApprovalSources(
+    (approvalLines.data ?? []).map((line) =>
+      typeof line.source_recommendation_type === "string"
+        ? line.source_recommendation_type
+        : "",
+    ),
+  );
+
+  if (sourceFamily === "fixed_pack") {
+    const fixedPackLines = await supabaseAdmin
+      .from("vault_purchase_order_lines")
+      .select("id, supplier_id, style_id, recommended_packs, recommended_units, units_per_pack, pack_cost_gbp, line_cost_gbp, source_recommendation_type, source_snapshot")
+      .eq("purchase_order_id", purchaseOrderId);
+
+    if (fixedPackLines.error) throw fixedPackLines.error;
+
+    const fixedPackLineIds = (fixedPackLines.data ?? [])
+      .map((line) => line.id)
+      .filter((lineId): lineId is string => typeof lineId === "string");
+    const fixedPackAllocations = await supabaseAdmin
+      .from("vault_purchase_order_line_size_allocations")
+      .select("purchase_order_line_id, variant_id, parent_product_id, model_design, normalized_size, shopify_variant_id_snapshot, shopify_inventory_item_id_snapshot, units_per_pack, ordered_units")
+      .in("purchase_order_line_id", fixedPackLineIds);
+
+    if (fixedPackAllocations.error) throw fixedPackAllocations.error;
+
+    validateFixedPackAllocationConservation(
+      fixedPackLines.data ?? [],
+      fixedPackAllocations.data ?? [],
+    );
+    const currentPackContracts = await loadSupplierStylePackCompositionIntelligence();
+    validateFixedPackCurrentPackContract(
+      fixedPackLines.data ?? [],
+      fixedPackAllocations.data ?? [],
+      currentPackContracts,
+    );
+    const fixedPackVariantIds = (fixedPackAllocations.data ?? [])
+      .map((allocation) => allocation.variant_id)
+      .filter((variantId): variantId is string => typeof variantId === "string");
+    const currentVariants = await supabaseAdmin
+      .from("vault_variants")
+      .select("id, product_id, model_design, normalized_size, source, source_active, identity_resolution_status, source_variant_id, source_inventory_item_id")
+      .in("id", fixedPackVariantIds);
+
+    if (currentVariants.error) throw currentVariants.error;
+
+    validateFixedPackCurrentVariantIdentity(
+      fixedPackAllocations.data ?? [],
+      currentVariants.data ?? [],
+    );
+    const [fixedPackCatalogue, fixedPackSupplier, fixedPackRule] = await Promise.all([
+      getCatalogueData(),
+      supabaseAdmin.from("vault_suppliers").select("id, currency_code, minimum_order_value").eq("id", orderData.supplier_id).maybeSingle(),
+      supabaseAdmin.from("vault_supplier_purchasing_rules").select("supplier_id, minimum_order_packs").eq("supplier_id", orderData.supplier_id).maybeSingle(),
+    ]);
+    if (fixedPackSupplier.error || fixedPackRule.error) {
+      throw fixedPackSupplier.error ?? fixedPackRule.error;
+    }
+    validateFixedPackCurrentCommercialPolicy(
+      fixedPackLines.data ?? [],
+      fixedPackCatalogue.products,
+      orderData.supplier_id,
+    );
+    validateFixedPackBasketCommercialPolicy(
+      orderData,
+      fixedPackLines.data ?? [],
+      fixedPackSupplier.data ?? null,
+      fixedPackRule.data ?? null,
+    );
+    const [fixedPackProvenance, fixedPackEvents] = await Promise.all([
+      supabaseAdmin.from("vault_fixed_pack_draft_idempotency").select("fingerprint, style_id, purchase_order_id, purchase_order_line_id").eq("purchase_order_id", purchaseOrderId),
+      supabaseAdmin.from("vault_purchase_order_events").select("purchase_order_line_id, event_type, event_snapshot").eq("purchase_order_id", purchaseOrderId),
+    ]);
+    if (fixedPackProvenance.error || fixedPackEvents.error) {
+      throw fixedPackProvenance.error ?? fixedPackEvents.error;
+    }
+    validateFixedPackSourceProvenance(
+      purchaseOrderId,
+      fixedPackLines.data ?? [],
+      fixedPackAllocations.data ?? [],
+      fixedPackProvenance.data ?? [],
+      fixedPackEvents.data ?? [],
+    );
+    throw new Error("FIXED_PACK_APPROVAL_NOT_IMPLEMENTED");
+  }
 
   const [catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
     getCatalogueData(),
