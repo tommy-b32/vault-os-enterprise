@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import { ProductEditor } from "@/components/catalogue/ProductEditor";
 import { ProductList } from "@/components/catalogue/ProductList";
@@ -13,26 +14,33 @@ import type {
 type CatalogueWorkspaceProps = {
   products: CatalogueProduct[];
   suppliers: CatalogueSupplier[];
+  attention?: string | null;
+  attentionProductIds?: string[];
 };
 
 export function CatalogueWorkspace({
   products,
   suppliers,
+  attention = null,
+  attentionProductIds = [],
 }: CatalogueWorkspaceProps) {
   const [search, setSearch] = useState("");
   const [selectedStyleId, setSelectedStyleId] =
     useState<string | null>(
-      products[0]?.style_id ?? null,
+    attention
+      ? products.find((product) => attentionProductIds.includes(product.parent_product_id))?.style_id ?? null
+      : products[0]?.style_id ?? null,
     );
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    if (!query) {
-      return products;
-    }
+    const scopedProducts = attentionProductIds.length
+      ? products.filter((product) => attentionProductIds.includes(product.parent_product_id))
+      : products;
+    if (!query) return scopedProducts;
 
-    return products.filter((product) => {
+    return scopedProducts.filter((product) => {
       const searchable = [
         product.product_name,
         product.supplier_company,
@@ -49,10 +57,15 @@ export function CatalogueWorkspace({
   }, [products, search]);
 
   const selectedProduct =
-    products.find(
+    filteredProducts.find(
       (product) =>
         product.style_id === selectedStyleId,
-    ) ?? null;
+    ) ?? (attention ? filteredProducts[0] ?? null : products.find((product) => product.style_id === selectedStyleId) ?? null);
+
+  useEffect(() => {
+    if (!attention) return;
+    if (selectedProduct?.style_id !== selectedStyleId) setSelectedStyleId(selectedProduct?.style_id ?? null);
+  }, [attention, selectedProduct?.style_id, selectedStyleId]);
 
   function handleSearchChange(value: string) {
     setSearch(value);
@@ -85,6 +98,7 @@ export function CatalogueWorkspace({
 
   return (
     <section className="catalogue-workspace">
+      {attention ? <div className="catalogue-remediation-notice"><p>Showing {filteredProducts.length} affected product{filteredProducts.length === 1 ? "" : "s"}: {attention.replaceAll("_", " ")}. Resolve the canonical data gap using the existing editor.</p>{filteredProducts.length === 0 ? <p>This Vault Brain issue is now resolved. <Link href="/">Return to Command Centre</Link> or <Link href="/catalogue">open the full catalogue</Link>.</p> : null}</div> : null}
       <aside className="catalogue-master-panel">
         <ProductSearch
           onChange={handleSearchChange}
@@ -106,6 +120,7 @@ export function CatalogueWorkspace({
         <ProductEditor
           product={selectedProduct}
           suppliers={suppliers}
+          remediation={attention}
         />
       </div>
     </section>

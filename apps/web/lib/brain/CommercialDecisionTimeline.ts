@@ -8,6 +8,35 @@ import type {
   VaultBrainPrediction,
 } from "@/lib/brain/PredictionEngine";
 
+type RemediableBuyingBlocker = Extract<TrustedBuyingCandidateRejectionReason,
+  "reorder_approval_missing" | "invalid_or_missing_commercial_cost" | "target_stock_days_missing" | "wallet_freshness_unknown" | "wallet_stale">;
+
+const REMEDIABLE_CATALOGUE_BLOCKERS = new Set<RemediableBuyingBlocker>([
+  "reorder_approval_missing", "invalid_or_missing_commercial_cost", "target_stock_days_missing",
+]);
+
+function isRemediableBuyingBlocker(reason: TrustedBuyingCandidateRejectionReason): reason is RemediableBuyingBlocker {
+  return REMEDIABLE_CATALOGUE_BLOCKERS.has(reason as RemediableBuyingBlocker) || reason === "wallet_freshness_unknown" || reason === "wallet_stale";
+}
+
+function remediationDestination(reason: RemediableBuyingBlocker): string {
+  const params = new URLSearchParams({ attention: reason });
+  return `${REMEDIABLE_CATALOGUE_BLOCKERS.has(reason) ? "/catalogue" : "/commercial"}?${params}`;
+}
+
+export function isCatalogueRemediationBlocker(value: string | undefined): value is Extract<RemediableBuyingBlocker,
+  "reorder_approval_missing" | "invalid_or_missing_commercial_cost" | "target_stock_days_missing"> {
+  return Boolean(value && REMEDIABLE_CATALOGUE_BLOCKERS.has(value as RemediableBuyingBlocker));
+}
+
+export function remediationProductIds(
+  timeline: CommercialDecisionTimelineResult | null,
+  attention: string,
+): string[] {
+  if (!isCatalogueRemediationBlocker(attention) || !timeline) return [];
+  return timeline.items.find((item) => item.blockerReasons.includes(attention))?.affectedParentProductIds ?? [];
+}
+
 export type CommercialDecisionTimelineItem = {
   id: string;
   source:
@@ -35,6 +64,8 @@ export type CommercialDecisionTimelineItem = {
   destination: string | null;
   evidence: Array<{ label: string; value: string }>;
   blockerReasons: string[];
+  affectedParentProductIds: string[];
+  affectedStyleIds: string[];
 };
 
 export type CommercialDecisionTimelineGroup =
@@ -159,21 +190,25 @@ function advisorItem(
       { label: "Suggested quantity", value: `${candidate.suggestedQuantity ?? "Unavailable"} packs` },
     ],
     blockerReasons: [],
+    affectedParentProductIds: [],
+    affectedStyleIds: [],
   };
 }
 
 function classifierBlockers(
   candidates: TrustedBuyingCandidateResult[],
 ): CommercialDecisionTimelineItem[] {
-  const counts = new Map<TrustedBuyingCandidateRejectionReason, number>();
+  const affected = new Map<TrustedBuyingCandidateRejectionReason, TrustedBuyingCandidateResult[]>();
   for (const candidate of candidates) {
     for (const reason of candidate.rejectionReasons) {
-      if (BLOCKER_PRESENTATION[reason]) counts.set(reason, (counts.get(reason) ?? 0) + 1);
+      if (BLOCKER_PRESENTATION[reason]) affected.set(reason, [...(affected.get(reason) ?? []), candidate]);
     }
   }
 
-  return [...counts.entries()].map(([reason, count]) => {
+  return [...affected.entries()].map(([reason, candidatesForReason]) => {
     const presentation = BLOCKER_PRESENTATION[reason]!;
+    const parentProductIds = [...new Set(candidatesForReason.map((candidate) => candidate.parentProductId).filter(Boolean))];
+    const styleIds = [...new Set(candidatesForReason.map((candidate) => candidate.styleId).filter(Boolean))];
     return {
       id: `classifier-${reason}`,
       source: presentation.source,
@@ -189,9 +224,11 @@ function classifierBlockers(
       confidenceMeaning: null,
       entityType: "catalogue_style_set",
       entityId: null,
-      destination: presentation.destination,
-      evidence: [{ label: "Affected styles", value: String(count) }],
+      destination: isRemediableBuyingBlocker(reason) ? remediationDestination(reason) : presentation.destination,
+      evidence: [{ label: "Affected styles", value: String(styleIds.length) }],
       blockerReasons: [reason],
+      affectedParentProductIds: parentProductIds,
+      affectedStyleIds: styleIds,
     } satisfies CommercialDecisionTimelineItem;
   });
 }
@@ -200,13 +237,19 @@ function monitoringItems(
   candidates: TrustedBuyingCandidateResult[],
 ): CommercialDecisionTimelineItem[] {
   const items: CommercialDecisionTimelineItem[] = [];
-  const walletPolicyCount = candidates.filter((candidate) =>
+  const walletCandidates = candidates.filter((candidate) =>
     candidate.rejectionReasons.includes("wallet_freshness_unknown") ||
-    candidate.rejectionReasons.includes("wallet_stale")).length;
+    candidate.rejectionReasons.includes("wallet_stale"));
   const walletTimestamp = candidates.map((candidate) =>
     candidate.capitalEvaluation.walletLastUpdated).find(validDate) ?? null;
 
-  if (walletPolicyCount > 0) {
+  if (walletCandidates.length > 0) {
+    const parentProductIds = [...new Set(walletCandidates.map((candidate) => candidate.parentProductId).filter(Boolean))];
+    const styleIds = [...new Set(walletCandidates.map((candidate) => candidate.styleId).filter(Boolean))];
+    const walletReason: RemediableBuyingBlocker = walletCandidates.some((candidate) =>
+      candidate.rejectionReasons.includes("wallet_stale"))
+      ? "wallet_stale"
+      : "wallet_freshness_unknown";
     items.push({
       id: "wallet-freshness-policy",
       source: "wallet",
@@ -222,12 +265,14 @@ function monitoringItems(
       confidenceMeaning: null,
       entityType: "purchasing_wallet",
       entityId: null,
-      destination: "/commercial",
+      destination: remediationDestination(walletReason),
       evidence: [
-        { label: "Affected styles", value: String(walletPolicyCount) },
+        { label: "Affected styles", value: String(styleIds.length) },
         { label: "Wallet last updated", value: walletTimestamp ?? "Unavailable" },
       ],
-      blockerReasons: ["wallet_freshness_unknown"],
+      blockerReasons: [walletReason],
+      affectedParentProductIds: parentProductIds,
+      affectedStyleIds: styleIds,
     });
   }
 
@@ -250,6 +295,8 @@ function monitoringItems(
       destination: "/advisor",
       evidence: [{ label: "Eligible styles", value: "0" }],
       blockerReasons: [],
+      affectedParentProductIds: [],
+      affectedStyleIds: [],
     });
   }
   return items;
@@ -287,6 +334,8 @@ function predictionItem(
     destination,
     evidence: prediction.evidence.map((entry) => ({ label: entry.label, value: entry.explanation })),
     blockerReasons: [],
+    affectedParentProductIds: [],
+    affectedStyleIds: [],
   };
 }
 
@@ -327,7 +376,7 @@ export function buildCommercialDecisionTimeline({
     : [];
   const items = [action, ...blockers, ...forecasts, ...monitoring]
     .filter((item): item is CommercialDecisionTimelineItem => item !== null)
-    .filter((item) => item.destination === null || DESTINATIONS.has(item.destination));
+    .filter((item) => item.destination === null || DESTINATIONS.has(item.destination.split("?", 1)[0]));
   const order: CommercialDecisionTimelineGroup[] = [
     "Now", "Today", "Upcoming", "Monitoring", "Blocked", "Recently resolved",
   ];

@@ -4,6 +4,8 @@ import ProductVisionWorkspace from "@/components/brain/ProductVisionWorkspace";
 import { CatalogueWorkspace } from "@/components/catalogue/CatalogueWorkspace";
 import VaultAppShell from "@/components/layout/VaultAppShell";
 import { getCatalogueData } from "@/lib/catalogue";
+import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecisionTimeline";
+import { isCatalogueRemediationBlocker, remediationProductIds } from "@/lib/brain/CommercialDecisionTimeline";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +32,14 @@ async function loadCataloguePage() {
   }
 }
 
-export default async function CataloguePage() {
-  const result = await loadCataloguePage();
+export default async function CataloguePage({ searchParams }: { searchParams: Promise<{ attention?: string; products?: string }> }) {
+  const query = await searchParams;
+  const attention = isCatalogueRemediationBlocker(query.attention) ? query.attention : null;
+  const [result, timeline] = await Promise.all([
+    loadCataloguePage(),
+    attention ? getCommercialDecisionTimeline(new Date().toISOString()) : Promise.resolve(null),
+  ]);
+  const attentionProductIds = attention ? remediationProductIds(timeline, attention) : [];
 
   if (!result.data) {
     return (
@@ -321,6 +329,8 @@ export default async function CataloguePage() {
             <CatalogueWorkspace
               products={products}
               suppliers={suppliers}
+              attention={attention}
+              attentionProductIds={attentionProductIds}
             />
           </section>
 

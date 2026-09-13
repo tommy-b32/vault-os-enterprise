@@ -220,6 +220,8 @@ const timelineItem = (overrides) => ({
   destination: "/inventory",
   evidence: [],
   blockerReasons: [],
+  affectedParentProductIds: [],
+  affectedStyleIds: [],
   ...overrides,
 });
 

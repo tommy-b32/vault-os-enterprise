@@ -5,11 +5,12 @@ import VaultAppShell from "@/components/layout/VaultAppShell";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { canCreateCashTransactions } from "@/lib/auth/rules";
 import { CashLedgerRepository } from "@/lib/business/CashLedgerRepository";
+import { WalletFreshness } from "@/lib/brain/WalletFreshness";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
-export default async function CommercialPage() {
+export default async function CommercialPage({ searchParams }: { searchParams: Promise<{ attention?: string }> }) {
   const operator = await requireAuthenticatedOperator();
   const [walletResponse, supplierResponse, supplierRuleResponse, cashLedgerResult] =
     await Promise.all([
@@ -24,6 +25,7 @@ export default async function CommercialPage() {
           manual_spending_limit_gbp,
           reserve_override_allowed,
           wallet_last_updated,
+          wallet_freshness_threshold_minutes,
           purchasing_power_state
         `)
         .single(),
@@ -75,6 +77,13 @@ export default async function CommercialPage() {
   }
 
   const wallet = walletResponse.data as PurchasingWalletData;
+  const attention = (await searchParams).attention;
+  const walletFreshness = attention === "wallet_stale" || attention === "wallet_freshness_unknown"
+    ? WalletFreshness.evaluate({
+        evidenceTimestamp: wallet.wallet_last_updated,
+        thresholdMinutes: wallet.wallet_freshness_threshold_minutes ?? null,
+      })
+    : null;
   const packMinimumBySupplierId = new Map(
     (supplierRuleResponse.data ?? []).map((rule) => [
       rule.supplier_id,
@@ -106,6 +115,14 @@ export default async function CommercialPage() {
             </p>
           </div>
         </header>
+        {walletFreshness ? (
+          <section className="commercial-card">
+            <p className="vault-eyebrow">Purchasing wallet remediation</p>
+            <h2>Wallet freshness: {walletFreshness.status}</h2>
+            <p>{walletFreshness.reason}</p>
+            <p>Last updated: {walletFreshness.evidenceTimestamp ?? "Unavailable"}. Canonical threshold: {walletFreshness.thresholdMinutes ?? "Unavailable"} minutes.</p>
+          </section>
+        ) : null}
 
         <CommercialWorkspace
           canCreateCashTransactions={canCreateCashTransactions(

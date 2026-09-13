@@ -28,6 +28,7 @@ import type {
 type ProductEditorProps = {
   product: CatalogueProduct | null;
   suppliers: CatalogueSupplier[];
+  remediation?: string | null;
 };
 
 const requirementLabels: Record<string, string> = {
@@ -58,6 +59,7 @@ function getNextActions(
 export function ProductEditor({
   product,
   suppliers,
+  remediation = null,
 }: ProductEditorProps) {
   const initialState: ProductSettingsActionState = {
     status: "idle",
@@ -69,14 +71,14 @@ export function ProductEditor({
     initialState,
   );
 
-  const [activeTab, setActiveTab] =
-    useState<ProductEditorTab>("business");
+  const remediationTab: ProductEditorTab = remediation === "invalid_or_missing_commercial_cost" ? "commercial" : "business";
+  const [activeTab, setActiveTab] = useState<ProductEditorTab>(remediationTab);
 
   useEffect(() => {
     // Style changes intentionally return the editor to its default workspace.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActiveTab("business");
-  }, [product?.style_id]);
+    setActiveTab(remediationTab);
+  }, [product?.style_id, remediationTab]);
 
   if (!product) {
     return (

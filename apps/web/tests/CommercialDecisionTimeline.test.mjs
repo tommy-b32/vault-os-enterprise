@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   COMMERCIAL_TIMELINE_DESTINATIONS,
   CommercialDecisionTimeline,
+  isCatalogueRemediationBlocker,
+  remediationProductIds,
 } from "../lib/brain/CommercialDecisionTimeline.ts";
 import { PredictionEngine } from "../lib/brain/PredictionEngine.ts";
 
@@ -41,6 +43,49 @@ test("classifier blocker becomes an undated Blocked item", () => {
   assert.equal(item.status, "blocked");
   assert.equal(item.deadlineAt, null);
   assert.ok(result.groups.find((group) => group.label === "Blocked").items.includes(item));
+});
+
+test("remediable blockers preserve only affected canonical products and share their remediation destination", () => {
+  const affected = candidate({ reasons: ["target_stock_days_missing"] });
+  const unrelated = { ...candidate({ reasons: ["inventory_stale"] }), styleId: "other::Blue", parentProductId: "other" };
+  const result = CommercialDecisionTimeline.build({
+    advisor: advisor([affected, unrelated]), candidates: [affected, unrelated], generatedAt,
+  });
+  const item = result.items.find((entry) => entry.id === "classifier-target_stock_days_missing");
+  assert.deepEqual(item.affectedParentProductIds, ["parent"]);
+  assert.deepEqual(item.affectedStyleIds, ["parent::Black"]);
+  assert.equal(item.destination, "/catalogue?attention=target_stock_days_missing");
+  assert.deepEqual(remediationProductIds(result, "target_stock_days_missing"), ["parent"]);
+});
+
+test("commercial, approval, and wallet blockers use canonical remediation workflows", () => {
+  const reasons = ["reorder_approval_missing", "invalid_or_missing_commercial_cost", "wallet_stale"];
+  const candidates = reasons.map((reason, index) => ({ ...candidate({ reasons: [reason] }), styleId: `p${index}::Black`, parentProductId: `p${index}` }));
+  const result = CommercialDecisionTimeline.build({ advisor: advisor(candidates), candidates, generatedAt });
+  assert.equal(result.items.find((item) => item.id === "classifier-reorder_approval_missing").destination, "/catalogue?attention=reorder_approval_missing");
+  assert.equal(result.items.find((item) => item.id === "classifier-invalid_or_missing_commercial_cost").destination, "/catalogue?attention=invalid_or_missing_commercial_cost");
+  assert.equal(result.items.find((item) => item.id === "wallet-freshness-policy").destination, "/commercial?attention=wallet_stale");
+});
+
+test("only supported catalogue blockers resolve current affected products", () => {
+  const candidates = [candidate({ reasons: ["reorder_approval_missing"] })];
+  const result = CommercialDecisionTimeline.build({ advisor: advisor(candidates), candidates, generatedAt });
+  assert.equal(isCatalogueRemediationBlocker("reorder_approval_missing"), true);
+  assert.equal(isCatalogueRemediationBlocker("not-a-blocker"), false);
+  assert.deepEqual(remediationProductIds(result, "reorder_approval_missing"), ["parent"]);
+  assert.deepEqual(remediationProductIds(result, "not-a-blocker"), []);
+  assert.deepEqual(remediationProductIds(null, "reorder_approval_missing"), []);
+});
+
+test("current remediation state drops resolved products and becomes empty only after the final resolution", () => {
+  const first = { ...candidate({ reasons: ["target_stock_days_missing"] }), parentProductId: "first", styleId: "first::Black" };
+  const second = { ...candidate({ reasons: ["target_stock_days_missing"] }), parentProductId: "second", styleId: "second::Blue" };
+  const before = CommercialDecisionTimeline.build({ advisor: advisor([first, second]), candidates: [first, second], generatedAt });
+  const afterOne = CommercialDecisionTimeline.build({ advisor: advisor([second]), candidates: [second], generatedAt });
+  const afterAll = CommercialDecisionTimeline.build({ advisor: advisor([]), candidates: [], generatedAt });
+  assert.deepEqual(remediationProductIds(before, "target_stock_days_missing"), ["first", "second"]);
+  assert.deepEqual(remediationProductIds(afterOne, "target_stock_days_missing"), ["second"]);
+  assert.deepEqual(remediationProductIds(afterAll, "target_stock_days_missing"), []);
 });
 
 test("trusted Advisor opportunity becomes the actionable decision", () => {
