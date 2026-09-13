@@ -168,13 +168,14 @@ export type FixedPackApprovalQualification = {
     provenance_fingerprint: string;
   }>;
 };
-export function classifyPurchaseOrderApprovalSources(sources: string[]): "legacy_pi" | "fixed_pack" {
+export function classifyPurchaseOrderApprovalSources(sources: string[]): "legacy_pi" | "fixed_pack" | "pending_catalogue" {
   const legacy = new Set(["purchase_intelligence_required", "purchase_intelligence_bring_forward"]);
   const fixed = new Set(["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"]);
-  if (!sources.length || sources.some((source) => !legacy.has(source) && !fixed.has(source))) throw new Error("PO_SOURCE_MIX_INVALID");
-  const family = legacy.has(sources[0]) ? legacy : fixed;
+  const pending = new Set(["pending_catalogue_purchase"]);
+  if (!sources.length || sources.some((source) => !legacy.has(source) && !fixed.has(source) && !pending.has(source))) throw new Error("PO_SOURCE_MIX_INVALID");
+  const family = legacy.has(sources[0]) ? legacy : fixed.has(sources[0]) ? fixed : pending;
   if (sources.some((source) => !family.has(source))) throw new Error("PO_SOURCE_MIX_INVALID");
-  return family === legacy ? "legacy_pi" : "fixed_pack";
+  return family === legacy ? "legacy_pi" : family === fixed ? "fixed_pack" : "pending_catalogue";
 }
 
 export type FixedPackAllocationConservationLine = {
@@ -687,7 +688,7 @@ function approvalMoney(value: number): number {
 async function getCurrentApprovalQualification(
   purchaseOrderId: string,
 ): Promise<{
-  sourceFamily: "legacy_pi" | "fixed_pack";
+  sourceFamily: "legacy_pi" | "fixed_pack" | "pending_catalogue";
   canonicalQualification: CanonicalApprovalQualification | FixedPackApprovalQualification | Record<string, never>;
 }> {
   const order = await supabaseAdmin
@@ -719,6 +720,10 @@ async function getCurrentApprovalQualification(
   );
 
   if (order.data.status === "approved") {
+    return { sourceFamily, canonicalQualification: {} };
+  }
+
+  if (sourceFamily === "pending_catalogue") {
     return { sourceFamily, canonicalQualification: {} };
   }
 
@@ -1407,9 +1412,13 @@ export async function getPurchaseOrder(
         vault_purchase_order_lines (
           *,
           vault_purchase_order_line_size_allocations (
+            id,
+            pending_catalogue_product_id,
             parent_product_id,
             model_design,
             normalized_size,
+            supplier_size_label,
+            identity_mode,
             ordered_units
           )
         ),
@@ -1436,9 +1445,11 @@ export async function getPurchaseOrder(
             vault_purchase_order_receipt_allocations (
               id,
               variant_id,
+              purchase_order_line_size_allocation_id,
               shopify_variant_id_snapshot,
               shopify_inventory_item_id_snapshot,
               quantity_received,
+              non_sellable_quantity,
               created_at
             )
           ),
@@ -1478,8 +1489,9 @@ export async function getPurchaseOrder(
 
   const productIds = Array.from(new Set(
     (data.vault_purchase_order_lines ?? [])
-      .map((line: { style_id: string }) => line.style_id.split("::")[0])
-      .filter(Boolean),
+      .flatMap((line: { vault_purchase_order_line_size_allocations?: Array<{ parent_product_id: string | null }> | null }) =>
+        (line.vault_purchase_order_line_size_allocations ?? []).map((allocation: { parent_product_id: string | null }) => allocation.parent_product_id))
+      .filter((productId: unknown): productId is string => typeof productId === "string" && productId.length > 0),
   ));
   const [supplierNames, approvingOperator, orderingOperator, shippingOperator, cancellingOperator, receivingVariants, receivingLocations] = await Promise.all([
     getSupplierNames([data.supplier_id]),
@@ -1590,9 +1602,14 @@ export async function approvePurchaseOrderDraft(input: {
     target_operator_id: input.operatorId,
     canonical_qualification: canonicalQualification,
   };
-  const { data, error } = sourceFamily === "fixed_pack"
-    ? await supabaseAdmin.rpc("approve_fixed_pack_vault_purchase_order", rpcInput)
-    : await supabaseAdmin.rpc("approve_vault_purchase_order", rpcInput);
+  const { data, error } = sourceFamily === "pending_catalogue"
+    ? await supabaseAdmin.rpc("approve_pending_catalogue_purchase_order", {
+      target_purchase_order_id: input.purchaseOrderId,
+      target_operator_id: input.operatorId,
+    })
+    : sourceFamily === "fixed_pack"
+      ? await supabaseAdmin.rpc("approve_fixed_pack_vault_purchase_order", rpcInput)
+      : await supabaseAdmin.rpc("approve_vault_purchase_order", rpcInput);
 
   if (error) throw new Error(error.message);
   const result = data?.[0];
@@ -1766,8 +1783,10 @@ export async function recordPurchaseOrderReceipt(input: {
     discrepancyNote: string | null;
     nonSellableQuantity: number;
     allocations: Array<{
-      variantId: string;
+      variantId?: string;
+      purchaseOrderLineSizeAllocationId?: string;
       quantityReceived: number;
+      nonSellableQuantity?: number;
     }>;
   }>;
 }): Promise<PurchaseOrderReceiptResult> {
@@ -1784,8 +1803,11 @@ export async function recordPurchaseOrderReceipt(input: {
         discrepancy_note: line.discrepancyNote,
         non_sellable_quantity: line.nonSellableQuantity,
         allocations: line.allocations.map((allocation) => ({
-          variant_id: allocation.variantId,
+          ...(allocation.purchaseOrderLineSizeAllocationId
+            ? { purchase_order_line_size_allocation_id: allocation.purchaseOrderLineSizeAllocationId }
+            : { variant_id: allocation.variantId }),
           quantity_received: allocation.quantityReceived,
+          ...(allocation.purchaseOrderLineSizeAllocationId ? { non_sellable_quantity: allocation.nonSellableQuantity ?? 0 } : {}),
         })),
       })),
     },

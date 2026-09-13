@@ -18,6 +18,8 @@ import {
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { addFixedPackRecommendationToDraft, type AddFixedPackRecommendationInput, type FixedPackDraftResult } from "@/lib/purchase-orders/FixedPackDraftRepository";
 import { addManualFixedPackToDraft, type AddManualFixedPackInput, type ManualFixedPackDraftResult } from "@/lib/purchase-orders/ManualFixedPackDraftRepository";
+import { addPendingCatalogueProductToDraft, type AddPendingCatalogueProductInput, type PendingCatalogueDraftResult } from "@/lib/purchase-orders/PendingCatalogueDraftRepository";
+import { linkPendingCatalogueProduct } from "@/lib/purchase-orders/PendingCatalogueLinkRepository";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -44,6 +46,33 @@ export async function addFixedPackRecommendationToDraftAction(input: AddFixedPac
 
 export async function addManualFixedPackToDraftAction(input: AddManualFixedPackInput): Promise<ManualFixedPackDraftResult> {
   try { const purchaseOrderId = typeof input?.purchaseOrderId === "string" ? input.purchaseOrderId.trim() : ""; const parentProductId = typeof input?.parentProductId === "string" ? input.parentProductId.trim() : ""; const styleId = typeof input?.styleId === "string" ? input.styleId.trim() : ""; const idempotencyKey = typeof input?.idempotencyKey === "string" ? input.idempotencyKey.trim() : ""; if (!UUID_PATTERN.test(purchaseOrderId) || !UUID_PATTERN.test(parentProductId) || !styleId || !idempotencyKey || idempotencyKey.length > 200 || !Number.isSafeInteger(input?.packCount) || input.packCount <= 0) return { success: false, code: "request_invalid", message: "The manual fixed-pack request is invalid." }; const operator = await requireAuthenticatedOperator(); const result = await addManualFixedPackToDraft(operator.id, { purchaseOrderId, parentProductId, styleId, packCount: input.packCount, idempotencyKey }); if (result.success) { revalidatePath("/purchase-orders"); revalidatePath(`/purchase-orders/${result.purchaseOrderId}`); } return result; } catch (error) { console.error("Unable to add manual fixed-pack to draft", error); return { success: false, code: "operation_failed", message: "The manual fixed-pack addition could not be completed." }; }
+}
+
+export async function addPendingCatalogueProductToDraftAction(input: AddPendingCatalogueProductInput): Promise<PendingCatalogueDraftResult> {
+  try {
+    const purchaseOrderId = typeof input?.purchaseOrderId === "string" ? input.purchaseOrderId.trim() : "";
+    const idempotencyKey = typeof input?.idempotencyKey === "string" ? input.idempotencyKey.trim() : "";
+    if (!UUID_PATTERN.test(purchaseOrderId) || !idempotencyKey || idempotencyKey.length > 200
+      || !Number.isSafeInteger(input?.orderedUnits) || input.orderedUnits <= 0
+      || typeof input?.unitCostGbp !== "number" || !Number.isFinite(input.unitCostGbp) || input.unitCostGbp < 0
+      || !Array.isArray(input?.sizes)) {
+      return { success: false, code: "request_invalid", message: "The new product request is invalid." };
+    }
+    const operator = await requireAuthenticatedOperator();
+    const result = await addPendingCatalogueProductToDraft(operator.id, input);
+    if (result.success) {
+      revalidatePath("/purchase-orders");
+      revalidatePath(`/purchase-orders/${result.purchaseOrderId}`);
+    }
+    return result;
+  } catch (error) {
+    console.error("Unable to add pending catalogue product to draft", error);
+    return { success: false, code: "operation_failed", message: "The new catalogue product could not be added to this draft." };
+  }
+}
+
+export async function linkPendingCatalogueProductAction(input: { purchaseOrderId: string; pendingProductId: string; mappings: Array<{ normalizedSize: string; canonicalProductId: string; canonicalVariantId: string; shopifyProductId: string }> }): Promise<{ success: boolean; message: string }> {
+  try { const operator=await requireAuthenticatedOperator(); if (!UUID_PATTERN.test(input.purchaseOrderId)||!UUID_PATTERN.test(input.pendingProductId)||!Array.isArray(input.mappings)||!input.mappings.length||input.mappings.some((m)=>!m.normalizedSize.trim()||!UUID_PATTERN.test(m.canonicalProductId)||!UUID_PATTERN.test(m.canonicalVariantId)||!m.shopifyProductId.trim())) return {success:false,message:"Complete every Shopify size mapping."}; await linkPendingCatalogueProduct(operator.id,input.pendingProductId,input.mappings); revalidatePath(`/purchase-orders/${input.purchaseOrderId}`); return {success:true,message:"Pending catalogue product linked to Shopify."}; } catch { return {success:false,message:"The pending catalogue product could not be linked safely."}; }
 }
 
 export type CancelPurchaseOrderState = {
@@ -175,7 +204,7 @@ export async function recordReceiptAgainstPurchaseOrder(
       purchaseOrderLineId: string;
       discrepancyNote: string | null;
       nonSellableQuantity: number;
-      allocations: Array<{ variantId: string; quantityReceived: number }>;
+      allocations: Array<{ variantId?: string; purchaseOrderLineSizeAllocationId?: string; quantityReceived: number; nonSellableQuantity?: number }>;
     }>();
     for (const [key, value] of formData.entries()) {
       if (!key.startsWith("allocation:") || typeof value !== "string" || value.trim() === "") continue;
@@ -194,6 +223,17 @@ export async function recordReceiptAgainstPurchaseOrder(
         allocations: [],
       };
       line.allocations.push({ variantId, quantityReceived });
+      linesById.set(purchaseOrderLineId, line);
+    }
+    for (const [key, value] of formData.entries()) {
+      if (!key.startsWith("pending_allocation:") || typeof value !== "string" || value.trim() === "") continue;
+      const [purchaseOrderLineId, allocationId, extra] = key.slice("pending_allocation:".length).split(":");
+      const quantityReceived = Number(value);
+      const nonSellable = Number(formData.get(`pending_non_sellable:${purchaseOrderLineId}:${allocationId}`) ?? 0);
+      if (extra !== undefined || !UUID_PATTERN.test(purchaseOrderLineId) || !UUID_PATTERN.test(allocationId) || !Number.isInteger(quantityReceived) || !Number.isInteger(nonSellable) || quantityReceived < 0 || nonSellable < 0 || quantityReceived + nonSellable <= 0) return { status: "error", message: "Each pending size needs positive sellable or non-sellable physical units." };
+      const note = formData.get(`note:${purchaseOrderLineId}`);
+      const line = linesById.get(purchaseOrderLineId) ?? { purchaseOrderLineId, discrepancyNote: typeof note === "string" && note.trim() ? note.trim() : null, nonSellableQuantity: 0, allocations: [] };
+      line.allocations.push({ purchaseOrderLineSizeAllocationId: allocationId, quantityReceived, nonSellableQuantity: nonSellable });
       linesById.set(purchaseOrderLineId, line);
     }
     for (const [key, value] of formData.entries()) {

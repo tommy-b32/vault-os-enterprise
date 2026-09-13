@@ -20,10 +20,13 @@ new Function("require", "exports", output)((name) => ({
   "@/components/purchase-orders/PurchaseOrderReceiving": { PurchaseOrderReceiving: () => null },
   "@/components/purchase-orders/PurchaseOrderShipping": { PurchaseOrderShipping: () => null },
   "@/components/purchase-orders/ManualFixedPackAddPanel": { ManualFixedPackAddPanel: () => null },
+  "@/components/purchase-orders/PendingCatalogueAddPanel": { PendingCatalogueAddPanel: () => null },
+  "@/components/purchase-orders/PendingCatalogueLinkCard": { PendingCatalogueLinkCard: () => null },
   "@/components/purchase-orders/PurchaseOrderProductImage": { PurchaseOrderProductImage: () => null },
   "@/lib/auth/operators": { requireAuthenticatedOperator: async () => ({}) },
   "@/lib/purchase-orders/PurchaseOrderRepository": { getPurchaseOrder: async () => null },
   "@/lib/purchase-orders/ManualFixedPackCandidates": { loadManualFixedPackCandidates: async () => ({ status: "incompatible", reason: "po_not_found" }) },
+  "@/lib/purchase-orders/PendingCatalogueLinkRepository": { loadPendingCatalogueLinkContexts: async () => [] },
 }[name] ?? require(name)), exports);
 
 const fixedLine = (allocations) => ({ source_recommendation_type: "fixed_pack_purchase_recommendation", vault_purchase_order_line_size_allocations: allocations });

@@ -9,10 +9,13 @@ import { PurchaseOrderPayment } from "@/components/purchase-orders/PurchaseOrder
 import { PurchaseOrderReceiving } from "@/components/purchase-orders/PurchaseOrderReceiving";
 import { PurchaseOrderShipping } from "@/components/purchase-orders/PurchaseOrderShipping";
 import { ManualFixedPackAddPanel } from "@/components/purchase-orders/ManualFixedPackAddPanel";
+import { PendingCatalogueAddPanel } from "@/components/purchase-orders/PendingCatalogueAddPanel";
+import { PendingCatalogueLinkCard } from "@/components/purchase-orders/PendingCatalogueLinkCard";
 import { PurchaseOrderProductImage } from "@/components/purchase-orders/PurchaseOrderProductImage";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { loadManualFixedPackCandidates } from "@/lib/purchase-orders/ManualFixedPackCandidates";
+import { loadPendingCatalogueLinkContexts } from "@/lib/purchase-orders/PendingCatalogueLinkRepository";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +33,12 @@ type SavedPurchaseOrderLine = {
   productImageUrl: string | null;
   productImageAlt: string;
   vault_purchase_order_line_size_allocations: Array<{
+    id: string;
+    pending_catalogue_product_id: string | null;
     normalized_size: string | null;
+    supplier_size_label: string | null;
     ordered_units: number | null;
+    identity_mode: string | null;
   }> | null;
 };
 
@@ -55,6 +62,19 @@ export function savedSizeAllocationDisplay(line: SavedPurchaseOrderLine): string
   }).map((allocation) => `${allocation.size} ×${allocation.orderedUnits}`).join(" · ");
 }
 
+function pendingSizeAllocationDisplay(line: SavedPurchaseOrderLine): string | null {
+  if (line.source_recommendation_type !== "pending_catalogue_purchase") return null;
+  const allocations = line.vault_purchase_order_line_size_allocations ?? [];
+  if (!allocations.length) return "Size allocation unavailable";
+  return allocations.map((allocation) => {
+    const normalized = allocation.normalized_size?.trim();
+    const supplier = allocation.supplier_size_label?.trim();
+    const orderedUnits = allocation.ordered_units;
+    if (allocation.identity_mode !== "pending_catalogue" || !normalized || !supplier || typeof orderedUnits !== "number" || !Number.isInteger(orderedUnits) || orderedUnits <= 0) return "Size allocation unavailable";
+    return `${supplier} (${normalized}) ×${allocation.ordered_units}`;
+  }).join(" · ");
+}
+
 type SavedReceiptLine = {
   id: string;
   purchase_order_line_id: string;
@@ -63,8 +83,10 @@ type SavedReceiptLine = {
   discrepancy_note: string | null;
   vault_purchase_order_receipt_allocations: Array<{
     id: string;
-    variant_id: string;
+    variant_id: string | null;
+    purchase_order_line_size_allocation_id: string | null;
     quantity_received: number;
+    non_sellable_quantity: number;
   }> | null;
 };
 
@@ -111,6 +133,7 @@ function readableSource(
   source: string,
 ) {
   if (source === "manual_fixed_pack_purchase") return "Manual Fixed Pack";
+  if (source === "pending_catalogue_purchase") return "Pending catalogue / New product";
   if (
     source ===
     "purchase_intelligence_required"
@@ -153,6 +176,8 @@ export default async function PurchaseOrderDetailPage({
     (draft.vault_purchase_order_lines ??
       []) as SavedPurchaseOrderLine[];
   const manualCandidates = await loadManualFixedPackCandidates(draft.id);
+  const pendingLinkContexts = await loadPendingCatalogueLinkContexts(draft.id);
+  const pendingProductsReadyToPost = new Set(pendingLinkContexts.filter((context) => context.status === "linked" && context.links.length === context.sizes.length && context.sizes.every((size) => size.physicalReceived === size.orderedUnits)).map((context) => context.pendingProductId));
 
   const totalUnits =
     lines.reduce(
@@ -166,6 +191,7 @@ export default async function PurchaseOrderDetailPage({
   const receipts = [...(draft.vault_purchase_order_receipts ?? [])]
     .sort((left, right) => left.received_date.localeCompare(right.received_date) || left.created_at.localeCompare(right.created_at));
   const receivedByLine = new Map<string, number>();
+  const receivedBySavedAllocation = new Map<string, { sellable: number; nonSellable: number }>();
   const nonSellableByLine = new Map<string, number>();
   for (const receipt of receipts) {
     for (const receiptLine of receipt.vault_purchase_order_receipt_lines ?? []) {
@@ -177,9 +203,16 @@ export default async function PurchaseOrderDetailPage({
         receiptLine.purchase_order_line_id,
         (nonSellableByLine.get(receiptLine.purchase_order_line_id) ?? 0) + receiptLine.non_sellable_quantity,
       );
+      for (const allocation of receiptLine.vault_purchase_order_receipt_allocations ?? []) {
+        if (!allocation.purchase_order_line_size_allocation_id) continue;
+        const prior = receivedBySavedAllocation.get(allocation.purchase_order_line_size_allocation_id) ?? { sellable: 0, nonSellable: 0 };
+        receivedBySavedAllocation.set(allocation.purchase_order_line_size_allocation_id, { sellable: prior.sellable + allocation.quantity_received, nonSellable: prior.nonSellable + allocation.non_sellable_quantity });
+      }
     }
   }
+
   const productNameByLine = new Map(lines.map((line) => [line.id, line.product_name]));
+  const savedAllocationById = new Map(lines.flatMap((line) => (line.vault_purchase_order_line_size_allocations ?? []).map((allocation) => [allocation.id, allocation] as const)));
   const receivingVariants = (draft.receiving_variants ?? []) as ReceivingVariant[];
   const receivingVariantById = new Map(receivingVariants.map((variant) => [variant.id, variant]));
   const postedByAllocation = new Map<string, number>();
@@ -393,7 +426,7 @@ export default async function PurchaseOrderDetailPage({
 
             {lines.map(
               (line: SavedPurchaseOrderLine) => {
-                const sizeAllocation = savedSizeAllocationDisplay(line);
+                const sizeAllocation = savedSizeAllocationDisplay(line) ?? pendingSizeAllocationDisplay(line);
                 return (
                 <article
                   className="purchase-order-editable-line"
@@ -503,6 +536,9 @@ export default async function PurchaseOrderDetailPage({
 
           {manualCandidates.status === "compatible" ? <ManualFixedPackAddPanel purchaseOrderId={manualCandidates.purchaseOrderId} supplierName={manualCandidates.supplierName} supplierMinimumOrderPacks={manualCandidates.supplierMinimumOrderPacks} currentBasketPacks={manualCandidates.currentBasketPacks} remainingPacksToMinimum={manualCandidates.remainingPacksToMinimum} candidates={manualCandidates.candidates} /> : null}
 
+        {draft.status === "draft" && lines.every((line) => line.source_recommendation_type === "pending_catalogue_purchase") ? <PendingCatalogueAddPanel purchaseOrderId={draft.id} supplierName={supplierName} /> : null}
+        {pendingLinkContexts.map((context) => <PendingCatalogueLinkCard key={context.pendingProductId} purchaseOrderId={draft.id} context={context} />)}
+
           {draft.reasoning ? (
             <p className="purchase-order-capital-guidance">
               {draft.reasoning}
@@ -572,6 +608,7 @@ export default async function PurchaseOrderDetailPage({
                   sourceVariantId: variant.source_variant_id,
                   inventoryItemId: variant.source_inventory_item_id,
                 })),
+              pendingAllocations: line.source_recommendation_type === "pending_catalogue_purchase" ? (line.vault_purchase_order_line_size_allocations ?? []).filter((allocation) => allocation.identity_mode === "pending_catalogue" && allocation.pending_catalogue_product_id && allocation.normalized_size && allocation.supplier_size_label && typeof allocation.ordered_units === "number").map((allocation) => ({ id: allocation.id, supplierSizeLabel: allocation.supplier_size_label!, normalizedSize: allocation.normalized_size!, orderedUnits: allocation.ordered_units!, sellableReceived: receivedBySavedAllocation.get(allocation.id)?.sellable ?? 0, nonSellableReceived: receivedBySavedAllocation.get(allocation.id)?.nonSellable ?? 0 })) : undefined,
             }))}
             locations={(draft.receiving_locations ?? []).map((location: ReceivingLocation) => ({
               id: location.id,
@@ -593,11 +630,12 @@ export default async function PurchaseOrderDetailPage({
                 nonSellableQuantity: line.non_sellable_quantity,
                 allocations: (line.vault_purchase_order_receipt_allocations ?? []).map((allocation) => ({
                   id: allocation.id,
-                  variantId: allocation.variant_id,
-                  size: receivingVariantById.get(allocation.variant_id)?.normalized_size ?? "Unknown size",
+                  variantId: allocation.variant_id ?? "",
+                  size: allocation.variant_id ? receivingVariantById.get(allocation.variant_id)?.normalized_size ?? "Unknown size" : (() => { const saved = allocation.purchase_order_line_size_allocation_id ? savedAllocationById.get(allocation.purchase_order_line_size_allocation_id) : null; return saved?.supplier_size_label && saved.normalized_size ? `${saved.supplier_size_label} (${saved.normalized_size})` : "Pending catalogue size"; })(),
                   quantityReceived: allocation.quantity_received,
                   postedQuantity: postedByAllocation.get(allocation.id) ?? 0,
-                  postingBlocked: blockedPostingAllocations.has(allocation.id),
+                  postingBlocked: blockedPostingAllocations.has(allocation.id) || Boolean(allocation.purchase_order_line_size_allocation_id && savedAllocationById.get(allocation.purchase_order_line_size_allocation_id)?.pending_catalogue_product_id && !pendingProductsReadyToPost.has(savedAllocationById.get(allocation.purchase_order_line_size_allocation_id)!.pending_catalogue_product_id!)),
+                  postingBlockReason: allocation.purchase_order_line_size_allocation_id && savedAllocationById.get(allocation.purchase_order_line_size_allocation_id)?.pending_catalogue_product_id && !pendingProductsReadyToPost.has(savedAllocationById.get(allocation.purchase_order_line_size_allocation_id)!.pending_catalogue_product_id!) ? "Link every received pending size to a canonical Shopify variant before posting." : null,
                 })),
               })),
             }))}

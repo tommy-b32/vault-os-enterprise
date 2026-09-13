@@ -26,6 +26,7 @@ type ReceivingLine = {
     sourceVariantId: string;
     inventoryItemId: string;
   }>;
+  pendingAllocations?: Array<{ id: string; supplierSizeLabel: string; normalizedSize: string; orderedUnits: number; sellableReceived: number; nonSellableReceived: number }>;
 };
 
 type ReceivingLocation = {
@@ -53,6 +54,7 @@ type ReceiptEvent = {
       quantityReceived: number;
       postedQuantity: number;
       postingBlocked: boolean;
+      postingBlockReason?: string | null;
     }>;
   }>;
 };
@@ -76,6 +78,7 @@ export function PurchaseOrderReceiving({
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [postingIdempotencyKey] = useState(() => crypto.randomUUID());
   const [receivedDate, setReceivedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [pendingInputError, setPendingInputError] = useState<string | null>(null);
   const eligible = status !== "received";
 
   useEffect(() => {
@@ -142,7 +145,7 @@ export function PurchaseOrderReceiving({
                             Post size {allocation.size} to Shopify (maximum {remaining})
                             <input defaultValue={remaining} disabled={allocation.postingBlocked} max={remaining} min="0"
                               name={`post_allocation:${allocation.id}`} step="1" type="number" />
-                            {allocation.postingBlocked ? <small>A prior posting outcome is pending or unknown; further posting is blocked.</small> : null}
+                            {allocation.postingBlocked ? <small>{allocation.postingBlockReason ?? "A prior posting outcome is pending or unknown; further posting is blocked."}</small> : null}
                           </label>
                         ) : null;
                       })}
@@ -162,7 +165,7 @@ export function PurchaseOrderReceiving({
       ) : <p>No receipts recorded.</p>}
 
       {eligible ? (
-        <form action={action}>
+        <form action={action} onSubmit={(event) => { const form = new FormData(event.currentTarget); for (const [key, value] of form.entries()) { if (!key.startsWith("pending_allocation:") || typeof value !== "string") continue; const suffix = key.slice("pending_allocation:".length); const outstanding = Number((event.currentTarget.elements.namedItem(key) as HTMLInputElement | null)?.dataset.pendingOutstanding); const physical = Number(value) + Number(form.get(`pending_non_sellable:${suffix}`) ?? 0); if (!Number.isFinite(physical) || physical <= 0 || physical > outstanding) { event.preventDefault(); setPendingInputError("Pending physical receipt cannot exceed the saved outstanding size quantity."); return; } } setPendingInputError(null); }}>
           <input name="purchase_order_id" type="hidden" value={purchaseOrderId} />
           <input name="idempotency_key" suppressHydrationWarning type="hidden" value={idempotencyKey} />
           <label>
@@ -186,17 +189,20 @@ export function PurchaseOrderReceiving({
             return (
               <fieldset disabled={remaining === null || remaining === 0} key={line.id}>
                 <legend>{line.productName}</legend>
-                {line.variants.length ? line.variants.map((variant) => (
+                {line.pendingAllocations?.length ? line.pendingAllocations.map((allocation) => {
+                  const outstanding = Math.max(0, allocation.orderedUnits - allocation.sellableReceived - allocation.nonSellableReceived);
+                  return <div key={allocation.id}><strong>{allocation.supplierSizeLabel} ({allocation.normalizedSize})</strong><small>Ordered {allocation.orderedUnits} = sellable received {allocation.sellableReceived} + non-sellable received {allocation.nonSellableReceived} + outstanding {outstanding}</small><label>Sellable units received now<input data-pending-outstanding={outstanding} defaultValue="0" max={outstanding} min="0" name={`pending_allocation:${line.id}:${allocation.id}`} required step="1" type="number" /></label><label>Non-sellable units received now<input defaultValue="0" max={outstanding} min="0" name={`pending_non_sellable:${line.id}:${allocation.id}`} required step="1" type="number" /></label></div>;
+                }) : line.variants.length ? line.variants.map((variant) => (
                   <label key={variant.id}>
                     Accepted sellable units — size {variant.size ?? variant.title ?? "Default"}
                     <input defaultValue="0" max={remaining ?? undefined} min="0" name={`allocation:${line.id}:${variant.id}`} required step="1" type="number" />
                     <small>Shopify variant {variant.sourceVariantId} · inventory item {variant.inventoryItemId}</small>
                   </label>
                 )) : <p>Exact active Shopify size variants are unavailable. This line cannot be received safely.</p>}
-                <label>
+                {!line.pendingAllocations?.length ? <label>
                   Damaged, wrong, or otherwise non-sellable units
                   <input defaultValue="0" max={remaining ?? undefined} min="0" name={`non_sellable:${line.id}`} required step="1" type="number" />
-                </label>
+                </label> : null}
                 <label>
                   Optional discrepancy or damage note
                   <textarea name={`note:${line.id}`} rows={2} />
@@ -207,7 +213,7 @@ export function PurchaseOrderReceiving({
           <p>
             This records physical receipt and exact size allocation evidence only. Count only accepted sellable units; describe short, damaged, or wrong items in the note. Vault OS does not alter Shopify inventory automatically.
           </p>
-          <button disabled={pending || !idempotencyKey || locations.length === 0 || lines.every((line) => line.orderedQuantity === null || line.receivedQuantity + line.nonSellableQuantity >= line.orderedQuantity || line.variants.length === 0)} type="submit">
+          <button disabled={pending || !idempotencyKey || locations.length === 0 || lines.every((line) => line.orderedQuantity === null || line.receivedQuantity + line.nonSellableQuantity >= line.orderedQuantity || (!line.pendingAllocations?.length && line.variants.length === 0))} type="submit">
             {pending ? "Recording Receipt…" : "Record Receipt"}
           </button>
           {state.message ? <p role={state.status === "error" ? "alert" : "status"}>{state.message}</p> : null}

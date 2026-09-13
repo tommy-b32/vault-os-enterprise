@@ -10,9 +10,12 @@ test("authoritative persisted source families route each approval RPC", () => {
   assert.match(repository, /purchase_intelligence_bring_forward/);
   assert.match(repository, /fixed_pack_purchase_recommendation/);
   assert.match(repository, /manual_fixed_pack_purchase/);
-  assert.match(repository, /if \(!sources\.length \|\| sources\.some\(\(source\) => !legacy\.has\(source\) && !fixed\.has\(source\)\)\) throw new Error\("PO_SOURCE_MIX_INVALID"\)/);
+  assert.match(repository, /pending_catalogue_purchase/);
+  assert.match(repository, /!legacy\.has\(source\) && !fixed\.has\(source\) && !pending\.has\(source\)/);
   assert.match(repository, /if \(sources\.some\(\(source\) => !family\.has\(source\)\)\) throw new Error\("PO_SOURCE_MIX_INVALID"\)/);
-  assert.match(repository, /sourceFamily === "fixed_pack"\s*\? await supabaseAdmin\.rpc\("approve_fixed_pack_vault_purchase_order", rpcInput\)\s*:\s*await supabaseAdmin\.rpc\("approve_vault_purchase_order", rpcInput\)/);
+  assert.match(repository, /approve_pending_catalogue_purchase_order/);
+  assert.match(repository, /approve_fixed_pack_vault_purchase_order/);
+  assert.match(repository, /approve_vault_purchase_order/);
 });
 
 test("fixed-pack qualification is server-derived for recommendation, manual, and combined baskets", () => {
