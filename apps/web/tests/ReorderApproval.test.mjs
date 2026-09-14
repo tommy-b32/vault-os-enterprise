@@ -1,11 +1,48 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { requiresExplicitReorderApproval } from "../lib/brain/ReorderApprovalEligibility.ts";
 
 const migrationUrl = new URL(
   "../../../supabase/migrations/20260804020000_product_reorder_approvals.sql",
   import.meta.url,
 );
+
+function approvalProduct(overrides = {}) {
+  return {
+    style_id: "parent::Black",
+    parent_product_id: "parent",
+    product_name: "Product",
+    configuration_trusted: true,
+    inventory_strategy: "stocked",
+    restock_enabled: true,
+    reorder_approval: null,
+    ...overrides,
+  };
+}
+
+test("approval blocker is emitted only for a product eligible for explicit reorder approval", () => {
+  assert.equal(requiresExplicitReorderApproval(approvalProduct()), true);
+
+  for (const overrides of [
+    { inventory_strategy: "discontinued" },
+    { inventory_strategy: "do_not_restock" },
+    { inventory_strategy: "dropship" },
+    { restock_enabled: false },
+    { configuration_trusted: false },
+  ]) {
+    assert.equal(requiresExplicitReorderApproval(approvalProduct(overrides)), false);
+  }
+});
+
+test("classifier uses the shared explicit-approval gate for its approval blocker", async () => {
+  const classifier = await readFile(
+    new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(classifier, /requiresExplicitReorderApproval\(product\).*reorder_approval_missing/);
+});
 
 test("complete configuration requires an explicit active approval", async () => {
   const sql = await readFile(migrationUrl, "utf8");
@@ -52,7 +89,7 @@ test("Advisor reports missing approval without changing ranking", async () => {
   ]);
 
   assert.match(classifier, /reorder_approval_missing/);
-  assert.match(classifier, /product\.reorder_approval\?\.approval_state/);
+  assert.match(classifier, /requiresExplicitReorderApproval\(product\)/);
   assert.match(advisor, /candidates: TrustedBuyingCandidateResult\[\]/);
   assert.match(advisor, /reorderApprovalMissing: countReason\("reorder_approval_missing"\)/);
 });

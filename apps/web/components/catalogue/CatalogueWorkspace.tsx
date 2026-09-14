@@ -69,7 +69,7 @@ export function CatalogueWorkspace({
   return (
     <section className={`catalogue-workspace ${attention ? "is-remediation" : ""}`}>
       <aside className="catalogue-master-panel">
-        {attention ? <header className="catalogue-remediation-list-heading"><p className="vault-eyebrow">Affected products</p><h2>{remediationTitle}</h2><span>{filteredProducts.length} requiring attention</span></header> : null}
+        {attention ? <header className="catalogue-remediation-list-heading"><p className="vault-eyebrow">Affected styles</p><h2>{remediationTitle}</h2><span>{filteredProducts.length} matching style{filteredProducts.length === 1 ? "" : "s"} / {attentionProductIds.length} parent product{attentionProductIds.length === 1 ? "" : "s"} require attention</span></header> : null}
         <ProductSearch
           onChange={handleSearchChange}
           resultCount={filteredProducts.length}

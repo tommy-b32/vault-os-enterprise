@@ -62,6 +62,9 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
   } = result.data;
 
   if (attention) {
+    const attentionStyleCount = products.filter((product) =>
+      attentionProductIds.includes(product.parent_product_id),
+    ).length;
     const remediationDetails = {
       reorder_approval_missing: { title: "Review reorder approvals", explanation: "These products need an explicit operator approval before Vault Brain can use them for reordering." },
       target_stock_days_missing: { title: "Set target stock days", explanation: "Vault Brain needs a target stock-days rule before it can assess replenishment coverage." },
@@ -70,7 +73,7 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
 
     return <VaultAppShell searchPlaceholder="Search affected products..." notificationCount={attentionProductIds.length} systemStatusLabel="Catalogue remediation active">
       <main className="catalogue-page catalogue-remediation-page">
-        <header className="catalogue-remediation-header"><div><p className="vault-eyebrow">VAULT BRAIN REMEDIATION</p><h1>{remediationDetails.title}</h1><p>{remediationDetails.explanation}</p><strong>{attentionProductIds.length} product{attentionProductIds.length === 1 ? "" : "s"} currently require attention.</strong></div><Link className="catalogue-remediation-back" href="/catalogue">Back to full Catalogue</Link></header>
+        <header className="catalogue-remediation-header"><div><p className="vault-eyebrow">VAULT BRAIN REMEDIATION</p><h1>{remediationDetails.title}</h1><p>{remediationDetails.explanation}</p><strong>{attentionProductIds.length} product{attentionProductIds.length === 1 ? "" : "s"} / {attentionStyleCount} style{attentionStyleCount === 1 ? "" : "s"} require attention.</strong></div><Link className="catalogue-remediation-back" href="/catalogue">Back to full Catalogue</Link></header>
         <CatalogueWorkspace products={products} suppliers={suppliers} attention={attention} attentionProductIds={attentionProductIds} remediationTitle={remediationDetails.title} />
       </main>
     </VaultAppShell>;

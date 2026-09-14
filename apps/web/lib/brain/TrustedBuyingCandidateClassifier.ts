@@ -5,6 +5,7 @@ import {
 } from "@/lib/supplier/SupplierMinimum";
 import type { CatalogueProduct } from "@/types/catalogue";
 import { WalletFreshness } from "@/lib/brain/WalletFreshness";
+import { requiresExplicitReorderApproval } from "./ReorderApprovalEligibility";
 
 export const TRUSTED_BUYING_MARGIN_PERCENT = 45;
 export const TRUSTED_BUYING_RETURN_PERCENT = 100;
@@ -213,7 +214,7 @@ export function classifyTrustedBuyingCandidate({
   if (!product.configuration_trusted) add(reasons, "configuration_untrusted");
   if (product.inventory_strategy !== "stocked") add(reasons, "inventory_strategy_not_stocked");
   if (!product.restock_enabled) add(reasons, "restock_disabled");
-  if (product.reorder_approval?.approval_state !== "approved") add(reasons, "reorder_approval_missing");
+  if (requiresExplicitReorderApproval(product)) add(reasons, "reorder_approval_missing");
   if (!product.supplier_id || !supplier) add(reasons, "supplier_missing");
   else if (!supplier.active) add(reasons, "supplier_inactive");
   if (supplier && !supplier.currency?.trim()) add(reasons, "supplier_currency_missing");
