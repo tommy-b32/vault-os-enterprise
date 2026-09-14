@@ -8,6 +8,7 @@ import { WalletFreshness } from "@/lib/brain/WalletFreshness";
 import {
   requiresCommercialCostRemediation,
   requiresExplicitReorderApproval,
+  requiresTargetStockDaysRemediation,
 } from "./ReorderApprovalEligibility";
 
 export const TRUSTED_BUYING_MARGIN_PERCENT = 45;
@@ -243,7 +244,9 @@ export function classifyTrustedBuyingCandidate({
   if (missing.includes("inventory_stale")) add(reasons, "inventory_stale");
   if (missing.includes("sales_history_unavailable")) add(reasons, "sales_history_unavailable");
   if ((replenishment.supplierLeadTimeDays ?? 0) <= 0) add(reasons, "supplier_lead_time_missing");
-  if ((replenishment.targetStockDays ?? 0) <= 0) add(reasons, "target_stock_days_missing");
+  if (requiresTargetStockDaysRemediation(product, replenishment.targetStockDays)) {
+    add(reasons, "target_stock_days_missing");
+  }
   if ((replenishment.unitsPerPack ?? 0) <= 0) add(reasons, "units_per_pack_missing");
   if (replenishment.supplierMoqPacks === null || replenishment.supplierMoqPacks < 0) add(reasons, "supplier_moq_missing");
   if (demand.status === "evidence_unavailable") add(reasons, "replenishment_untrusted");

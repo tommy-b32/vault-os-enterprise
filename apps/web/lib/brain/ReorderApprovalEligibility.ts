@@ -27,6 +27,17 @@ export function requiresCommercialCostRemediation(
   );
 }
 
+export function requiresTargetStockDaysRemediation(
+  product: FuturePurchasingInput,
+  targetStockDays: number | null,
+): boolean {
+  return isFuturePurchasingProduct(product) && (
+    targetStockDays === null ||
+    !Number.isFinite(targetStockDays) ||
+    targetStockDays <= 0
+  );
+}
+
 export function requiresExplicitReorderApproval(
   product: ReorderApprovalEligibilityInput,
 ): boolean {

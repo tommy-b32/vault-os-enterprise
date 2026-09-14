@@ -5,6 +5,7 @@ import {
   isFuturePurchasingProduct,
   requiresCommercialCostRemediation,
   requiresExplicitReorderApproval,
+  requiresTargetStockDaysRemediation,
 } from "../lib/brain/ReorderApprovalEligibility.ts";
 
 const migrationUrl = new URL(
@@ -70,6 +71,31 @@ test("classifier gates invalid commercial cost with the future-purchasing predic
   );
 
   assert.match(classifier, /requiresCommercialCostRemediation\(product, commercial\.landed_cost_per_pack_gbp\)/);
+});
+
+test("target-stock-days blocker applies only to future-replenishment products with missing or invalid days", () => {
+  assert.equal(requiresTargetStockDaysRemediation(approvalProduct(), null), true);
+  assert.equal(requiresTargetStockDaysRemediation(approvalProduct(), 0), true);
+  assert.equal(requiresTargetStockDaysRemediation(approvalProduct(), 30), false);
+
+  for (const overrides of [
+    { inventory_strategy: "discontinued" },
+    { inventory_strategy: "do_not_restock" },
+    { inventory_strategy: "dropship" },
+    { inventory_strategy: "service" },
+    { restock_enabled: false },
+  ]) {
+    assert.equal(requiresTargetStockDaysRemediation(approvalProduct(overrides), null), false);
+  }
+});
+
+test("classifier gates target-stock-days remediation with the future-purchasing predicate", async () => {
+  const classifier = await readFile(
+    new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(classifier, /requiresTargetStockDaysRemediation\(product, replenishment\.targetStockDays\)/);
 });
 
 test("complete configuration requires an explicit active approval", async () => {
