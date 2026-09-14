@@ -38,6 +38,14 @@ export function requiresTargetStockDaysRemediation(
   );
 }
 
+export function requiresSupplierMinimumRemediation(
+  product: FuturePurchasingInput,
+  supplier: { active: boolean } | null,
+  minimumState: "unknown" | "not_applicable" | "defined",
+): boolean {
+  return isFuturePurchasingProduct(product) && supplier?.active === true && minimumState === "unknown";
+}
+
 export function requiresExplicitReorderApproval(
   product: ReorderApprovalEligibilityInput,
 ): boolean {

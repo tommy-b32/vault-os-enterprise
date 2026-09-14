@@ -5,8 +5,10 @@ import {
   isFuturePurchasingProduct,
   requiresCommercialCostRemediation,
   requiresExplicitReorderApproval,
+  requiresSupplierMinimumRemediation,
   requiresTargetStockDaysRemediation,
 } from "../lib/brain/ReorderApprovalEligibility.ts";
+import { SupplierMinimumContract } from "../lib/supplier/SupplierMinimum.ts";
 
 const migrationUrl = new URL(
   "../../../supabase/migrations/20260804020000_product_reorder_approvals.sql",
@@ -96,6 +98,41 @@ test("classifier gates target-stock-days remediation with the future-purchasing 
   );
 
   assert.match(classifier, /requiresTargetStockDaysRemediation\(product, replenishment\.targetStockDays\)/);
+});
+
+test("supplier-minimum blocker requires a future-purchasing product, active supplier, and unknown policy", () => {
+  const activeSupplier = { active: true };
+  assert.equal(requiresSupplierMinimumRemediation(approvalProduct(), activeSupplier, "unknown"), true);
+  assert.equal(requiresSupplierMinimumRemediation(approvalProduct(), null, "unknown"), false);
+  assert.equal(requiresSupplierMinimumRemediation(approvalProduct(), { active: false }, "unknown"), false);
+
+  for (const overrides of [
+    { inventory_strategy: "discontinued" },
+    { inventory_strategy: "do_not_restock" },
+    { inventory_strategy: "dropship" },
+    { restock_enabled: false },
+  ]) {
+    assert.equal(requiresSupplierMinimumRemediation(approvalProduct(overrides), activeSupplier, "unknown"), false);
+  }
+});
+
+test("defined and explicitly not-applicable supplier policies remain trusted", () => {
+  const exclusive = SupplierMinimumContract.create({ value: null, currency: "GBP", minimumOrderPacks: 20 });
+  const noMinimum = SupplierMinimumContract.create({ value: 0, currency: "EUR", minimumOrderPacks: 0 });
+
+  assert.equal(exclusive.state, "defined");
+  assert.equal(noMinimum.state, "not_applicable");
+  assert.equal(requiresSupplierMinimumRemediation(approvalProduct(), { active: true }, exclusive.state), false);
+  assert.equal(requiresSupplierMinimumRemediation(approvalProduct(), { active: true }, noMinimum.state), false);
+});
+
+test("classifier gates supplier-minimum unknown with the shared relevance predicate", async () => {
+  const classifier = await readFile(
+    new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(classifier, /requiresSupplierMinimumRemediation\(product, supplier, supplierMinimum\.state\)/);
 });
 
 test("complete configuration requires an explicit active approval", async () => {

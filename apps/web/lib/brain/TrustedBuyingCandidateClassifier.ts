@@ -8,6 +8,7 @@ import { WalletFreshness } from "@/lib/brain/WalletFreshness";
 import {
   requiresCommercialCostRemediation,
   requiresExplicitReorderApproval,
+  requiresSupplierMinimumRemediation,
   requiresTargetStockDaysRemediation,
 } from "./ReorderApprovalEligibility";
 
@@ -260,7 +261,9 @@ export function classifyTrustedBuyingCandidate({
   ) add(reasons, "quantity_below_minimum_policy_unresolved");
 
   let minimumEvaluation: TrustedBuyingCandidateResult["supplierMinimum"]["evaluation"] = "not_evaluated";
-  if (supplierMinimum.state === "unknown") add(reasons, "supplier_minimum_unknown");
+  if (requiresSupplierMinimumRemediation(product, supplier, supplierMinimum.state)) {
+    add(reasons, "supplier_minimum_unknown");
+  }
   else if (supplierMinimum.state === "defined") add(reasons, "supplier_minimum_not_evaluated");
   if (supplierMinimum.state === "defined" && !supplierMinimum.currency) {
     minimumEvaluation = "currency_unavailable";
