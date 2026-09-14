@@ -23,6 +23,7 @@ function approvalProduct(overrides = {}) {
     configuration_trusted: true,
     inventory_strategy: "stocked",
     restock_enabled: true,
+    supplier_id: "supplier",
     reorder_approval: null,
     ...overrides,
   };
@@ -51,10 +52,16 @@ test("classifier uses the shared explicit-approval gate for its approval blocker
   assert.match(classifier, /requiresExplicitReorderApproval\(product\).*reorder_approval_missing/);
 });
 
-test("commercial-cost blocker applies only to future-purchasing products with missing or invalid cost", () => {
+test("commercial-cost blocker requires a future-purchasing product with an active assigned supplier and invalid cost", () => {
+  const activeSupplier = { active: true };
   assert.equal(isFuturePurchasingProduct(approvalProduct()), true);
-  assert.equal(requiresCommercialCostRemediation(approvalProduct(), null), true);
-  assert.equal(requiresCommercialCostRemediation(approvalProduct(), 0), true);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct(), activeSupplier, null), true);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct(), activeSupplier, 0), true);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct(), activeSupplier, Number.NaN), true);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct(), activeSupplier, 10), false);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct({ supplier_id: null }), activeSupplier, null), false);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct(), null, null), false);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct(), { active: false }, null), false);
 
   for (const overrides of [
     { inventory_strategy: "discontinued" },
@@ -62,17 +69,19 @@ test("commercial-cost blocker applies only to future-purchasing products with mi
     { restock_enabled: false },
   ]) {
     assert.equal(isFuturePurchasingProduct(approvalProduct(overrides)), false);
-    assert.equal(requiresCommercialCostRemediation(approvalProduct(overrides), null), false);
+    assert.equal(requiresCommercialCostRemediation(approvalProduct(overrides), activeSupplier, null), false);
   }
 });
 
-test("classifier gates invalid commercial cost with the future-purchasing predicate", async () => {
+test("classifier gates invalid commercial cost with future-purchasing and active-supplier relevance", async () => {
   const classifier = await readFile(
     new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url),
     "utf8",
   );
 
-  assert.match(classifier, /requiresCommercialCostRemediation\(product, commercial\.landed_cost_per_pack_gbp\)/);
+  assert.match(classifier, /requiresCommercialCostRemediation\(product, supplier, commercial\.landed_cost_per_pack_gbp\)/);
+  assert.match(classifier, /!product\.supplier_id \|\| !supplier\).*supplier_missing/s);
+  assert.match(classifier, /else if \(!supplier\.active\).*supplier_inactive/s);
 });
 
 test("target-stock-days blocker applies only to future-replenishment products with missing or invalid days", () => {

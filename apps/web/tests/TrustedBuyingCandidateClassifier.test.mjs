@@ -90,7 +90,7 @@ test("calculated quantity and MOQ remain distinct and unresolved", async () => {
 
 test("supplier minimum and wallet gaps remain policy blockers", async () => {
   const source = await readFile(classifierUrl, "utf8");
-  assert.match(source, /supplierMinimum\.state === "unknown"/);
+  assert.match(source, /requiresSupplierMinimumRemediation\(product, supplier, supplierMinimum\.state\)/);
   assert.match(source, /supplier_minimum_not_evaluated/);
   assert.match(source, /minimumEvaluation = "currency_unavailable"/);
   assert.match(source, /wallet_unavailable/);

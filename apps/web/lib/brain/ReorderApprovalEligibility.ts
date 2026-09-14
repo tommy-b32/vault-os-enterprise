@@ -10,6 +10,10 @@ type FuturePurchasingInput = {
   restock_enabled: boolean;
 };
 
+type CommercialCostRemediationInput = FuturePurchasingInput & {
+  supplier_id: string | null;
+};
+
 export function isFuturePurchasingProduct(
   product: FuturePurchasingInput,
 ): boolean {
@@ -17,14 +21,17 @@ export function isFuturePurchasingProduct(
 }
 
 export function requiresCommercialCostRemediation(
-  product: FuturePurchasingInput,
+  product: CommercialCostRemediationInput,
+  supplier: { active: boolean } | null,
   landedCostPerPackGbp: number | null,
 ): boolean {
-  return isFuturePurchasingProduct(product) && (
-    landedCostPerPackGbp === null ||
-    !Number.isFinite(landedCostPerPackGbp) ||
-    landedCostPerPackGbp <= 0
-  );
+  return isFuturePurchasingProduct(product) &&
+    Boolean(product.supplier_id) &&
+    supplier?.active === true && (
+      landedCostPerPackGbp === null ||
+      !Number.isFinite(landedCostPerPackGbp) ||
+      landedCostPerPackGbp <= 0
+    );
 }
 
 export function requiresTargetStockDaysRemediation(

@@ -225,7 +225,7 @@ export function classifyTrustedBuyingCandidate({
   if (supplier && !supplier.currency?.trim()) add(reasons, "supplier_currency_missing");
 
   if (!commercial.commercial_cost_trusted) add(reasons, "commercial_data_missing");
-  if (requiresCommercialCostRemediation(product, commercial.landed_cost_per_pack_gbp)) {
+  if (requiresCommercialCostRemediation(product, supplier, commercial.landed_cost_per_pack_gbp)) {
     add(reasons, "invalid_or_missing_commercial_cost");
   }
   if (
