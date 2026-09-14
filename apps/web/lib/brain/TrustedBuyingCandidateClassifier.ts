@@ -5,7 +5,10 @@ import {
 } from "@/lib/supplier/SupplierMinimum";
 import type { CatalogueProduct } from "@/types/catalogue";
 import { WalletFreshness } from "@/lib/brain/WalletFreshness";
-import { requiresExplicitReorderApproval } from "./ReorderApprovalEligibility";
+import {
+  requiresCommercialCostRemediation,
+  requiresExplicitReorderApproval,
+} from "./ReorderApprovalEligibility";
 
 export const TRUSTED_BUYING_MARGIN_PERCENT = 45;
 export const TRUSTED_BUYING_RETURN_PERCENT = 100;
@@ -220,11 +223,9 @@ export function classifyTrustedBuyingCandidate({
   if (supplier && !supplier.currency?.trim()) add(reasons, "supplier_currency_missing");
 
   if (!commercial.commercial_cost_trusted) add(reasons, "commercial_data_missing");
-  if (
-    commercial.landed_cost_per_pack_gbp === null ||
-    !Number.isFinite(commercial.landed_cost_per_pack_gbp) ||
-    commercial.landed_cost_per_pack_gbp <= 0
-  ) add(reasons, "invalid_or_missing_commercial_cost");
+  if (requiresCommercialCostRemediation(product, commercial.landed_cost_per_pack_gbp)) {
+    add(reasons, "invalid_or_missing_commercial_cost");
+  }
   if (
     commercial.estimated_margin_percent === null ||
     commercial.estimated_return_on_pack_capital_percent === null ||

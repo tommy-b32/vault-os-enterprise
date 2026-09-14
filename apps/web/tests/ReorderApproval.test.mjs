@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { requiresExplicitReorderApproval } from "../lib/brain/ReorderApprovalEligibility.ts";
+import {
+  isFuturePurchasingProduct,
+  requiresCommercialCostRemediation,
+  requiresExplicitReorderApproval,
+} from "../lib/brain/ReorderApprovalEligibility.ts";
 
 const migrationUrl = new URL(
   "../../../supabase/migrations/20260804020000_product_reorder_approvals.sql",
@@ -42,6 +46,30 @@ test("classifier uses the shared explicit-approval gate for its approval blocker
   );
 
   assert.match(classifier, /requiresExplicitReorderApproval\(product\).*reorder_approval_missing/);
+});
+
+test("commercial-cost blocker applies only to future-purchasing products with missing or invalid cost", () => {
+  assert.equal(isFuturePurchasingProduct(approvalProduct()), true);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct(), null), true);
+  assert.equal(requiresCommercialCostRemediation(approvalProduct(), 0), true);
+
+  for (const overrides of [
+    { inventory_strategy: "discontinued" },
+    { inventory_strategy: "do_not_restock" },
+    { restock_enabled: false },
+  ]) {
+    assert.equal(isFuturePurchasingProduct(approvalProduct(overrides)), false);
+    assert.equal(requiresCommercialCostRemediation(approvalProduct(overrides), null), false);
+  }
+});
+
+test("classifier gates invalid commercial cost with the future-purchasing predicate", async () => {
+  const classifier = await readFile(
+    new URL("../lib/brain/TrustedBuyingCandidateClassifier.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(classifier, /requiresCommercialCostRemediation\(product, commercial\.landed_cost_per_pack_gbp\)/);
 });
 
 test("complete configuration requires an explicit active approval", async () => {

@@ -4253,7 +4253,7 @@ input:focus-visible {
 .catalogue-remediation-list-heading { padding-bottom: 14px; border-bottom: 1px solid var(--vault-border); }
 .catalogue-remediation-list-heading h2 { margin: 4px 0; font-size: 16px; }
 .catalogue-remediation-list-heading span { color: var(--vault-muted); font-size: 13px; }
-.catalogue-workspace.is-remediation .catalogue-master-panel { position: sticky; top: 18px; max-height: calc(100vh - 36px); }
+.catalogue-workspace.is-remediation .catalogue-master-panel { position: sticky; top: 18px; grid-template-rows: auto auto minmax(0, 1fr); max-height: calc(100vh - 36px); }
 .catalogue-workspace.is-remediation .catalogue-detail-panel { min-width: 0; }
 .catalogue-remediation-resolved { display: grid; place-items: center; gap: 12px; min-height: 360px; padding: 38px; border: 1px solid rgba(107, 201, 120, .32); border-radius: 14px; background: rgba(107, 201, 120, .045); text-align: center; }
 .catalogue-remediation-resolved h2, .catalogue-remediation-resolved p { margin: 0; }

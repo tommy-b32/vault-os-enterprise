@@ -5,11 +5,32 @@ type ReorderApprovalEligibilityInput = {
   reorder_approval: { approval_state: string } | null;
 };
 
+type FuturePurchasingInput = {
+  inventory_strategy: string;
+  restock_enabled: boolean;
+};
+
+export function isFuturePurchasingProduct(
+  product: FuturePurchasingInput,
+): boolean {
+  return product.inventory_strategy === "stocked" && product.restock_enabled;
+}
+
+export function requiresCommercialCostRemediation(
+  product: FuturePurchasingInput,
+  landedCostPerPackGbp: number | null,
+): boolean {
+  return isFuturePurchasingProduct(product) && (
+    landedCostPerPackGbp === null ||
+    !Number.isFinite(landedCostPerPackGbp) ||
+    landedCostPerPackGbp <= 0
+  );
+}
+
 export function requiresExplicitReorderApproval(
   product: ReorderApprovalEligibilityInput,
 ): boolean {
   return product.configuration_trusted &&
-    product.inventory_strategy === "stocked" &&
-    product.restock_enabled &&
+    isFuturePurchasingProduct(product) &&
     product.reorder_approval?.approval_state !== "approved";
 }
