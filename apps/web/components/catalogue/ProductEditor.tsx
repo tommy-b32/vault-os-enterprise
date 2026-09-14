@@ -20,6 +20,7 @@ import {
 import { ProductBusinessTab } from "@/components/catalogue/editor/ProductBusinessTab";
 import { ProductCommercialTab } from "@/components/catalogue/editor/ProductCommercialTab";
 import { remediationInitialTab } from "@/lib/catalogue/remediation-workspace";
+import { requiresExplicitReorderApproval } from "@/lib/brain/ReorderApprovalEligibility";
 
 import type {
   CatalogueProduct,
@@ -42,7 +43,15 @@ const requirementLabels: Record<string, string> = {
 
 function getNextActions(
   product: CatalogueProduct,
+  reorderApprovalRequired: boolean,
 ): string[] {
+  if (reorderApprovalRequired) {
+    return [
+      "Configuration complete",
+      "Explicit reorder approval is required before this product can be used in purchasing recommendations.",
+    ];
+  }
+
   if (product.missing_requirements.length === 0) {
     return [
       "No action required",
@@ -142,7 +151,8 @@ export function ProductEditor({
     },
   ];
 
-  const nextActions = getNextActions(product);
+  const reorderApprovalRequired = requiresExplicitReorderApproval(product);
+  const nextActions = getNextActions(product, reorderApprovalRequired);
 
   return (
     <div
@@ -301,6 +311,31 @@ export function ProductEditor({
                 </div>
               </div>
             </>
+          ) : reorderApprovalRequired ? (
+            <>
+              <p className="vault-brain-message">
+                Configuration is trusted. Explicit reorder approval is pending
+                before Vault Brain can use this product in purchasing
+                recommendations.
+              </p>
+
+              <div className="vault-brain-summary">
+                <div>
+                  <span>Status</span>
+                  <strong>Configuration trusted</strong>
+                </div>
+
+                <div>
+                  <span>Reorder approval</span>
+                  <strong>Required</strong>
+                </div>
+
+                <div>
+                  <span>Confidence</span>
+                  <strong>{product.configuration_score}%</strong>
+                </div>
+              </div>
+            </>
           ) : (
             <>
               <p className="vault-brain-message">
@@ -312,16 +347,12 @@ export function ProductEditor({
               <div className="vault-brain-summary">
                 <div>
                   <span>Status</span>
-                  <strong>Trusted</strong>
+                  <strong>{product.trusted_for_reorder ? "Trusted for reorder" : "Trusted"}</strong>
                 </div>
 
                 <div>
-                  <span>Reorder Engine</span>
-                  <strong>
-                    {product.trusted_for_reorder
-                      ? "Enabled"
-                      : "Disabled"}
-                  </strong>
+                  <span>Reorder approval</span>
+                  <strong>{product.trusted_for_reorder ? "Granted" : "Not required"}</strong>
                 </div>
 
                 <div>

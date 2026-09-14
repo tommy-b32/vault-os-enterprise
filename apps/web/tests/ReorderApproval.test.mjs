@@ -184,3 +184,19 @@ test("Advisor reports missing approval without changing ranking", async () => {
   assert.match(advisor, /candidates: TrustedBuyingCandidateResult\[\]/);
   assert.match(advisor, /reorderApprovalMissing: countReason\("reorder_approval_missing"\)/);
 });
+
+test("editor copy distinguishes trusted configuration from pending reorder approval", async () => {
+  const editor = await readFile(
+    new URL("../components/catalogue/ProductEditor.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(editor, /Configuration complete/);
+  assert.match(editor, /Explicit reorder approval is required before this product can be used in purchasing recommendations\./);
+  assert.match(editor, /Configuration is trusted\. Explicit reorder approval is pending/);
+  assert.match(editor, /Reorder approval/);
+  assert.match(editor, /Required/);
+  assert.match(editor, /Trusted for reorder/);
+  assert.match(editor, /Granted/);
+  assert.doesNotMatch(editor, /Reorder Engine/);
+});
