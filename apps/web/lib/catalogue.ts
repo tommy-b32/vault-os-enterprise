@@ -80,10 +80,20 @@ type StyleCatalogueRow = {
   stock_status: string | null;
 };
 
-type CommercialRow =
-  ProductCommercialCost & {
-    product_id: string;
-  };
+type CommercialRow = Omit<ProductCommercialCost, "realised_asp"> & {
+  product_id: string;
+  net_revenue_gbp: number | null;
+  net_units_sold: number | null;
+  order_count: number | null;
+  window_start: string | null;
+  window_end: string | null;
+  latest_sale_at: string | null;
+  order_history_freshness: string | null;
+  history_complete: boolean | null;
+  mapping_complete: boolean | null;
+  realised_asp_availability: string | null;
+  realised_asp_unavailable_reason: string | null;
+};
 
 type ReplenishmentRow = {
   style_id: string;
@@ -166,6 +176,19 @@ const EMPTY_COMMERCIAL_COST:
     landed_cost_per_unit: null,
 
     average_selling_price: null,
+    realised_asp: {
+      net_revenue_gbp: 0,
+      net_units_sold: 0,
+      order_count: 0,
+      window_start: null,
+      window_end: null,
+      latest_sale_at: null,
+      order_history_freshness: null,
+      history_complete: false,
+      mapping_complete: false,
+      availability: "unavailable",
+      unavailable_reason: "shopify_order_history_unavailable",
+    },
 
     estimated_gross_profit_per_unit: null,
     estimated_margin_percent: null,
@@ -502,6 +525,17 @@ export async function getCatalogueData():
         landed_cost_per_pack_gbp,
         landed_cost_per_unit,
         average_selling_price,
+        net_revenue_gbp,
+        net_units_sold,
+        order_count,
+        window_start,
+        window_end,
+        latest_sale_at,
+        order_history_freshness,
+        history_complete,
+        mapping_complete,
+        realised_asp_availability,
+        realised_asp_unavailable_reason,
         estimated_gross_profit_per_unit,
         estimated_margin_percent,
         estimated_return_on_pack_capital_percent,
@@ -693,6 +727,19 @@ export async function getCatalogueData():
 
         average_selling_price:
           row.average_selling_price,
+        realised_asp: {
+          net_revenue_gbp: row.net_revenue_gbp ?? 0,
+          net_units_sold: row.net_units_sold ?? 0,
+          order_count: row.order_count ?? 0,
+          window_start: row.window_start,
+          window_end: row.window_end,
+          latest_sale_at: row.latest_sale_at,
+          order_history_freshness: row.order_history_freshness,
+          history_complete: row.history_complete ?? false,
+          mapping_complete: row.mapping_complete ?? false,
+          availability: row.realised_asp_availability === "available" ? "available" : "unavailable",
+          unavailable_reason: row.realised_asp_unavailable_reason,
+        },
 
         estimated_gross_profit_per_unit:
           row.estimated_gross_profit_per_unit,

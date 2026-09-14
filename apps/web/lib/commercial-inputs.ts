@@ -24,7 +24,6 @@ export type ParsedCommercialInputs = {
   unitsPerPack: number;
   shippingCostPerPack: number;
   importCostPerPack: number;
-  averageSellingPrice: number;
   lastSupplierPriceUpdate: string | null;
 };
 
@@ -147,10 +146,6 @@ export function parseCommercialInputs(
     importCostPerPack: optionalNonNegativeNumber(
       formData.get("import_cost_per_pack"),
       "Import cost",
-    ),
-    averageSellingPrice: requiredPositiveNumber(
-      formData.get("average_selling_price"),
-      "Average selling price",
     ),
     lastSupplierPriceUpdate: parseSupplierDate(
       formData.get("last_supplier_price_update"),

@@ -15,7 +15,6 @@ function validEntries(overrides = {}) {
     units_per_pack: "6",
     shipping_cost_per_pack: "3.50",
     import_cost_per_pack: "0",
-    average_selling_price: "40",
     last_supplier_price_update: "2026-08-04",
     ...overrides,
   };
@@ -57,7 +56,6 @@ test("strict parser blocks invalid mandatory commercial values", async () => {
     [{ shipping_cost_per_pack: "-1" }, /Shipping cost cannot be negative/],
     [{ import_cost_per_pack: "-1" }, /Import cost cannot be negative/],
     [{ units_per_pack: "0" }, /Units per pack must be greater than zero/],
-    [{ average_selling_price: "0" }, /Average selling price must be greater than zero/],
     [{ last_supplier_price_update: "2026-02-31" }, /Supplier price date is invalid/],
     [{ parent_product_id: `${parentId}::Black` }, /valid parent product identifier/],
   ];
@@ -100,7 +98,6 @@ test("server action persists source fields and rereads canonical metrics", async
     "units_per_pack",
     "shipping_cost_per_pack",
     "import_cost_per_pack",
-    "average_selling_price",
     "last_supplier_price_update",
   ]) {
     assert.match(action, new RegExp(`${field}:`));
@@ -118,8 +115,7 @@ test("canonical purchasing qualification never converts a missing landed cost to
 
   assert.doesNotMatch(classifier, /landed_cost_per_pack_gbp\s*\?\?\s*0/);
   assert.match(classifier, /invalid_or_missing_commercial_cost/);
-  assert.match(classifier, /commercial\.landed_cost_per_pack_gbp === null/);
-  assert.match(classifier, /Number\.isFinite\(commercial\.landed_cost_per_pack_gbp\)/);
+  assert.match(classifier, /requiresCommercialCostRemediation\(product, supplier, commercial\.landed_cost_per_pack_gbp\)/);
 });
 
 test('changed "use server" modules export async actions only', async () => {
@@ -145,4 +141,18 @@ test('changed "use server" modules export async actions only', async () => {
     );
     assert.match(source, /export async function updateCommercialCosts/);
   }
+});
+
+test("Commercial presents Shopify realised ASP as read-only evidence rather than a manual save input", async () => {
+  const [tab, action] = await Promise.all([
+    readFile(new URL("../components/catalogue/editor/ProductCommercialTab.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/catalogue/commercial-actions.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(tab, /REALISED SHOPIFY ASP/);
+  assert.match(tab, /discounts such as 2-for-£70 and refunds are included automatically/);
+  assert.match(tab, /net_units_sold/);
+  assert.match(tab, /order_history_freshness/);
+  assert.doesNotMatch(tab, /name="average_selling_price"/);
+  assert.doesNotMatch(action, /average_selling_price:/);
 });

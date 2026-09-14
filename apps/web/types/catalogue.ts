@@ -17,6 +17,19 @@ export type ProductCommercialCost = {
   landed_cost_per_unit: number | null;
 
   average_selling_price: number | null;
+  realised_asp: {
+    net_revenue_gbp: number;
+    net_units_sold: number;
+    order_count: number;
+    window_start: string | null;
+    window_end: string | null;
+    latest_sale_at: string | null;
+    order_history_freshness: string | null;
+    history_complete: boolean;
+    mapping_complete: boolean;
+    availability: "available" | "unavailable";
+    unavailable_reason: string | null;
+  };
 
   estimated_gross_profit_per_unit: number | null;
   estimated_margin_percent: number | null;

@@ -5566,6 +5566,23 @@ grid-template-columns:1fr;
   gap: 22px;
 }
 
+.commercial-realised-asp {
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(0, 2fr);
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(224, 182, 76, .28);
+  border-radius: 9px;
+  background: rgba(224, 182, 76, .045);
+}
+
+.commercial-realised-asp p { margin: 5px 0 0; color: #aab0ab; font-size: .78rem; line-height: 1.45; }
+.commercial-realised-asp strong { color: #f0bd49; font-size: 1.45rem; }
+.commercial-realised-asp dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.commercial-realised-asp dt { color: #929994; font-size: .68rem; text-transform: uppercase; }
+.commercial-realised-asp dd { margin: 4px 0 0; color: #edf0eb; font-size: .8rem; overflow-wrap: anywhere; }
+.commercial-realised-asp > small { grid-column: 1 / -1; color: #e4b64c; text-transform: capitalize; }
+
 .commercial-calculation-grid {
   display: grid;
   grid-template-columns: repeat(
@@ -5642,6 +5659,8 @@ grid-template-columns:1fr;
 }
 
 @media (max-width: 900px) {
+  .commercial-realised-asp { grid-template-columns: 1fr; }
+  .commercial-realised-asp dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .commercial-calculation-grid {
     grid-template-columns: repeat(
       2,
@@ -5651,6 +5670,7 @@ grid-template-columns:1fr;
 }
 
 @media (max-width: 560px) {
+  .commercial-realised-asp dl { grid-template-columns: 1fr; }
   .commercial-calculation-grid {
     grid-template-columns: 1fr;
   }

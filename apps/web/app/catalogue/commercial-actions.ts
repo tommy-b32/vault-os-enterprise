@@ -95,7 +95,6 @@ export async function updateCommercialCosts(
         units_per_pack: inputs.unitsPerPack,
         shipping_cost_per_pack: inputs.shippingCostPerPack,
         import_cost_per_pack: inputs.importCostPerPack,
-        average_selling_price: inputs.averageSellingPrice,
         last_supplier_price_update: inputs.lastSupplierPriceUpdate,
       },
       { onConflict: "product_id" },

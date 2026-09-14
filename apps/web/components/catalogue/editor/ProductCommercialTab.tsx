@@ -125,14 +125,9 @@ export function ProductCommercialTab({
           ),
     );
 
-  const [averageSellingPrice, setAverageSellingPrice] =
-    useState(
-      commercial.average_selling_price === null
-        ? ""
-        : String(
-            commercial.average_selling_price,
-          ),
-    );
+  const averageSellingPrice = commercial.average_selling_price === null
+    ? ""
+    : String(commercial.average_selling_price);
 
   const [lastSupplierUpdate, setLastSupplierUpdate] =
     useState(
@@ -194,6 +189,26 @@ export function ProductCommercialTab({
         type="hidden"
         value={product.supplier_id ?? ""}
       />
+
+      <article className="commercial-realised-asp">
+        <div>
+          <p className="vault-eyebrow">REALISED SHOPIFY ASP</p>
+          <strong>
+            {commercial.realised_asp.availability === "available" && commercial.average_selling_price !== null
+              ? formatCurrency(commercial.average_selling_price, "GBP")
+              : "Unavailable"}
+          </strong>
+          <p>Shopify realised sales; discounts such as 2-for-£70 and refunds are included automatically.</p>
+        </div>
+        <dl>
+          <div><dt>Net units</dt><dd>{commercial.realised_asp.net_units_sold}</dd></div>
+          <div><dt>Net revenue</dt><dd>{formatCurrency(commercial.realised_asp.net_revenue_gbp, "GBP")}</dd></div>
+          <div><dt>Period</dt><dd>{commercial.realised_asp.window_start && commercial.realised_asp.window_end ? `${new Date(commercial.realised_asp.window_start).toLocaleDateString("en-GB")}–${new Date(commercial.realised_asp.window_end).toLocaleDateString("en-GB")}` : "Unavailable"}</dd></div>
+          <div><dt>Latest sale</dt><dd>{commercial.realised_asp.latest_sale_at ? new Date(commercial.realised_asp.latest_sale_at).toLocaleDateString("en-GB") : "None"}</dd></div>
+          <div><dt>Order data freshness</dt><dd>{commercial.realised_asp.order_history_freshness ? new Date(commercial.realised_asp.order_history_freshness).toLocaleString("en-GB") : "Unavailable"}</dd></div>
+        </dl>
+        {commercial.realised_asp.unavailable_reason ? <small>Unavailable: {commercial.realised_asp.unavailable_reason.replaceAll("_", " ")}.</small> : null}
+      </article>
 
       <div className="product-editor-grid">
         <label>
@@ -308,24 +323,6 @@ export function ProductCommercialTab({
             Pre-filled from a recognised pack profile; enter the
             canonical pack size when no reliable profile value exists.
           </small>
-        </label>
-
-        <label>
-          <span>Average selling price</span>
-
-          <input
-            min="0"
-            name="average_selling_price"
-            onChange={(event) =>
-              setAverageSellingPrice(
-                event.target.value,
-              )
-            }
-            placeholder="Example: 40"
-            step="0.01"
-            type="number"
-            value={averageSellingPrice}
-          />
         </label>
 
         <label>
