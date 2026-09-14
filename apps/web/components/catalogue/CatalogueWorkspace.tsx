@@ -14,11 +14,13 @@ import {
 import type {
   CatalogueProduct,
   CatalogueSupplier,
+  SupplierCostProfile,
 } from "@/types/catalogue";
 
 type CatalogueWorkspaceProps = {
   products: CatalogueProduct[];
   suppliers: CatalogueSupplier[];
+  costProfiles?: SupplierCostProfile[];
   attention?: string | null;
   attentionProductIds?: string[];
   remediationTitle?: string;
@@ -27,6 +29,7 @@ type CatalogueWorkspaceProps = {
 export function CatalogueWorkspace({
   products,
   suppliers,
+  costProfiles = [],
   attention = null,
   attentionProductIds = [],
   remediationTitle,
@@ -90,6 +93,7 @@ export function CatalogueWorkspace({
         <ProductEditor
           product={selectedProduct}
           suppliers={suppliers}
+          costProfiles={costProfiles}
           remediation={attention}
         />
       </div>

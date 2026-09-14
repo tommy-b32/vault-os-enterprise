@@ -25,11 +25,13 @@ import { requiresExplicitReorderApproval } from "@/lib/brain/ReorderApprovalElig
 import type {
   CatalogueProduct,
   CatalogueSupplier,
+  SupplierCostProfile,
 } from "@/types/catalogue";
 
 type ProductEditorProps = {
   product: CatalogueProduct | null;
   suppliers: CatalogueSupplier[];
+  costProfiles: SupplierCostProfile[];
   remediation?: string | null;
 };
 
@@ -69,6 +71,7 @@ function getNextActions(
 export function ProductEditor({
   product,
   suppliers,
+  costProfiles,
   remediation = null,
 }: ProductEditorProps) {
   const initialState: ProductSettingsActionState = {
@@ -402,6 +405,7 @@ export function ProductEditor({
         <ProductCommercialTab
           key={product.style_id}
           product={product}
+          costProfiles={costProfiles}
         />
       )}
 

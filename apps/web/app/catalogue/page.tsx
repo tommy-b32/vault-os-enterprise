@@ -58,6 +58,7 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
   const {
     products,
     suppliers,
+    costProfiles,
     summary,
   } = result.data;
 
@@ -74,7 +75,7 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
     return <VaultAppShell searchPlaceholder="Search affected products..." notificationCount={attentionProductIds.length} systemStatusLabel="Catalogue remediation active">
       <main className="catalogue-page catalogue-remediation-page">
         <header className="catalogue-remediation-header"><div><p className="vault-eyebrow">VAULT BRAIN REMEDIATION</p><h1>{remediationDetails.title}</h1><p>{remediationDetails.explanation}</p><strong>{attentionProductIds.length} product{attentionProductIds.length === 1 ? "" : "s"} / {attentionStyleCount} style{attentionStyleCount === 1 ? "" : "s"} require attention.</strong></div><Link className="catalogue-remediation-back" href="/catalogue">Back to full Catalogue</Link></header>
-        <CatalogueWorkspace products={products} suppliers={suppliers} attention={attention} attentionProductIds={attentionProductIds} remediationTitle={remediationDetails.title} />
+        <CatalogueWorkspace products={products} suppliers={suppliers} costProfiles={costProfiles} attention={attention} attentionProductIds={attentionProductIds} remediationTitle={remediationDetails.title} />
       </main>
     </VaultAppShell>;
   }
@@ -347,6 +348,7 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
             <CatalogueWorkspace
               products={products}
               suppliers={suppliers}
+              costProfiles={costProfiles}
             />
           </section>
 

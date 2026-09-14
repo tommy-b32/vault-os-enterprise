@@ -9,6 +9,7 @@ import {
 import type {
   CatalogueProduct,
   CatalogueSupplier,
+  SupplierCostProfile,
   ConfigurationState,
   InventoryStrategy,
   PackProfile,
@@ -157,6 +158,7 @@ export type CatalogueConfigurationSummary = {
 export type CatalogueData = {
   products: CatalogueProduct[];
   suppliers: CatalogueSupplier[];
+  costProfiles: SupplierCostProfile[];
   summary: CatalogueConfigurationSummary;
 };
 
@@ -201,6 +203,16 @@ const EMPTY_COMMERCIAL_COST:
 
     last_supplier_price_update: null,
     commercial_notes: null,
+    commercial_cost_resolution_mode: "unavailable",
+    effective_profile_id: null,
+    effective_profile_version_id: null,
+    cost_type_id: null,
+    pack_cost_source: "unavailable",
+    shipping_cost_source: "unavailable",
+    import_cost_source: "unavailable",
+    units_source: "unavailable",
+    fx_source: "unavailable",
+    profile_price_updated_at: null,
   };
 
 const EMPTY_SALES_INTELLIGENCE:
@@ -435,6 +447,7 @@ export async function getCatalogueData():
   const [
     styleResponse,
     supplierResponse,
+    costProfileResponse,
     commercialResponse,
     replenishmentResponse,
     productVisionByProductId,
@@ -510,6 +523,11 @@ export async function getCatalogueData():
       ),
 
     supabaseAdmin
+      .from("vault_supplier_product_type_cost_profiles")
+      .select("id, supplier_id, supplier_currency, price_updated_at, active, vault_suppliers!inner(supplier_name), vault_cost_types!inner(id, display_name)")
+      .eq("active", true),
+
+    supabaseAdmin
       .from(
         "vault_product_commercial_intelligence",
       )
@@ -543,6 +561,16 @@ export async function getCatalogueData():
         missing_commercial_requirements,
         last_supplier_price_update,
         commercial_notes
+        ,commercial_cost_resolution_mode,
+        effective_profile_id,
+        effective_profile_version_id,
+        cost_type_id,
+        pack_cost_source,
+        shipping_cost_source,
+        import_cost_source,
+        units_source,
+        fx_source,
+        profile_price_updated_at
       `),
 
     supabaseAdmin
@@ -599,7 +627,7 @@ export async function getCatalogueData():
     commercialResponse.error ??
     replenishmentResponse.error ??
     approvalResponse.error ??
-    operatorResponse.error;
+    operatorResponse.error ?? costProfileResponse.error;
 
   if (error) {
     throw new Error(
@@ -614,6 +642,15 @@ export async function getCatalogueData():
   const suppliers =
     (supplierResponse.data ??
       []) as CatalogueSupplier[];
+  const costProfiles = (costProfileResponse.data ?? []).map((row: any) => ({
+    id: row.id,
+    supplier_id: row.supplier_id,
+    supplier_name: row.vault_suppliers.supplier_name,
+    cost_type_id: row.vault_cost_types.id,
+    cost_type_name: row.vault_cost_types.display_name,
+    active: row.active,
+    price_updated_at: row.price_updated_at,
+  })) as SupplierCostProfile[];
 
   const commercialRows =
     (commercialResponse.data ??
@@ -763,6 +800,19 @@ export async function getCatalogueData():
 
         commercial_notes:
           row.commercial_notes,
+        commercial_cost_resolution_mode:
+          row.commercial_cost_resolution_mode === "inherited" || row.commercial_cost_resolution_mode === "mixed" || row.commercial_cost_resolution_mode === "product_override"
+            ? row.commercial_cost_resolution_mode
+            : "unavailable",
+        effective_profile_id: row.effective_profile_id,
+        effective_profile_version_id: row.effective_profile_version_id,
+        cost_type_id: row.cost_type_id,
+        pack_cost_source: row.pack_cost_source ?? "unavailable",
+        shipping_cost_source: row.shipping_cost_source ?? "unavailable",
+        import_cost_source: row.import_cost_source ?? "unavailable",
+        units_source: row.units_source ?? "unavailable",
+        fx_source: row.fx_source ?? "unavailable",
+        profile_price_updated_at: row.profile_price_updated_at,
       },
     );
   }
@@ -1053,6 +1103,7 @@ export async function getCatalogueData():
   return {
     products,
     suppliers,
+    costProfiles,
 
     summary:
       buildSummary(

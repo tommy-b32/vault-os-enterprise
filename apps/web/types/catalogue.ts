@@ -43,6 +43,16 @@ export type ProductCommercialCost = {
 
   last_supplier_price_update: string | null;
   commercial_notes: string | null;
+  commercial_cost_resolution_mode: "product_override" | "inherited" | "mixed" | "unavailable";
+  effective_profile_id: string | null;
+  effective_profile_version_id: string | null;
+  cost_type_id: string | null;
+  pack_cost_source: string;
+  shipping_cost_source: string;
+  import_cost_source: string;
+  units_source: string;
+  fx_source: string;
+  profile_price_updated_at: string | null;
 };
 
 export type ProductSalesIntelligence = {
@@ -119,6 +129,16 @@ export type PackProfile =
 export type CatalogueSupplier = {
   id: string;
   supplier_name: string;
+};
+
+export type SupplierCostProfile = {
+  id: string;
+  supplier_id: string;
+  supplier_name: string;
+  cost_type_id: string;
+  cost_type_name: string;
+  active: boolean;
+  price_updated_at: string;
 };
 
 export type ReplenishmentIntelligence = {

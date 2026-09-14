@@ -64,6 +64,27 @@ export async function updateCommercialCosts(
     };
   }
 
+  const inheritanceRequested = inputs.inheritPackCost || inputs.inheritShippingCost ||
+    inputs.inheritImportCost || inputs.inheritUnitsPerPack || inputs.inheritFx;
+  if (inheritanceRequested && !inputs.profileId) {
+    return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "Choose a matching supplier cost profile before enabling inheritance." };
+  }
+  if (inheritanceRequested) {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("vault_supplier_product_type_cost_profiles")
+      .select("id, supplier_id, cost_type_id, active")
+      .eq("id", inputs.profileId!)
+      .maybeSingle();
+    const { data: assignment, error: assignmentError } = await supabaseAdmin
+      .from("vault_product_cost_type_assignments")
+      .select("cost_type_id")
+      .eq("product_id", inputs.parentProductId)
+      .maybeSingle();
+    if (profileError || assignmentError || !profile?.active || profile.supplier_id !== inputs.supplierId || profile.cost_type_id !== assignment?.cost_type_id) {
+      return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The supplier cost profile must be active and match this parent’s assigned supplier and canonical cost type." };
+    }
+  }
+
   if (!parentResponse.data) {
     return {
       ...INITIAL_COMMERCIAL_ACTION_STATE,
@@ -100,7 +121,19 @@ export async function updateCommercialCosts(
       { onConflict: "product_id" },
     );
 
-  if (saveError) {
+  const { error: inheritanceError } = await supabaseAdmin
+    .from("vault_product_cost_profile_inheritance")
+    .upsert({
+      product_id: inputs.parentProductId,
+      profile_id: inheritanceRequested ? inputs.profileId : null,
+      inherit_pack_cost: inputs.inheritPackCost,
+      inherit_shipping_cost: inputs.inheritShippingCost,
+      inherit_import_cost: inputs.inheritImportCost,
+      inherit_units_per_pack: inputs.inheritUnitsPerPack,
+      inherit_fx: inputs.inheritFx,
+    }, { onConflict: "product_id" });
+
+  if (saveError || inheritanceError) {
     return {
       ...INITIAL_COMMERCIAL_ACTION_STATE,
       status: "error",

@@ -25,7 +25,22 @@ export type ParsedCommercialInputs = {
   shippingCostPerPack: number;
   importCostPerPack: number;
   lastSupplierPriceUpdate: string | null;
+  profileId: string | null;
+  inheritPackCost: boolean;
+  inheritShippingCost: boolean;
+  inheritImportCost: boolean;
+  inheritUnitsPerPack: boolean;
+  inheritFx: boolean;
 };
+
+function checked(formData: FormData, name: string): boolean {
+  return formData.get(name) === "true";
+}
+
+function optionalProfileId(value: FormDataEntryValue | null): string | null {
+  if (value === null || value === "") return null;
+  return parseSupplierId(value);
+}
 
 function requiredPositiveNumber(
   value: FormDataEntryValue | null,
@@ -150,5 +165,11 @@ export function parseCommercialInputs(
     lastSupplierPriceUpdate: parseSupplierDate(
       formData.get("last_supplier_price_update"),
     ),
+    profileId: optionalProfileId(formData.get("profile_id")),
+    inheritPackCost: checked(formData, "inherit_pack_cost"),
+    inheritShippingCost: checked(formData, "inherit_shipping_cost"),
+    inheritImportCost: checked(formData, "inherit_import_cost"),
+    inheritUnitsPerPack: checked(formData, "inherit_units_per_pack"),
+    inheritFx: checked(formData, "inherit_fx"),
   };
 }

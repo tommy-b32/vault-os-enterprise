@@ -21,12 +21,62 @@ export type CashLedgerActionState = {
   message: string;
 };
 
+export type SupplierCostProfileActionState = CashLedgerActionState;
+export const INITIAL_SUPPLIER_COST_PROFILE_ACTION_STATE: SupplierCostProfileActionState = { status: "idle", message: "" };
+
 class CashLedgerInputError extends Error {}
 class SupplierMinimumInputError extends Error {}
 
 function text(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function requiredPositive(formData: FormData, name: string, label: string): number {
+  const value = Number(text(formData, name));
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be greater than zero.`);
+  return value;
+}
+
+export async function saveSupplierCostProfile(
+  _previousState: SupplierCostProfileActionState,
+  formData: FormData,
+): Promise<SupplierCostProfileActionState> {
+  try {
+    const operator = await requireOperatorRole("owner", "operator");
+    const supplierId = text(formData, "supplier_id");
+    const costTypeId = text(formData, "cost_type_id").toLowerCase();
+    const costTypeName = text(formData, "cost_type_name");
+    const currency = text(formData, "supplier_currency").toUpperCase();
+    if (!/^[a-z0-9_]+$/.test(costTypeId) || !costTypeName) throw new Error("Choose a governed cost type identifier and display name.");
+    if (!["GBP", "EUR", "USD", "TRY"].includes(currency)) throw new Error("Choose a supported supplier currency.");
+    const supplier = await supabaseAdmin.from("vault_suppliers").select("id, is_active").eq("id", supplierId).maybeSingle();
+    if (supplier.error || !supplier.data?.is_active) throw new Error("Choose an active canonical supplier.");
+    const { error: typeError } = await supabaseAdmin.from("vault_cost_types").upsert({ id: costTypeId, display_name: costTypeName }, { onConflict: "id" });
+    if (typeError) throw new Error("The governed cost type could not be saved.");
+    const profile = {
+      supplier_id: supplierId, cost_type_id: costTypeId, supplier_currency: currency,
+      exchange_rate_to_gbp: currency === "GBP" ? 1 : requiredPositive(formData, "exchange_rate_to_gbp", "Exchange rate"),
+      pack_cost: requiredPositive(formData, "pack_cost", "Pack cost"),
+      shipping_cost_per_pack: Number(text(formData, "shipping_cost_per_pack") || 0),
+      import_cost_per_pack: Number(text(formData, "import_cost_per_pack") || 0),
+      units_per_pack: requiredPositive(formData, "units_per_pack", "Units per pack"),
+      price_updated_at: text(formData, "price_updated_at"), effective_from: text(formData, "effective_from") || new Date().toISOString(),
+      active: true, updated_by_operator_id: operator.id, created_by_operator_id: operator.id,
+      notes: text(formData, "notes") || null,
+    };
+    if (!Number.isInteger(profile.units_per_pack) || profile.shipping_cost_per_pack < 0 || profile.import_cost_per_pack < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(profile.price_updated_at)) throw new Error("Check the non-negative costs, whole pack quantity, and price date.");
+    const existing = await supabaseAdmin.from("vault_supplier_product_type_cost_profiles").select("id").eq("supplier_id", supplierId).eq("cost_type_id", costTypeId).eq("active", true).maybeSingle();
+    const write = existing.data
+      ? supabaseAdmin.from("vault_supplier_product_type_cost_profiles").update(profile).eq("id", existing.data.id)
+      : supabaseAdmin.from("vault_supplier_product_type_cost_profiles").insert(profile);
+    const { error } = await write;
+    if (error) throw new Error("The supplier cost profile could not be saved.");
+    revalidateSupplierRuleConsumers();
+    return { status: "success", message: "Supplier replacement-cost profile saved. Existing products remain product-specific until they explicitly opt into inheritance." };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "The supplier cost profile could not be saved." };
+  }
 }
 
 export async function addCashTransaction(

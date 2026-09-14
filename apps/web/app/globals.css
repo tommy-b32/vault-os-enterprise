@@ -5566,6 +5566,25 @@ grid-template-columns:1fr;
   gap: 22px;
 }
 
+.commercial-effective-cost {
+  display: grid;
+  grid-template-columns: minmax(180px, .75fr) minmax(0, 1.25fr);
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(224, 182, 76, .25);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .018);
+}
+.commercial-effective-cost h4 { margin: 5px 0; color: #f0bd49; text-transform: capitalize; }
+.commercial-effective-cost p { margin: 0; color: #aab0ab; font-size: .78rem; line-height: 1.45; }
+.commercial-effective-cost dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.commercial-effective-cost dt { color: #929994; font-size: .68rem; text-transform: uppercase; }
+.commercial-effective-cost dd { margin: 3px 0 0; color: #edf0eb; font-size: .78rem; overflow-wrap: anywhere; }
+.commercial-effective-cost > label { display: grid; gap: 6px; grid-column: 1 / -1; color: #c8cec8; font-size: .75rem; }
+.commercial-inheritance-controls { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 0; padding: 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; }
+.commercial-inheritance-controls legend { padding: 0 5px; color: #efbd49; font-size: .68rem; text-transform: uppercase; }
+.commercial-inheritance-controls label { display: flex; align-items: center; gap: 8px; color: #cbd1cb; font-size: .76rem; }
+
 .commercial-realised-asp {
   display: grid;
   grid-template-columns: minmax(180px, .8fr) minmax(0, 2fr);
@@ -5659,6 +5678,7 @@ grid-template-columns:1fr;
 }
 
 @media (max-width: 900px) {
+  .commercial-effective-cost { grid-template-columns: 1fr; }
   .commercial-realised-asp { grid-template-columns: 1fr; }
   .commercial-realised-asp dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .commercial-calculation-grid {
@@ -5670,6 +5690,7 @@ grid-template-columns:1fr;
 }
 
 @media (max-width: 560px) {
+  .commercial-effective-cost dl, .commercial-inheritance-controls { grid-template-columns: 1fr; }
   .commercial-realised-asp dl { grid-template-columns: 1fr; }
   .commercial-calculation-grid {
     grid-template-columns: 1fr;
