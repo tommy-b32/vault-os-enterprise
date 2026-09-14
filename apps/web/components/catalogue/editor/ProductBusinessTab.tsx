@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type {
   CatalogueProduct,
   CatalogueSupplier,
@@ -10,6 +12,7 @@ import {
 type ProductBusinessTabProps = {
   product: CatalogueProduct;
   suppliers: CatalogueSupplier[];
+  actionFooter?: ReactNode;
 };
 
 const strategies = [
@@ -39,6 +42,7 @@ function formatApprovalTimestamp(value: string): string {
 export function ProductBusinessTab({
   product,
   suppliers,
+  actionFooter,
 }: ProductBusinessTabProps) {
   const approval = product.reorder_approval;
   const hasActiveApproval =
@@ -198,6 +202,8 @@ export function ProductBusinessTab({
           />
         </label>
       </div>
+
+      {actionFooter}
 
       <section className={`commercial-approval is-${approvalState}`}>
         <input

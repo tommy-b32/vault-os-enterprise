@@ -6,6 +6,11 @@ import Link from "next/link";
 import { ProductEditor } from "@/components/catalogue/ProductEditor";
 import { ProductList } from "@/components/catalogue/ProductList";
 import { ProductSearch } from "@/components/catalogue/ProductSearch";
+import {
+  filterWorkspaceProducts,
+  getWorkspaceProducts,
+  selectedWorkspaceProduct,
+} from "@/lib/catalogue/remediation-workspace";
 import type {
   CatalogueProduct,
   CatalogueSupplier,
@@ -16,6 +21,7 @@ type CatalogueWorkspaceProps = {
   suppliers: CatalogueSupplier[];
   attention?: string | null;
   attentionProductIds?: string[];
+  remediationTitle?: string;
 };
 
 export function CatalogueWorkspace({
@@ -23,44 +29,23 @@ export function CatalogueWorkspace({
   suppliers,
   attention = null,
   attentionProductIds = [],
+  remediationTitle,
 }: CatalogueWorkspaceProps) {
   const [search, setSearch] = useState("");
+  const scopedProducts = useMemo(() => getWorkspaceProducts(products, attention, attentionProductIds), [attention, attentionProductIds, products]);
+  const hasAffectedProducts = scopedProducts.length > 0;
   const [selectedStyleId, setSelectedStyleId] =
     useState<string | null>(
     attention
-      ? products.find((product) => attentionProductIds.includes(product.parent_product_id))?.style_id ?? null
+      ? scopedProducts[0]?.style_id ?? null
       : products[0]?.style_id ?? null,
     );
 
   const filteredProducts = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    return filterWorkspaceProducts(scopedProducts, search);
+  }, [scopedProducts, search]);
 
-    const scopedProducts = attentionProductIds.length
-      ? products.filter((product) => attentionProductIds.includes(product.parent_product_id))
-      : products;
-    if (!query) return scopedProducts;
-
-    return scopedProducts.filter((product) => {
-      const searchable = [
-        product.product_name,
-        product.supplier_company,
-        product.inventory_strategy,
-        product.pack_profile,
-        product.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return searchable.includes(query);
-    });
-  }, [products, search]);
-
-  const selectedProduct =
-    filteredProducts.find(
-      (product) =>
-        product.style_id === selectedStyleId,
-    ) ?? (attention ? filteredProducts[0] ?? null : products.find((product) => product.style_id === selectedStyleId) ?? null);
+  const selectedProduct = selectedWorkspaceProduct(filteredProducts, selectedStyleId);
 
   useEffect(() => {
     if (!attention) return;
@@ -70,36 +55,21 @@ export function CatalogueWorkspace({
   function handleSearchChange(value: string) {
     setSearch(value);
 
-    const query = value.trim().toLowerCase();
-
-    if (!query) {
-      return;
-    }
-
-    const firstMatch = products.find((product) => {
-      const searchable = [
-        product.product_name,
-        product.supplier_company,
-        product.inventory_strategy,
-        product.pack_profile,
-        product.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return searchable.includes(query);
-    });
+    const firstMatch = filterWorkspaceProducts(scopedProducts, value)[0];
 
     if (firstMatch) {
       setSelectedStyleId(firstMatch.style_id);
     }
   }
 
+  if (attention && !hasAffectedProducts) {
+    return <section className="catalogue-remediation-resolved"><p className="vault-eyebrow">VAULT BRAIN REMEDIATION</p><h2>Vault Brain issue resolved</h2><p>All products currently satisfy this requirement.</p><div><Link href="/">Return to Command Centre</Link><Link href="/catalogue">Open full Catalogue</Link></div></section>;
+  }
+
   return (
-    <section className="catalogue-workspace">
-      {attention ? <div className="catalogue-remediation-notice"><p>Showing {filteredProducts.length} affected product{filteredProducts.length === 1 ? "" : "s"}: {attention.replaceAll("_", " ")}. Resolve the canonical data gap using the existing editor.</p>{filteredProducts.length === 0 ? <p>This Vault Brain issue is now resolved. <Link href="/">Return to Command Centre</Link> or <Link href="/catalogue">open the full catalogue</Link>.</p> : null}</div> : null}
+    <section className={`catalogue-workspace ${attention ? "is-remediation" : ""}`}>
       <aside className="catalogue-master-panel">
+        {attention ? <header className="catalogue-remediation-list-heading"><p className="vault-eyebrow">Affected products</p><h2>{remediationTitle}</h2><span>{filteredProducts.length} requiring attention</span></header> : null}
         <ProductSearch
           onChange={handleSearchChange}
           resultCount={filteredProducts.length}

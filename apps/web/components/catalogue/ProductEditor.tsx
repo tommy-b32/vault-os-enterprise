@@ -19,6 +19,7 @@ import {
 } from "@/components/catalogue/ProductEditorTabs";
 import { ProductBusinessTab } from "@/components/catalogue/editor/ProductBusinessTab";
 import { ProductCommercialTab } from "@/components/catalogue/editor/ProductCommercialTab";
+import { remediationInitialTab } from "@/lib/catalogue/remediation-workspace";
 
 import type {
   CatalogueProduct,
@@ -71,7 +72,7 @@ export function ProductEditor({
     initialState,
   );
 
-  const remediationTab: ProductEditorTab = remediation === "invalid_or_missing_commercial_cost" ? "commercial" : "business";
+  const remediationTab: ProductEditorTab = remediationInitialTab(remediation);
   const [activeTab, setActiveTab] = useState<ProductEditorTab>(remediationTab);
 
   useEffect(() => {
@@ -351,20 +352,8 @@ export function ProductEditor({
           <ProductBusinessTab
             product={product}
             suppliers={suppliers}
+            actionFooter={<footer className="product-editor-footer"><div><strong>Save product settings</strong><p>Saving updates Inventory Intelligence, supplier planning and future Vault Advisor recommendations.</p></div><ProductSaveButton /></footer>}
           />
-
-          <footer className="product-editor-footer">
-            <div>
-              <strong>Vault business memory</strong>
-
-              <p>
-                Saving will update Inventory Intelligence, supplier
-                planning and future Vault Advisor recommendations.
-              </p>
-            </div>
-
-            <ProductSaveButton />
-          </footer>
 
           {saveState.status !== "idle" && (
             <p
