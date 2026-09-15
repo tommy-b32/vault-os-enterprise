@@ -21,8 +21,7 @@ export type CashLedgerActionState = {
   message: string;
 };
 
-export type SupplierCostProfileActionState = CashLedgerActionState;
-export const INITIAL_SUPPLIER_COST_PROFILE_ACTION_STATE: SupplierCostProfileActionState = { status: "idle", message: "" };
+type SupplierCostProfileActionState = CashLedgerActionState;
 
 class CashLedgerInputError extends Error {}
 class SupplierMinimumInputError extends Error {}

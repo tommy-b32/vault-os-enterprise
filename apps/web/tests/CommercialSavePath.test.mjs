@@ -121,6 +121,7 @@ test("canonical purchasing qualification never converts a missing landed cost to
 test('changed "use server" modules export async actions only', async () => {
   const serverModules = [
     new URL("../app/catalogue/commercial-actions.ts", import.meta.url),
+    new URL("../app/commercial/actions.ts", import.meta.url),
   ];
 
   for (const moduleUrl of serverModules) {
@@ -139,7 +140,12 @@ test('changed "use server" modules export async actions only', async () => {
       [],
       `${moduleUrl.pathname} exports non-async runtime values`,
     );
-    assert.match(source, /export async function updateCommercialCosts/);
+    assert.match(
+      source,
+      moduleUrl.pathname.endsWith("commercial-actions.ts")
+        ? /export async function updateCommercialCosts/
+        : /export async function saveSupplierCostProfile/,
+    );
   }
 });
 

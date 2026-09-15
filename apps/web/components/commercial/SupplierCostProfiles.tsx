@@ -1,8 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
-import { INITIAL_SUPPLIER_COST_PROFILE_ACTION_STATE, saveSupplierCostProfile } from "@/app/commercial/actions";
+import { saveSupplierCostProfile } from "@/app/commercial/actions";
 import type { SupplierPurchasingData } from "@/components/commercial/SupplierPurchasing";
+
+const INITIAL_SUPPLIER_COST_PROFILE_ACTION_STATE = { status: "idle" as const, message: "" };
 
 export function SupplierCostProfiles({ suppliers }: { suppliers: SupplierPurchasingData[] }) {
   const [state, action, pending] = useActionState(saveSupplierCostProfile, INITIAL_SUPPLIER_COST_PROFILE_ACTION_STATE);
