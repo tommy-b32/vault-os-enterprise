@@ -2,6 +2,7 @@ import { shopifyGraphQL } from "./graphql.ts";
 
 export type ShopifyVariantNode = {
   id: string;
+  createdAt: string;
   title: string;
   image?: {
     url?: string | null;
@@ -22,6 +23,8 @@ export type ShopifyVariantNode = {
 
 export type ShopifyProductNode = {
   id: string;
+  createdAt: string;
+  publishedAt: string | null;
   title: string;
   handle: string;
   vendor: string;
@@ -64,6 +67,8 @@ const PRODUCT_QUERY = `
 
       nodes {
         id
+        createdAt
+        publishedAt
         title
         handle
         vendor
@@ -82,6 +87,7 @@ const PRODUCT_QUERY = `
 
           nodes {
             id
+            createdAt
             title
             image {
               url

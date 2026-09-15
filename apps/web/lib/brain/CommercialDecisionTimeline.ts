@@ -7,6 +7,7 @@ import type {
   PredictionEngineResult,
   VaultBrainPrediction,
 } from "@/lib/brain/PredictionEngine";
+import { hasStrongEarlyDemand } from "@/lib/brain/TradingEvidencePolicy";
 
 type RemediableBuyingBlocker = Extract<TrustedBuyingCandidateRejectionReason,
   "reorder_approval_missing" | "invalid_or_missing_commercial_cost" | "target_stock_days_missing" | "wallet_freshness_unknown" | "wallet_stale">;
@@ -160,6 +161,20 @@ function priorityWeight(priority: CommercialDecisionTimelineItem["priority"]): n
   return { critical: 5, high: 4, medium: 3, low: 2, informational: 1 }[priority];
 }
 
+function tradingEvidenceOf(candidate: TrustedBuyingCandidateResult) {
+  return candidate.tradingEvidence ?? {
+    state: "UNKNOWN" as const,
+    reason: "Trading history not yet verified.",
+    verifiedLiveDays: null,
+    verifiedCoverageDays: null,
+    coverageComplete: false,
+    orderEvidenceFresh: false,
+    firstPositiveSaleAt: null,
+    sellingDays: null,
+    unitsSinceLive: null,
+  };
+}
+
 function advisorItem(
   advisor: AdvisorEngineResult,
   generatedAt: string,
@@ -201,6 +216,7 @@ function classifierBlockers(
   const affected = new Map<TrustedBuyingCandidateRejectionReason, TrustedBuyingCandidateResult[]>();
   for (const candidate of candidates) {
     for (const reason of candidate.rejectionReasons) {
+      if (reason === "target_stock_days_missing" && tradingEvidenceOf(candidate).state !== "SUFFICIENT_EVIDENCE") continue;
       if (BLOCKER_PRESENTATION[reason]) affected.set(reason, [...(affected.get(reason) ?? []), candidate]);
     }
   }
@@ -237,6 +253,27 @@ function monitoringItems(
   candidates: TrustedBuyingCandidateResult[],
 ): CommercialDecisionTimelineItem[] {
   const items: CommercialDecisionTimelineItem[] = [];
+  const targetDaysCandidates = candidates.filter((candidate) =>
+    candidate.rejectionReasons.includes("target_stock_days_missing") &&
+    tradingEvidenceOf(candidate).state !== "SUFFICIENT_EVIDENCE");
+  for (const state of ["LEARNING", "DEVELOPING_EVIDENCE", "UNKNOWN"] as const) {
+    const affected = targetDaysCandidates.filter((candidate) => tradingEvidenceOf(candidate).state === state);
+    if (!affected.length) continue;
+    const styleIds = [...new Set(affected.map((candidate) => candidate.styleId).filter(Boolean))];
+    const parentProductIds = [...new Set(affected.map((candidate) => candidate.parentProductId).filter(Boolean))];
+    const strongEarly = state === "LEARNING" && affected.some((candidate) => hasStrongEarlyDemand(tradingEvidenceOf(candidate)));
+    items.push({
+      id: `target-stock-days-${state.toLowerCase()}`,
+      source: "inventory", category: "follow_up", status: "monitoring",
+      priority: state === "DEVELOPING_EVIDENCE" ? "medium" : "low",
+      title: state === "UNKNOWN" ? "Trading history not yet verified" : strongEarly ? "Strong early demand — still learning" : state === "LEARNING" ? "Gathering trading evidence" : "Trading evidence is still developing",
+      description: state === "UNKNOWN" ? "Target stock days remain a buying-safety requirement, but Vault cannot yet verify trading maturity." : state === "LEARNING" ? "Target stock days remain required for trusted replenishment while this style gathers verified live trading evidence." : "Target stock days remain required for trusted replenishment; executive remediation will become high priority after evidence is sufficient.",
+      effectiveAt: null, deadlineAt: null, predictedAt: null, confidence: null, confidenceMeaning: null,
+      entityType: "catalogue_style_set", entityId: null, destination: "/catalogue?attention=target_stock_days_missing",
+      evidence: [{ label: "Affected styles", value: String(styleIds.length) }], blockerReasons: ["target_stock_days_missing"],
+      affectedParentProductIds: parentProductIds, affectedStyleIds: styleIds,
+    });
+  }
   const walletCandidates = candidates.filter((candidate) =>
     candidate.rejectionReasons.includes("wallet_freshness_unknown") ||
     candidate.rejectionReasons.includes("wallet_stale"));

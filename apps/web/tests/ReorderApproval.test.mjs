@@ -107,6 +107,7 @@ test("classifier gates target-stock-days remediation with the future-purchasing 
   );
 
   assert.match(classifier, /requiresTargetStockDaysRemediation\(product, replenishment\.targetStockDays\)/);
+  assert.match(classifier, /add\(reasons, "target_stock_days_missing"\)/);
 });
 
 test("supplier-minimum blocker requires a future-purchasing product, active supplier, and unknown policy", () => {

@@ -4,6 +4,7 @@ import {
   type SupplierMinimum,
 } from "@/lib/supplier/SupplierMinimum";
 import type { CatalogueProduct } from "@/types/catalogue";
+import type { TradingEvidence } from "@/types/catalogue";
 import { WalletFreshness } from "@/lib/brain/WalletFreshness";
 import {
   requiresCommercialCostRemediation,
@@ -114,6 +115,7 @@ export type TrustedBuyingCandidateResult = {
     walletLastUpdated: string | null;
   };
   confidence: number | null;
+  tradingEvidence: TradingEvidence;
   evidence: string[];
 };
 
@@ -202,6 +204,10 @@ export function classifyTrustedBuyingCandidate({
         walletLastUpdated: wallet?.lastUpdated ?? null,
       },
       confidence: null,
+      tradingEvidence: {
+        state: "UNKNOWN", reason: "Trading history not yet verified.", verifiedLiveDays: null,
+        verifiedCoverageDays: null, coverageComplete: false, orderEvidenceFresh: false, firstPositiveSaleAt: null, sellingDays: null, unitsSinceLive: null,
+      },
       evidence: [],
     };
   }
@@ -322,6 +328,10 @@ export function classifyTrustedBuyingCandidate({
       walletLastUpdated: wallet?.lastUpdated ?? null,
     },
     confidence: demand.trusted ? 100 : null,
+    tradingEvidence: product.trading_evidence ?? {
+      state: "UNKNOWN", reason: "Trading history not yet verified.", verifiedLiveDays: null,
+      verifiedCoverageDays: null, coverageComplete: false, orderEvidenceFresh: false, firstPositiveSaleAt: null, sellingDays: null, unitsSinceLive: null,
+    },
     evidence: [
       "DemandIntelligenceEngine",
       "canonical commercial intelligence",

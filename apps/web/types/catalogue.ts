@@ -169,6 +169,18 @@ export type ReplenishmentIntelligence = {
   missingRequirements: string[];
 };
 
+export type TradingEvidence = {
+  state: "LEARNING" | "DEVELOPING_EVIDENCE" | "SUFFICIENT_EVIDENCE" | "UNKNOWN";
+  reason: string;
+  verifiedLiveDays: number | null;
+  verifiedCoverageDays: number | null;
+  coverageComplete: boolean;
+  orderEvidenceFresh: boolean;
+  firstPositiveSaleAt: string | null;
+  sellingDays: number | null;
+  unitsSinceLive: number | null;
+};
+
 export type ProductReorderApproval = {
   approval_state: "approved" | "revoked";
   approved_at: string;
@@ -241,6 +253,8 @@ export type CatalogueProduct = {
   sales_intelligence: ProductSalesIntelligence;
 
   replenishment_intelligence: ReplenishmentIntelligence;
+
+  trading_evidence?: TradingEvidence;
 
   configuration_score: number;
 

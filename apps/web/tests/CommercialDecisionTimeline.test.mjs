@@ -24,8 +24,34 @@ function candidate({ eligible = false, reasons = ["inventory_stale"] } = {}) {
     rejectionReasons: reasons,
     suggestedQuantity: 3,
     capitalEvaluation: { walletLastUpdated: "2026-08-05T09:00:00.000Z" },
+    tradingEvidence: { state: "SUFFICIENT_EVIDENCE", reason: "Verified trading evidence is sufficient.", verifiedLiveDays: 28, verifiedCoverageDays: 28, coverageComplete: true, orderEvidenceFresh: true, firstPositiveSaleAt: null, sellingDays: 0, unitsSinceLive: 0 },
   };
 }
+
+test("learning and developing target-days gaps remain buying blockers but are not high remediation", () => {
+  const learning = candidate({ reasons: ["target_stock_days_missing"] });
+  learning.tradingEvidence = { ...learning.tradingEvidence, state: "LEARNING", verifiedLiveDays: 2, verifiedCoverageDays: 2 };
+  const developing = { ...candidate({ reasons: ["target_stock_days_missing"] }), styleId: "developing::Black", parentProductId: "developing" };
+  developing.tradingEvidence = { ...developing.tradingEvidence, state: "DEVELOPING_EVIDENCE", verifiedLiveDays: 15, verifiedCoverageDays: 15 };
+  const result = CommercialDecisionTimeline.build({ advisor: advisor([learning, developing]), candidates: [learning, developing], generatedAt });
+  assert.equal(result.items.some((item) => item.id === "classifier-target_stock_days_missing"), false);
+  assert.equal(result.items.find((item) => item.id === "target-stock-days-learning").priority, "low");
+  assert.equal(result.items.find((item) => item.id === "target-stock-days-developing_evidence").priority, "medium");
+});
+
+test("sufficient evidence retains high target-days remediation", () => {
+  const result = CommercialDecisionTimeline.build({ advisor: advisor([candidate({ reasons: ["target_stock_days_missing"] })]), candidates: [candidate({ reasons: ["target_stock_days_missing"] })], generatedAt });
+  assert.equal(result.items.find((item) => item.id === "classifier-target_stock_days_missing").priority, "high");
+});
+
+test("unknown evidence retains buying blockage without high target-days remediation", () => {
+  const blocked = candidate({ reasons: ["target_stock_days_missing"] });
+  blocked.tradingEvidence = { ...blocked.tradingEvidence, state: "UNKNOWN", orderEvidenceFresh: false, verifiedLiveDays: null, verifiedCoverageDays: null, coverageComplete: false };
+  const result = CommercialDecisionTimeline.build({ advisor: advisor([blocked]), candidates: [blocked], generatedAt });
+  assert.ok(blocked.rejectionReasons.includes("target_stock_days_missing"));
+  assert.equal(result.items.some((item) => item.id === "classifier-target_stock_days_missing"), false);
+  assert.equal(result.items.find((item) => item.id === "target-stock-days-unknown").priority, "low");
+});
 
 function advisor(candidates, opportunity = null) {
   return {

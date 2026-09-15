@@ -123,6 +123,9 @@ Deno.serve(async (request: Request) => {
           {
             source: "shopify",
             source_product_id: product.id,
+            shopify_created_at: product.createdAt,
+            shopify_online_store_published_at: product.publishedAt,
+            shopify_publication_observed_at: new Date().toISOString(),
             title: product.title,
             handle: product.handle,
             vendor: product.vendor || null,
@@ -171,6 +174,7 @@ Deno.serve(async (request: Request) => {
                 source: "shopify",
                 source_variant_id:
                   variant.id,
+                shopify_created_at: variant.createdAt,
                 source_inventory_item_id:
                   variant.inventoryItem?.id ??
                   null,
@@ -230,6 +234,17 @@ Deno.serve(async (request: Request) => {
 
         variantsSynced += 1;
       }
+
+      const { error: publicationObservationError } = await supabase
+        .from("vault_shopify_product_publication_observations")
+        .upsert({
+          product_id: savedProduct.id,
+          source: "shopify",
+          published_at: product.publishedAt,
+          publication_state: product.publishedAt ? "published" : "unpublished",
+          observed_at: new Date().toISOString(),
+        }, { onConflict: "product_id, source, published_at_key, publication_state" });
+      if (publicationObservationError) throw publicationObservationError;
     }
 
     const staleVariantIds = findStaleCanonicalVariantIds(

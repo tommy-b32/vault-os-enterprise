@@ -17,6 +17,7 @@ import type {
   ProductIntelligenceProfile,
   ProductReorderApproval,
   ReplenishmentIntelligence,
+  TradingEvidence,
   ProductSalesIntelligence,
 } from "@/types/catalogue";
 
@@ -122,6 +123,18 @@ type ReplenishmentRow = {
   supplier_minimum_order_state: ReplenishmentIntelligence["supplierMinimumOrderState"];
   trusted: boolean;
   missing_requirements: string[] | null;
+};
+
+type TradingEvidenceRow = {
+  style_id: string;
+  maturity_state: TradingEvidence["state"];
+  verified_live_days: number | null;
+  verified_coverage_days: number | null;
+  coverage_complete: boolean | null;
+  order_evidence_fresh: boolean | null;
+  first_positive_sale_at: string | null;
+  selling_days: number | null;
+  units_since_live: number | null;
 };
 
 type ReorderApprovalRow = {
@@ -450,6 +463,7 @@ export async function getCatalogueData():
     costProfileResponse,
     commercialResponse,
     replenishmentResponse,
+    tradingEvidenceResponse,
     productVisionByProductId,
     approvalResponse,
     operatorResponse,
@@ -603,6 +617,20 @@ export async function getCatalogueData():
         missing_requirements
       `),
 
+    supabaseAdmin
+      .from("vault_style_trading_evidence")
+      .select(`
+        style_id,
+        maturity_state,
+        verified_live_days,
+        verified_coverage_days,
+        coverage_complete,
+        order_evidence_fresh,
+        first_positive_sale_at,
+        selling_days,
+        units_since_live
+      `),
+
     ProductVisionRepository
       .getMapByProductId(),
 
@@ -626,6 +654,7 @@ export async function getCatalogueData():
     supplierResponse.error ??
     commercialResponse.error ??
     replenishmentResponse.error ??
+    tradingEvidenceResponse.error ??
     approvalResponse.error ??
     operatorResponse.error ?? costProfileResponse.error;
 
@@ -661,6 +690,9 @@ export async function getCatalogueData():
 
   const replenishmentByStyle = new Map(
     replenishmentRows.map((row) => [row.style_id, row]),
+  );
+  const tradingEvidenceByStyle = new Map(
+    ((tradingEvidenceResponse.data ?? []) as TradingEvidenceRow[]).map((row) => [row.style_id, row]),
   );
 
   const approvalRows =
@@ -822,6 +854,7 @@ export async function getCatalogueData():
     styleRows.map(
       (style) => {
         const replenishment = replenishmentByStyle.get(style.style_id);
+        const tradingEvidence = tradingEvidenceByStyle.get(style.style_id);
         const commercialCost =
           commercialByParentProduct.get(
             style.parent_product_id,
@@ -1007,6 +1040,24 @@ export async function getCatalogueData():
               replenishment?.missing_requirements ?? [
                 "replenishment_intelligence_unavailable",
               ],
+          },
+
+          trading_evidence: {
+            state: tradingEvidence?.maturity_state ?? "UNKNOWN",
+            reason: tradingEvidence?.maturity_state === "LEARNING"
+              ? "Gathering trading evidence."
+              : tradingEvidence?.maturity_state === "DEVELOPING_EVIDENCE"
+                ? "Trading evidence is still developing."
+                : tradingEvidence?.maturity_state === "SUFFICIENT_EVIDENCE"
+                  ? "Verified trading evidence is sufficient."
+                  : "Trading history not yet verified.",
+            verifiedLiveDays: tradingEvidence?.verified_live_days ?? null,
+            verifiedCoverageDays: tradingEvidence?.verified_coverage_days ?? null,
+            coverageComplete: tradingEvidence?.coverage_complete ?? false,
+            orderEvidenceFresh: tradingEvidence?.order_evidence_fresh ?? false,
+            firstPositiveSaleAt: tradingEvidence?.first_positive_sale_at ?? null,
+            sellingDays: tradingEvidence?.selling_days ?? null,
+            unitsSinceLive: tradingEvidence?.units_since_live ?? null,
           },
 
           configuration_score:
