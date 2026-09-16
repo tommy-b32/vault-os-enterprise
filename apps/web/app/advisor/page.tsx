@@ -4,6 +4,7 @@ import VaultAppShell from "@/components/layout/VaultAppShell";
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import type { SupplierPurchasingData } from "@/components/commercial/SupplierPurchasing";
 import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
+import { targetStockDaysPresentationItems } from "@/lib/brain/CommercialDecisionTimeline";
 import type {
   AdvisorDiagnostics,
 } from "@/lib/brain/AdvisorEngine";
@@ -17,6 +18,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import type {
   CatalogueProduct,
 } from "@/types/catalogue";
+import type { TrustedBuyingCandidateResult } from "@/lib/brain/TrustedBuyingCandidateClassifier";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,7 @@ type DecisionBlocker = {
   count: number;
   href: string;
   action: string;
+  priority?: "high" | "medium" | "low";
 };
 
 type ReadinessCheck = {
@@ -93,6 +96,7 @@ function getDestinationLabel(href: string): string {
 
 function buildDecisionBlockers(
   diagnostics: AdvisorDiagnostics,
+  candidates: TrustedBuyingCandidateResult[],
 ): DecisionBlocker[] {
   const blockers: DecisionBlocker[] = [];
   const missingSuppliers = Math.max(
@@ -130,17 +134,15 @@ function buildDecisionBlockers(
     });
   }
 
-  if (diagnostics.targetStockDaysMissing > 0) {
-    blockers.push({
-      id: "target-stock-days",
-      title: "Target stock days are incomplete",
-      description:
-        "The quantity engine requires canonical target stock days before calculating a trusted reorder.",
-      count: diagnostics.targetStockDaysMissing,
-      href: "/catalogue",
-      action: "Complete target stock days",
-    });
-  }
+  blockers.push(...targetStockDaysPresentationItems(candidates).map((item) => ({
+    id: `trading-evidence-${item.id}`,
+    title: item.title,
+    description: item.description ?? "Target stock days remain a buying-safety requirement.",
+    count: item.affectedStyleIds.length,
+    href: item.destination ?? "/catalogue",
+    action: item.priority === "high" ? "Complete target stock days" : "Review trading evidence",
+    priority: item.priority as "high" | "medium" | "low",
+  })));
 
   if (diagnostics.reorderApprovalMissing > 0) {
     blockers.push({
@@ -472,7 +474,7 @@ export default async function AdvisorPage() {
   const { analysis, diagnostics } = result.advisor;
   const primaryDecision = analysis.highestPriority;
   const rankedOpportunities = analysis.ranked.slice(1, 6);
-  const blockers = buildDecisionBlockers(diagnostics);
+  const blockers = buildDecisionBlockers(diagnostics, result.advisor.candidates);
   const advisorConfidence =
     analysis.ranked.length > 0
       ? `${analysis.averageConfidence}%`
@@ -620,7 +622,7 @@ export default async function AdvisorPage() {
                 <div className="advisor-blocker-grid">
                   {blockers.map((blocker) => (
                     <article key={blocker.id}>
-                      <span>{blocker.count} affected</span>
+                      <span>{blocker.priority ? `${formatLabel(blocker.priority)} priority · ` : ""}{blocker.count} affected</span>
                       <h3>{blocker.title}</h3>
                       <p>{blocker.description}</p>
                       <Link href={blocker.href}>{blocker.action} →</Link>

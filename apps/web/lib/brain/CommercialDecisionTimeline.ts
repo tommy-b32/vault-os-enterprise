@@ -339,6 +339,22 @@ function monitoringItems(
   return items;
 }
 
+/**
+ * The single presentation policy for a missing target-stock-days rule. Buying
+ * remains blocked in the classifier; this only decides its executive-facing
+ * urgency according to verified trading maturity.
+ */
+export function targetStockDaysPresentationItems(
+  candidates: TrustedBuyingCandidateResult[],
+): CommercialDecisionTimelineItem[] {
+  return [
+    ...classifierBlockers(candidates).filter((item) =>
+      item.blockerReasons.includes("target_stock_days_missing")),
+    ...monitoringItems(candidates).filter((item) =>
+      item.blockerReasons.includes("target_stock_days_missing")),
+  ];
+}
+
 function predictionItem(
   prediction: VaultBrainPrediction,
   predictedAt: string,
@@ -427,4 +443,5 @@ export function buildCommercialDecisionTimeline({
 
 export const CommercialDecisionTimeline = {
   build: buildCommercialDecisionTimeline,
+  targetStockDaysPresentationItems,
 } as const;
