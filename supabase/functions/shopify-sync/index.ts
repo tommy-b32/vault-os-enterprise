@@ -201,6 +201,8 @@ Deno.serve(async (request: Request) => {
                 option_3_name: identity.optionNames[2],
                 model_design: identity.modelDesign,
                 normalized_size: identity.normalizedSize,
+                size_domain: identity.sizeDomain,
+                size_system: identity.sizeSystem,
                 identity_resolution_status: identity.resolution,
                 price:
                   Number(variant.price || 0),
