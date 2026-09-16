@@ -22,9 +22,13 @@ test("Shopify catalogue ingestion persists source timestamps and idempotent publ
 });
 
 test("trading evidence derives maturity only from source timestamps and successful coverage", async () => {
-  const migration = await readFile(new URL("supabase/migrations/20260929000000_style_trading_evidence.sql", root), "utf8");
+  const migration = await readFile(new URL("supabase/migrations/20260930000000_style_trading_evidence_joined_recent_coverage.sql", root), "utf8");
   assert.match(migration, /vault_style_trading_evidence/);
-  assert.match(migration, /range_agg\(tstzrange\(created_from, created_before/);
+  assert.match(migration, /tstzrange\(created_from, created_before/);
+  assert.match(migration, /range_agg\(covered_window\)/);
+  assert.match(migration, /updated_from/);
+  assert.match(migration, /updated_before/);
+  assert.match(migration, /recent_orders_by_updated_at/);
   assert.match(migration, /canonical_order_evidence_max_age/);
   assert.match(migration, /interval '30 minutes'/);
   assert.match(migration, /order_evidence_fresh/);

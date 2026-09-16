@@ -20,9 +20,9 @@ test("default reconciliation request remains unchanged", async () => {
     readFile(ordersUrl, "utf8"),
   ]);
   assert.match(handler, /SHOPIFY_ORDER_SYNC_DAYS/);
-  assert.match(handler, /fetchRecentShopifyOrders\(updatedSince as string\)/);
+  assert.match(handler, /fetchRecentShopifyOrders\(updatedSince as string, reconciliationBefore as string\)/);
   assert.match(handler, /recent_orders_by_updated_at/);
-  assert.match(orders, /`updated_at:>=\$\{updatedSince\}`/);
+  assert.match(orders, /`updated_at:>='\$\{updatedSince\}' updated_at:<'\$\{updatedBefore\}'`/);
   assert.match(orders, /sortKey: "UPDATED_AT"/);
 });
 
@@ -123,7 +123,7 @@ test("historical pages are small, follow cursors, preserve bounds and exclude cu
   assert.equal(calls[0].variables.query, "created_at:>='2026-05-01T00:00:00Z' created_at:<'2026-05-08T00:00:00Z'");
   assert.equal(calls[0].deadline, calls[1].deadline);
   assert.doesNotMatch(calls[0].query, /\bemail\b|\bcustomer\b/);
-  await orders.fetchRecentShopifyOrders("2026-08-01T00:00:00Z");
+  await orders.fetchRecentShopifyOrders("2026-08-01T00:00:00Z", "2026-08-08T00:00:00Z");
   assert.equal(calls[2].variables.first, 50);
   assert.equal(calls[2].deadline, undefined);
   assert.match(calls[2].query, /email customer/);
@@ -240,5 +240,8 @@ test("backfill diagnostics preserve the existing sync-run schema", async () => {
   const insert = source.match(/\.from\("vault_shopify_order_sync_runs"\)[\s\S]*?\.select\("id"\)/)?.[0] ?? "";
   assert.match(source, /historical_orders_by_created_at/);
   assert.match(insert, /sync_days: syncDays/);
-  assert.doesNotMatch(insert, /created_from|created_before/);
+  assert.match(insert, /created_from/);
+  assert.match(insert, /created_before/);
+  assert.match(insert, /updated_from/);
+  assert.match(insert, /updated_before/);
 });
