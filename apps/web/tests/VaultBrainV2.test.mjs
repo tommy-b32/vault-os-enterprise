@@ -29,6 +29,7 @@ test("Vault Brain V2 reuses governed outputs for a decision trace without recrea
   assert.match(component, /What Vault OS understands now/);
   assert.match(component, /DECISION TRACE/);
   assert.match(component, /data\.decisionTrace\.map/);
+  assert.match(component, /GOVERNED DECISION REASONS/);
   assert.match(component, /does not create a buying, reorder, or approval recommendation/);
 });
 

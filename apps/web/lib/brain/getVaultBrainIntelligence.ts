@@ -69,6 +69,9 @@ export async function getVaultBrainIntelligence(): Promise<VaultBrainIntelligenc
   const timeline = await getCommercialDecisionTimeline(cockpit.generatedAt);
   const decisionTrace = buildTrace(cockpit, timeline);
   const noTrustedCandidate = decisionTrace.find((stage) => stage.id === "trusted-buying-decision")?.state === "blocked";
-  const blockerExplanations = (timeline?.items ?? []).filter((item) => item.source === "classifier" && (item.status === "blocked" || item.status === "monitoring")).map((item) => item.description ?? item.title).slice(0, 3);
-  return { generatedAt: cockpit.generatedAt, conclusions: buildConclusions(decisionTrace), decisionTrace, blockerExplanations: blockerExplanations.length || !noTrustedCandidate ? blockerExplanations : ["The current governed path has not produced a trusted candidate, but an authoritative candidate-level blocker is not available."], noTrustedCandidate, historyAvailable: false, learningAvailable: false };
+  const blockerExplanations = timeline?.reasonSummary?.outcome === "NO_TRUSTED_CANDIDATE"
+    ? timeline.reasonSummary.primaryReasons.map((reason) => `${reason.affectedStyleIds.length} style${reason.affectedStyleIds.length === 1 ? "" : "s"}: ${reason.explanation}`).slice(0, 6)
+    : (timeline?.items ?? []).filter((item) => item.source === "classifier" && (item.status === "blocked" || item.status === "monitoring")).map((item) => item.description ?? item.title).slice(0, 3);
+  const limitations = timeline?.reasonSummary?.limitations ?? [];
+  return { generatedAt: cockpit.generatedAt, conclusions: buildConclusions(decisionTrace), decisionTrace, blockerExplanations: blockerExplanations.length || !noTrustedCandidate ? [...blockerExplanations, ...limitations] : ["The current governed path has not produced a trusted candidate, but an authoritative candidate-level blocker is not available."], noTrustedCandidate, historyAvailable: false, learningAvailable: false };
 }

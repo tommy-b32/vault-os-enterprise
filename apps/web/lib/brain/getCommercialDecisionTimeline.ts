@@ -3,6 +3,7 @@ import "server-only";
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import type { SupplierPurchasingData } from "@/components/commercial/SupplierPurchasing";
 import { AdvisorEngine } from "@/lib/brain/AdvisorEngine";
+import { BuyingDecisionReasonSummary } from "@/lib/brain/BuyingDecisionReasonSummary";
 import {
   CommercialDecisionTimeline,
   type CommercialDecisionTimelineResult,
@@ -60,7 +61,7 @@ export async function getCommercialDecisionTimeline(
           ...supplier,
           minimum_order_packs: packMinimumBySupplierId.get(supplier.id) ?? null,
         })) as SupplierPurchasingData[];
-    const candidates = PurchaseIntelligenceEngine.evaluate({
+    const evaluation = PurchaseIntelligenceEngine.evaluate({
       products: catalogue.products,
       suppliers: suppliers.map((supplier) => ({
         id: supplier.id,
@@ -72,15 +73,18 @@ export async function getCommercialDecisionTimeline(
       })),
       wallet,
       inventoryTrusted: freshness.syncStatus === "current",
-    }).candidates;
+    });
+    const candidates = evaluation.candidates;
     const advisor = AdvisorEngine.analyse({
       products: catalogue.products,
       candidates,
     });
+    const reasonSummary = BuyingDecisionReasonSummary.build(evaluation, generatedAt);
 
     return CommercialDecisionTimeline.build({
       advisor,
       candidates,
+      reasonSummary,
       generatedAt,
     });
   } catch {

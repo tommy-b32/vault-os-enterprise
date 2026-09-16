@@ -8,6 +8,7 @@ import type {
   VaultBrainPrediction,
 } from "@/lib/brain/PredictionEngine";
 import { hasStrongEarlyDemand } from "@/lib/brain/TradingEvidencePolicy";
+import type { BuyingDecisionReasonSummary } from "@/lib/brain/BuyingDecisionReasonSummary";
 
 type RemediableBuyingBlocker = Extract<TrustedBuyingCandidateRejectionReason,
   "reorder_approval_missing" | "invalid_or_missing_commercial_cost" | "target_stock_days_missing" | "wallet_freshness_unknown" | "wallet_stale">;
@@ -79,6 +80,7 @@ export type CommercialDecisionTimelineGroup =
 
 export type CommercialDecisionTimelineResult = {
   generatedAt: string;
+  reasonSummary: BuyingDecisionReasonSummary | null;
   highestPriorityAction: CommercialDecisionTimelineItem | null;
   groups: Array<{
     label: CommercialDecisionTimelineGroup;
@@ -249,6 +251,18 @@ function classifierBlockers(
   });
 }
 
+function reasonSummaryItems(summary: BuyingDecisionReasonSummary): CommercialDecisionTimelineItem[] {
+  return summary.reasons.filter((reason) =>
+    reason.source === "TrustedBuyingCandidateClassifier" &&
+    reason.code !== "target_stock_days_missing" &&
+    reason.state !== "NO_ACTION_REQUIRED" && reason.state !== "INFORMATIONAL"
+  ).map((reason) => {
+    const source = reason.stage === "INVENTORY" ? "inventory" : reason.stage === "COMMERCIAL" ? "commercial" : reason.stage === "SUPPLIER" ? "supplier" : reason.stage === "CAPITAL" ? "wallet" : "classifier" as const;
+    const destination = reason.stage === "INVENTORY" ? "/inventory" : reason.stage === "COMMERCIAL" || reason.stage === "CAPITAL" ? "/commercial" : reason.stage === "SUPPLIER" ? "/purchase-intelligence" : "/catalogue";
+    return { id: `reason-summary-${reason.code}`, source, category: reason.state === "GATHERING_EVIDENCE" ? "follow_up" : "blocker", status: reason.state === "GATHERING_EVIDENCE" ? "monitoring" : reason.state === "UNAVAILABLE" ? "unavailable" : "blocked", priority: reason.state === "GATHERING_EVIDENCE" ? "medium" : "high", title: reason.explanation, description: reason.explanation, effectiveAt: summary.generatedAt, deadlineAt: null, predictedAt: null, confidence: null, confidenceMeaning: null, entityType: "catalogue_style_set", entityId: null, destination, evidence: [{ label: "Affected styles", value: String(reason.affectedStyleIds.length) }], blockerReasons: [reason.code], affectedParentProductIds: reason.affectedParentProductIds, affectedStyleIds: reason.affectedStyleIds } satisfies CommercialDecisionTimelineItem;
+  });
+}
+
 function monitoringItems(
   candidates: TrustedBuyingCandidateResult[],
 ): CommercialDecisionTimelineItem[] {
@@ -409,16 +423,20 @@ function groupFor(
 export function buildCommercialDecisionTimeline({
   advisor,
   candidates,
+  reasonSummary = null,
   predictions = null,
   generatedAt,
 }: {
   advisor: AdvisorEngineResult;
   candidates: TrustedBuyingCandidateResult[];
+  reasonSummary?: BuyingDecisionReasonSummary | null;
   predictions?: PredictionEngineResult | null;
   generatedAt: string;
 }): CommercialDecisionTimelineResult {
   const action = advisorItem(advisor, generatedAt);
-  const blockers = classifierBlockers(candidates)
+  const blockers = (reasonSummary
+    ? [...reasonSummaryItems(reasonSummary), ...classifierBlockers(candidates).filter((item) => item.blockerReasons.includes("target_stock_days_missing"))]
+    : classifierBlockers(candidates))
     .sort((a, b) => priorityWeight(b.priority) - priorityWeight(a.priority))
     .slice(0, 3);
   const monitoring = monitoringItems(candidates).slice(0, 3);
@@ -438,7 +456,7 @@ export function buildCommercialDecisionTimeline({
     items: items.filter((item) => groupFor(item, generatedAt) === label),
   })).filter((group) => group.items.length > 0);
 
-  return { generatedAt, highestPriorityAction: action, groups, items };
+  return { generatedAt, reasonSummary, highestPriorityAction: action, groups, items };
 }
 
 export const CommercialDecisionTimeline = {
