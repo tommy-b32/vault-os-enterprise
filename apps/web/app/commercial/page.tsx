@@ -50,7 +50,7 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
         .select("supplier_id, minimum_order_packs"),
       supabaseAdmin
         .from("vault_supplier_product_type_cost_profiles")
-        .select("id, supplier_id, supplier_currency, exchange_rate_to_gbp, pack_cost, shipping_cost_per_pack, import_cost_per_pack, units_per_pack, price_updated_at, active, vault_suppliers!inner(supplier_name), vault_cost_types!inner(id, display_name)")
+        .select("id, supplier_id, supplier_currency, exchange_rate_to_gbp, pack_cost, shipping_cost_per_pack, import_cost_per_pack, units_per_pack, price_updated_at, effective_from, active, vault_suppliers!inner(supplier_name), vault_cost_types!inner(id, display_name)")
         .order("price_updated_at", { ascending: false }),
       CashLedgerRepository.getSnapshot(20).then(
         (data) => ({ data, error: null }),
@@ -104,7 +104,7 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
     supplier_currency: row.supplier_currency, exchange_rate_to_gbp: row.exchange_rate_to_gbp,
     pack_cost: row.pack_cost, shipping_cost_per_pack: row.shipping_cost_per_pack,
     import_cost_per_pack: row.import_cost_per_pack, units_per_pack: row.units_per_pack,
-    price_updated_at: row.price_updated_at, active: row.active,
+    price_updated_at: row.price_updated_at, effective_from: row.effective_from, active: row.active,
   }));
 
   return (

@@ -26,6 +26,23 @@ test("the confirmed Exclusive tee profile calculates governed USD to GBP economi
   assert.notEqual(fx, 1);
 });
 
+test("profile edit preview is driven by live draft state and preserves effective_from", async () => {
+  const [component, page] = await Promise.all([
+    read("components/commercial/SupplierCostProfiles.tsx"),
+    read("app/commercial/page.tsx"),
+  ]);
+  assert.match(component, /const \[draft, setDraft\] = useState/);
+  assert.match(component, /landed \* fx/);
+  assert.match(component, /landedGbp \/ units/);
+  assert.match(component, /draft\.currency === "GBP" \? "1" : draft\.exchangeRate/);
+  assert.match(component, /value=\{draft\.packCost\}/);
+  assert.match(component, /value=\{draft\.shipping\}/);
+  assert.match(component, /value=\{draft\.importCost\}/);
+  assert.match(component, /value=\{draft\.units\}/);
+  assert.match(component, /effectiveFrom: profile\.effective_from\.slice\(0, 16\)/);
+  assert.match(page, /effective_from/);
+});
+
 test("parents require an explicit governed cost type before eligible profiles are offered", async () => {
   const [component, action] = await Promise.all([
     read("components/catalogue/editor/ProductCommercialTab.tsx"),
