@@ -192,9 +192,10 @@ function getRefundsByLine(order: ShopifyOrderNode) {
 
 export async function fetchRecentShopifyOrders(
   updatedSince: string,
+  updatedBefore: string,
 ): Promise<ShopifyOrderNode[]> {
   return fetchShopifyOrders({
-    query: `updated_at:>=${updatedSince}`,
+    query: `updated_at:>='${updatedSince}' updated_at:<'${updatedBefore}'`,
     sortKey: "UPDATED_AT",
   });
 }

@@ -93,14 +93,17 @@ Deno.serve(async (request: Request) => {
       }, 400);
     }
 
+    const reconciliationBefore = requestInput.mode === "reconciliation"
+      ? startedAt
+      : null;
     const syncDays = requestInput.mode === "historical_backfill"
       ? Math.ceil(
           (Date.parse(requestInput.createdBefore) - Date.parse(requestInput.createdFrom)) /
             (24 * 60 * 60 * 1000),
         )
       : getSyncDays();
-    const updatedSince = requestInput.mode === "reconciliation"
-      ? new Date(Date.now() - syncDays * 24 * 60 * 60 * 1000).toISOString()
+    const updatedSince = reconciliationBefore
+      ? new Date(Date.parse(reconciliationBefore) - syncDays * 24 * 60 * 60 * 1000).toISOString()
       : null;
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
@@ -113,7 +116,7 @@ Deno.serve(async (request: Request) => {
           requestInput.createdFrom,
           requestInput.createdBefore,
         )
-      : await fetchRecentShopifyOrders(updatedSince as string);
+      : await fetchRecentShopifyOrders(updatedSince as string, reconciliationBefore as string);
     let linesSynced = 0;
 
     for (const order of orders) {
@@ -139,6 +142,8 @@ Deno.serve(async (request: Request) => {
         created_before: requestInput.mode === "historical_backfill"
           ? requestInput.createdBefore
           : null,
+        updated_from: requestInput.mode === "reconciliation" ? updatedSince : null,
+        updated_before: reconciliationBefore,
         started_at: startedAt,
         completed_at: completedAt,
       })
@@ -166,6 +171,7 @@ Deno.serve(async (request: Request) => {
         : "recent_orders_by_updated_at",
       sync_days: syncDays,
       updated_since: updatedSince,
+      updated_before: reconciliationBefore,
       created_from: requestInput.mode === "historical_backfill"
         ? requestInput.createdFrom
         : null,
