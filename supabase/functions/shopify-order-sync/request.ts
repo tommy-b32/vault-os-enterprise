@@ -1,5 +1,6 @@
 export type OrderSyncRequest =
   | { mode: "reconciliation" }
+  | { mode: "historical_maintenance" }
   | {
       mode: "historical_backfill";
       createdFrom: string;
@@ -31,6 +32,9 @@ export function parseOrderSyncRequest(value: unknown): OrderSyncRequest {
   }
 
   const body = value as Record<string, unknown>;
+  if (body.mode === "historical_maintenance" && Object.keys(body).length === 1) {
+    return { mode: "historical_maintenance" };
+  }
   const hasFrom = body.created_from !== undefined;
   const hasBefore = body.created_before !== undefined;
   if (!hasFrom && !hasBefore) return { mode: "reconciliation" };

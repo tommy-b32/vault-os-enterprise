@@ -96,32 +96,39 @@ Deno.serve(async (request: Request) => {
     const reconciliationBefore = requestInput.mode === "reconciliation"
       ? startedAt
       : null;
-    const syncDays = requestInput.mode === "historical_backfill"
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    let maintenanceWindow: { created_from: string; created_before: string } | null = null;
+    if (requestInput.mode === "historical_maintenance") {
+      const { data, error } = await supabase.rpc("get_shopify_historical_maintenance_window", { target_at: startedAt });
+      if (error) throw new Error(`Unable to plan historical coverage maintenance: ${error.message}`);
+      maintenanceWindow = data?.[0] ?? null;
+      if (!maintenanceWindow) return respond({ success: true, sync_mode: "historical_maintenance", maintained: false, completed_at: startedAt });
+    }
+    const historicalWindow = requestInput.mode === "historical_backfill"
+      ? { created_from: requestInput.createdFrom, created_before: requestInput.createdBefore }
+      : maintenanceWindow;
+    const syncDays = historicalWindow
       ? Math.ceil(
-          (Date.parse(requestInput.createdBefore) - Date.parse(requestInput.createdFrom)) /
+          (Date.parse(historicalWindow.created_before) - Date.parse(historicalWindow.created_from)) /
             (24 * 60 * 60 * 1000),
         )
       : getSyncDays();
     const updatedSince = reconciliationBefore
       ? new Date(Date.parse(reconciliationBefore) - syncDays * 24 * 60 * 60 * 1000).toISOString()
       : null;
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-    const orders = requestInput.mode === "historical_backfill"
+    const orders = historicalWindow
       ? await fetchHistoricalShopifyOrders(
-          requestInput.createdFrom,
-          requestInput.createdBefore,
+          historicalWindow.created_from,
+          historicalWindow.created_before,
         )
       : await fetchRecentShopifyOrders(updatedSince as string, reconciliationBefore as string);
     let linesSynced = 0;
 
     for (const order of orders) {
       const result = await upsertShopifyOrder(supabase, order, {
-        omitCustomerData: requestInput.mode === "historical_backfill",
+        omitCustomerData: Boolean(historicalWindow),
       });
       linesSynced += result.linesSynced;
     }
@@ -130,17 +137,17 @@ Deno.serve(async (request: Request) => {
     const { data: syncRun, error: syncRunError } = await supabase
       .from("vault_shopify_order_sync_runs")
       .insert({
-        sync_mode: requestInput.mode === "historical_backfill"
+        sync_mode: historicalWindow
           ? "historical_orders_by_created_at"
           : "recent_orders_by_updated_at",
         sync_days: syncDays,
         orders_synced: orders.length,
         order_lines_synced: linesSynced,
-        created_from: requestInput.mode === "historical_backfill"
-          ? requestInput.createdFrom
+        created_from: historicalWindow
+          ? historicalWindow.created_from
           : null,
-        created_before: requestInput.mode === "historical_backfill"
-          ? requestInput.createdBefore
+        created_before: historicalWindow
+          ? historicalWindow.created_before
           : null,
         updated_from: requestInput.mode === "reconciliation" ? updatedSince : null,
         updated_before: reconciliationBefore,
@@ -166,17 +173,17 @@ Deno.serve(async (request: Request) => {
 
     return respond({
       success: true,
-      sync_mode: requestInput.mode === "historical_backfill"
+      sync_mode: historicalWindow
         ? "historical_orders_by_created_at"
         : "recent_orders_by_updated_at",
       sync_days: syncDays,
       updated_since: updatedSince,
       updated_before: reconciliationBefore,
-      created_from: requestInput.mode === "historical_backfill"
-        ? requestInput.createdFrom
+      created_from: historicalWindow
+        ? historicalWindow.created_from
         : null,
-      created_before: requestInput.mode === "historical_backfill"
-        ? requestInput.createdBefore
+      created_before: historicalWindow
+        ? historicalWindow.created_before
         : null,
       orders_synced: orders.length,
       order_lines_synced: linesSynced,

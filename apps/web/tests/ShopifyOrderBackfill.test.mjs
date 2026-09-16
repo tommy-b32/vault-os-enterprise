@@ -26,6 +26,11 @@ test("default reconciliation request remains unchanged", async () => {
   assert.match(orders, /sortKey: "UPDATED_AT"/);
 });
 
+test("historical maintenance is an explicit internal mode", () => {
+  assert.deepEqual(parseOrderSyncRequest({ mode: "historical_maintenance" }), { mode: "historical_maintenance" });
+  assert.throws(() => parseOrderSyncRequest({ mode: "historical_maintenance", created_from: "2026-01-01T00:00:00Z" }));
+});
+
 test("historical mode accepts a complete ISO-8601 range", () => {
   assert.deepEqual(parseOrderSyncRequest({
     created_from: "2026-07-01T00:00:00Z",
