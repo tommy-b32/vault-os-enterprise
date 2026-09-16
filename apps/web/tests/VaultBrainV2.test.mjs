@@ -16,24 +16,50 @@ test("Vault Brain V2 is read-only and does not use legacy snapshots or demonstra
   }
 });
 
-test("Vault Brain V2 composes governed Command Centre outputs without recreating finance or buying calculations", async () => {
+test("Vault Brain V2 reuses governed outputs for a decision trace without recreating policy", async () => {
   const model = await read("lib/brain/getVaultBrainIntelligence.ts");
   const component = await read("components/brain/VaultBrainV2.tsx");
 
   assert.match(model, /getCommandCentreCockpit/);
-  assert.match(model, /cockpit\.attention/);
-  assert.match(model, /cockpit\.executiveBriefing\.supportingEvidence/);
-  assert.doesNotMatch(model, /vault_purchasing_wallet|available_purchasing_power_gbp|TrustedBuyingCandidateClassifier/);
-  assert.match(component, /No trusted buying candidate is available/);
-  assert.match(component, /does not create a buying recommendation/);
+  assert.match(model, /getCommercialDecisionTimeline/);
+  assert.match(model, /decisionTrace/);
+  assert.match(model, /blockerReasons/);
+  assert.doesNotMatch(model, /cockpit\.attention/);
+  assert.doesNotMatch(model, /available_purchasing_power_gbp|TrustedBuyingCandidateClassifier|PurchaseIntelligenceEngine/);
+  assert.match(component, /What Vault OS understands now/);
+  assert.match(component, /DECISION TRACE/);
+  assert.match(component, /data\.decisionTrace\.map/);
+  assert.match(component, /does not create a buying, reorder, or approval recommendation/);
 });
 
-test("Vault Brain V2 fails closed and links operators to governed specialist surfaces", async () => {
+test("Vault Brain V2 fails closed, formats freshness for people, and links specialist surfaces", async () => {
   const component = await read("components/brain/VaultBrainV2.tsx");
 
-  assert.match(component, /Source freshness unavailable/);
+  assert.match(component, /Freshness unavailable/);
+  assert.match(component, /Intl\.DateTimeFormat/);
+  assert.doesNotMatch(component, /toLocaleString/);
   assert.match(component, /No governed executive conclusion is currently available/);
   assert.match(component, /href="\/"/);
   assert.match(component, /href="\/intelligence"/);
   assert.match(component, /Open authoritative surface/);
+});
+
+test("Vault Brain V2 preserves the governed route contracts for every trace stage", async () => {
+  const model = await read("lib/brain/getVaultBrainIntelligence.ts");
+
+  for (const destination of ["/inventory", "/catalogue", "/commercial", "/purchase-intelligence", "/advisor"]) {
+    assert.ok(model.includes(destination), `expected governed route ${destination}`);
+  }
+  assert.match(model, /No governed aggregate commercial-trust result is exposed/);
+  assert.match(model, /not produced a trusted candidate/);
+});
+
+test("Vault Brain V2 keeps missing evidence fail-closed at every governed boundary", async () => {
+  const model = await read("lib/brain/getVaultBrainIntelligence.ts");
+
+  assert.match(model, /domain\.state === "unavailable" \|\| domain\.state === "not_connected"/);
+  assert.match(model, /commercial \? timelineState\(commercial\) : "unknown"/);
+  assert.match(model, /wallet\.state === "stale" \? "watch" : "unavailable"/);
+  assert.match(model, /noCandidate \? "blocked" : advisorAction \? "proven" : "unknown"/);
+  assert.match(model, /this alone does not approve a purchase/);
 });
