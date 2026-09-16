@@ -98,6 +98,7 @@ export function ProductCommercialTab({
   const [hasUnsavedChanges, setHasUnsavedChanges] =
     useState(false);
   const [profileId, setProfileId] = useState(commercial.effective_profile_id ?? "");
+  const [costTypeId, setCostTypeId] = useState(commercial.cost_type_id ?? "");
   const [inherit, setInherit] = useState({
     pack: commercial.pack_cost_source === "inherited",
     shipping: commercial.shipping_cost_source === "inherited",
@@ -105,7 +106,8 @@ export function ProductCommercialTab({
     units: commercial.units_source === "inherited",
     fx: commercial.fx_source === "inherited",
   });
-  const matchingProfiles = costProfiles.filter((profile) => profile.supplier_id === product.supplier_id && (!commercial.cost_type_id || profile.cost_type_id === commercial.cost_type_id));
+  const costTypes = [...new Map(costProfiles.map((profile) => [profile.cost_type_id, profile.cost_type_name])).entries()];
+  const matchingProfiles = costProfiles.filter((profile) => profile.supplier_id === product.supplier_id && profile.cost_type_id === costTypeId);
 
   const [currency, setCurrency] =
     useState(commercial.currency ?? "GBP");
@@ -214,6 +216,7 @@ export function ProductCommercialTab({
           <div><dt>FX</dt><dd>{sourceLabel(commercial.fx_source, commercial.cost_type_id, commercial.profile_price_updated_at)}</dd></div>
         </dl>
         <label><span>Supplier cost profile</span><select name="profile_id" onChange={(event) => setProfileId(event.target.value)} value={profileId}><option value="">No profile selected</option>{matchingProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.supplier_name} · {profile.cost_type_name}</option>)}</select></label>
+        <label><span>Canonical cost type</span><select name="cost_type_id" onChange={(event) => { setCostTypeId(event.target.value); setProfileId(""); }} value={costTypeId}><option value="">Choose explicit cost type</option>{costTypes.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
         <fieldset className="commercial-inheritance-controls"><legend>Cost source controls</legend>
           {([['pack','inherit_pack_cost','Use supplier profile for pack cost'],['shipping','inherit_shipping_cost','Use supplier profile for shipping'],['import','inherit_import_cost','Use supplier profile for import'],['units','inherit_units_per_pack','Use supplier profile for units'],['fx','inherit_fx','Use supplier profile for currency and FX']] as const).map(([key,name,label]) => <label key={name}><input checked={inherit[key]} name={name} onChange={(event) => setInherit((previous) => ({ ...previous, [key]: event.target.checked }))} type="checkbox" value="true" />{inherit[key] ? "Return to profile inheritance" : `${label} / Override for this product`}</label>)}
         </fieldset>

@@ -53,9 +53,11 @@ export async function saveSupplierCostProfile(
     if (supplier.error || !supplier.data?.is_active) throw new Error("Choose an active canonical supplier.");
     const { error: typeError } = await supabaseAdmin.from("vault_cost_types").upsert({ id: costTypeId, display_name: costTypeName }, { onConflict: "id" });
     if (typeError) throw new Error("The governed cost type could not be saved.");
+    const exchangeRateToGbp = currency === "GBP" ? 1 : requiredPositive(formData, "exchange_rate_to_gbp", "Exchange rate");
+    if (currency !== "GBP" && exchangeRateToGbp === 1) throw new Error("A non-GBP supplier profile cannot use the default 1.000000 FX rate. Enter a verified GBP value for one unit of supplier currency.");
     const profile = {
       supplier_id: supplierId, cost_type_id: costTypeId, supplier_currency: currency,
-      exchange_rate_to_gbp: currency === "GBP" ? 1 : requiredPositive(formData, "exchange_rate_to_gbp", "Exchange rate"),
+      exchange_rate_to_gbp: exchangeRateToGbp,
       pack_cost: requiredPositive(formData, "pack_cost", "Pack cost"),
       shipping_cost_per_pack: Number(text(formData, "shipping_cost_per_pack") || 0),
       import_cost_per_pack: Number(text(formData, "import_cost_per_pack") || 0),

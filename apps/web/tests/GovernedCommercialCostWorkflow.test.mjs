@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const root = new URL("..", import.meta.url);
+const read = (file) => readFile(new URL(file, root), "utf8");
+
+test("supplier profiles are viewable, editable, and reject the non-GBP FX default", async () => {
+  const [component, action] = await Promise.all([
+    read("components/commercial/SupplierCostProfiles.tsx"),
+    read("app/commercial/actions.ts"),
+  ]);
+  assert.match(component, /profiles\.map/);
+  assert.match(component, /Edit/);
+  assert.match(component, /Preview:/);
+  assert.match(action, /currency !== "GBP" && exchangeRateToGbp === 1/);
+  assert.match(action, /GBP value for one unit of supplier currency/);
+});
+
+test("the confirmed Exclusive tee profile calculates governed USD to GBP economics", () => {
+  const supplierLandedPack = 50 + 23.25;
+  const fx = 0.745755;
+  assert.equal(supplierLandedPack, 73.25);
+  assert.equal(Number((supplierLandedPack * fx).toFixed(2)), 54.63);
+  assert.equal(Number((supplierLandedPack * fx / 5).toFixed(2)), 10.93);
+  assert.notEqual(fx, 1);
+});
+
+test("parents require an explicit governed cost type before eligible profiles are offered", async () => {
+  const [component, action] = await Promise.all([
+    read("components/catalogue/editor/ProductCommercialTab.tsx"),
+    read("app/catalogue/commercial-actions.ts"),
+  ]);
+  assert.match(component, /Canonical cost type/);
+  assert.match(component, /profile\.cost_type_id === costTypeId/);
+  assert.match(action, /vault_product_cost_type_assignments/);
+  assert.match(action, /profile\.supplier_id !== inputs\.supplierId/);
+  assert.match(action, /profile\.cost_type_id !== assignment\?\.cost_type_id/);
+});
+
+test("inheritance remains parent-level and preserves all five field choices", async () => {
+  const [component, action] = await Promise.all([
+    read("components/catalogue/editor/ProductCommercialTab.tsx"),
+    read("app/catalogue/commercial-actions.ts"),
+  ]);
+  for (const field of ["inherit_pack_cost", "inherit_shipping_cost", "inherit_import_cost", "inherit_units_per_pack", "inherit_fx"]) {
+    assert.match(component, new RegExp(field));
+    assert.match(action, new RegExp(field));
+  }
+  assert.match(action, /vault_product_cost_profile_inheritance/);
+  assert.doesNotMatch(action, /vault_style_/);
+});

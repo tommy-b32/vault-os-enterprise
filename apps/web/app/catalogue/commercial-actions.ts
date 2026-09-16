@@ -69,10 +69,16 @@ export async function updateCommercialCosts(
   if (inheritanceRequested && !inputs.profileId) {
     return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "Choose a matching supplier cost profile before enabling inheritance." };
   }
+  if (inputs.costTypeId) {
+    const { data: costType, error: costTypeError } = await supabaseAdmin.from("vault_cost_types").select("id, active").eq("id", inputs.costTypeId).maybeSingle();
+    if (costTypeError || !costType?.active) return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "Choose an active governed canonical cost type." };
+    const { error: assignmentError } = await supabaseAdmin.from("vault_product_cost_type_assignments").upsert({ product_id: inputs.parentProductId, cost_type_id: inputs.costTypeId }, { onConflict: "product_id" });
+    if (assignmentError) return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The canonical cost type could not be saved." };
+  }
   if (inheritanceRequested) {
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("vault_supplier_product_type_cost_profiles")
-      .select("id, supplier_id, cost_type_id, active")
+      .select("id, supplier_id, cost_type_id, supplier_currency, exchange_rate_to_gbp, active")
       .eq("id", inputs.profileId!)
       .maybeSingle();
     const { data: assignment, error: assignmentError } = await supabaseAdmin
@@ -80,7 +86,7 @@ export async function updateCommercialCosts(
       .select("cost_type_id")
       .eq("product_id", inputs.parentProductId)
       .maybeSingle();
-    if (profileError || assignmentError || !profile?.active || profile.supplier_id !== inputs.supplierId || profile.cost_type_id !== assignment?.cost_type_id) {
+    if (profileError || assignmentError || !profile?.active || profile.supplier_id !== inputs.supplierId || profile.cost_type_id !== assignment?.cost_type_id || (profile.supplier_currency !== "GBP" && Number(profile.exchange_rate_to_gbp) === 1)) {
       return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The supplier cost profile must be active and match this parent’s assigned supplier and canonical cost type." };
     }
   }

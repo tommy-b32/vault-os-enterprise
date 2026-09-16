@@ -8,7 +8,7 @@ import {
   type SupplierPurchasingData,
 } from "@/components/commercial/SupplierPurchasing";
 import { CashLedger } from "@/components/commercial/CashLedger";
-import { SupplierCostProfiles } from "@/components/commercial/SupplierCostProfiles";
+import { SupplierCostProfiles, type SupplierCostProfileRecord } from "@/components/commercial/SupplierCostProfiles";
 import type { CashLedgerSnapshot } from "@/lib/business/CashLedgerRepository";
 
 type CommercialWorkspaceProps = {
@@ -17,6 +17,7 @@ type CommercialWorkspaceProps = {
   cashLedger: CashLedgerSnapshot | null;
   cashLedgerError: string | null;
   canCreateCashTransactions: boolean;
+  costProfiles: SupplierCostProfileRecord[];
 };
 
 export function CommercialWorkspace({
@@ -25,6 +26,7 @@ export function CommercialWorkspace({
   cashLedger,
   cashLedgerError,
   canCreateCashTransactions,
+  costProfiles,
 }: CommercialWorkspaceProps) {
   return (
     <div className="commercial-workspace">
@@ -33,7 +35,7 @@ export function CommercialWorkspace({
       <CashLedger canCreateTransactions={canCreateCashTransactions} errorMessage={cashLedgerError} snapshot={cashLedger} />
 
       <SupplierPurchasing suppliers={suppliers} />
-      <SupplierCostProfiles suppliers={suppliers} />
+      <SupplierCostProfiles suppliers={suppliers} profiles={costProfiles} />
     </div>
   );
 }

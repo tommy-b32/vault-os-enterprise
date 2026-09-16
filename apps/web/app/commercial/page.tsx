@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CommercialPage({ searchParams }: { searchParams: Promise<{ attention?: string }> }) {
   const operator = await requireAuthenticatedOperator();
-  const [walletResponse, supplierResponse, supplierRuleResponse, cashLedgerResult] =
+  const [walletResponse, supplierResponse, supplierRuleResponse, costProfileResponse, cashLedgerResult] =
     await Promise.all([
       supabaseAdmin
         .from("vault_purchasing_wallet")
@@ -48,6 +48,10 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
       supabaseAdmin
         .from("vault_supplier_purchasing_rules")
         .select("supplier_id, minimum_order_packs"),
+      supabaseAdmin
+        .from("vault_supplier_product_type_cost_profiles")
+        .select("id, supplier_id, supplier_currency, exchange_rate_to_gbp, pack_cost, shipping_cost_per_pack, import_cost_per_pack, units_per_pack, price_updated_at, active, vault_suppliers!inner(supplier_name), vault_cost_types!inner(id, display_name)")
+        .order("price_updated_at", { ascending: false }),
       CashLedgerRepository.getSnapshot(20).then(
         (data) => ({ data, error: null }),
         (error: unknown) => ({
@@ -60,7 +64,7 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
       ),
     ]);
 
-  const error = walletResponse.error ?? supplierResponse.error ?? supplierRuleResponse.error;
+  const error = walletResponse.error ?? supplierResponse.error ?? supplierRuleResponse.error ?? costProfileResponse.error;
 
   if (error) {
     return (
@@ -94,6 +98,14 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
     ...supplier,
     minimum_order_packs: packMinimumBySupplierId.get(supplier.id) ?? null,
   })) as SupplierPurchasingData[];
+  const costProfiles = (costProfileResponse.data ?? []).map((row: any) => ({
+    id: row.id, supplier_id: row.supplier_id, supplier_name: row.vault_suppliers.supplier_name,
+    cost_type_id: row.vault_cost_types.id, cost_type_name: row.vault_cost_types.display_name,
+    supplier_currency: row.supplier_currency, exchange_rate_to_gbp: row.exchange_rate_to_gbp,
+    pack_cost: row.pack_cost, shipping_cost_per_pack: row.shipping_cost_per_pack,
+    import_cost_per_pack: row.import_cost_per_pack, units_per_pack: row.units_per_pack,
+    price_updated_at: row.price_updated_at, active: row.active,
+  }));
 
   return (
     <VaultAppShell
@@ -131,6 +143,7 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
           cashLedger={cashLedgerResult.data}
           cashLedgerError={cashLedgerResult.error}
           suppliers={suppliers}
+          costProfiles={costProfiles}
           wallet={wallet}
         />
       </main>
