@@ -65,6 +65,31 @@ test("strict parser blocks invalid mandatory commercial values", async () => {
   }
 });
 
+test("inherited commercial fields do not require product overrides", async () => {
+  const { parseCommercialInputs } = await loadParser();
+  const inherited = parseCommercialInputs(form({
+    currency: "USD",
+    exchange_rate_to_gbp: "",
+    pack_cost: "",
+    units_per_pack: "",
+    shipping_cost_per_pack: "",
+    import_cost_per_pack: "",
+    profile_id: "5eec6ed8-16af-4024-8f02-e43fdf5c8cd7",
+    cost_type_id: "tee",
+    inherit_pack_cost: "true",
+    inherit_shipping_cost: "true",
+    inherit_import_cost: "true",
+    inherit_units_per_pack: "true",
+    inherit_fx: "true",
+  }));
+
+  assert.equal(inherited.packCost, null);
+  assert.equal(inherited.shippingCostPerPack, null);
+  assert.equal(inherited.importCostPerPack, null);
+  assert.equal(inherited.unitsPerPack, null);
+  assert.equal(inherited.exchangeRateToGbp, null);
+});
+
 test("Commercial owns its save action and Business cannot capture its submit", async () => {
   const [editor, commercialTab] = await Promise.all([
     readFile(new URL("../components/catalogue/ProductEditor.tsx", import.meta.url), "utf8"),

@@ -32,7 +32,7 @@ export async function updateCommercialCosts(
     };
   }
 
-  const [parentResponse, settingsResponse, supplierResponse] =
+  const [parentResponse, settingsResponse, supplierResponse, existingCostResponse] =
     await Promise.all([
       supabaseAdmin
         .from("vault_products")
@@ -50,12 +50,18 @@ export async function updateCommercialCosts(
         .eq("id", inputs.supplierId)
         .eq("is_active", true)
         .maybeSingle(),
+      supabaseAdmin
+        .from("vault_product_costs")
+        .select("currency, exchange_rate_to_gbp, pack_cost, units_per_pack, shipping_cost_per_pack, import_cost_per_pack")
+        .eq("product_id", inputs.parentProductId)
+        .maybeSingle(),
     ]);
 
   if (
     parentResponse.error ||
     settingsResponse.error ||
-    supplierResponse.error
+    supplierResponse.error ||
+    existingCostResponse.error
   ) {
     return {
       ...INITIAL_COMMERCIAL_ACTION_STATE,
@@ -69,26 +75,30 @@ export async function updateCommercialCosts(
   if (inheritanceRequested && !inputs.profileId) {
     return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "Choose a matching supplier cost profile before enabling inheritance." };
   }
+  if (inheritanceRequested) {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("vault_supplier_product_type_cost_profiles")
+      .select("id, supplier_id, cost_type_id, supplier_currency, exchange_rate_to_gbp, pack_cost, shipping_cost_per_pack, import_cost_per_pack, units_per_pack, active")
+      .eq("id", inputs.profileId!)
+      .maybeSingle();
+    const profileFxIsSafe = profile?.supplier_currency === "GBP"
+      ? Number(profile.exchange_rate_to_gbp) === 1
+      : Number.isFinite(Number(profile?.exchange_rate_to_gbp)) && Number(profile?.exchange_rate_to_gbp) > 0 && Number(profile?.exchange_rate_to_gbp) !== 1;
+    const inheritedValuesAreValid =
+      (!inputs.inheritPackCost || Number(profile?.pack_cost) > 0) &&
+      (!inputs.inheritShippingCost || Number.isFinite(Number(profile?.shipping_cost_per_pack)) && Number(profile?.shipping_cost_per_pack) >= 0) &&
+      (!inputs.inheritImportCost || Number.isFinite(Number(profile?.import_cost_per_pack)) && Number(profile?.import_cost_per_pack) >= 0) &&
+      (!inputs.inheritUnitsPerPack || Number.isInteger(Number(profile?.units_per_pack)) && Number(profile?.units_per_pack) > 0) &&
+      (!inputs.inheritFx || profileFxIsSafe);
+    if (profileError || !profile?.active || profile.supplier_id !== inputs.supplierId || !inputs.costTypeId || profile.cost_type_id !== inputs.costTypeId || !inheritedValuesAreValid) {
+      return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The supplier cost profile must be active and match this parent’s assigned supplier and canonical cost type, with safe complete values for each inherited field." };
+    }
+  }
   if (inputs.costTypeId) {
     const { data: costType, error: costTypeError } = await supabaseAdmin.from("vault_cost_types").select("id, active").eq("id", inputs.costTypeId).maybeSingle();
     if (costTypeError || !costType?.active) return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "Choose an active governed canonical cost type." };
     const { error: assignmentError } = await supabaseAdmin.from("vault_product_cost_type_assignments").upsert({ product_id: inputs.parentProductId, cost_type_id: inputs.costTypeId }, { onConflict: "product_id" });
     if (assignmentError) return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The canonical cost type could not be saved." };
-  }
-  if (inheritanceRequested) {
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("vault_supplier_product_type_cost_profiles")
-      .select("id, supplier_id, cost_type_id, supplier_currency, exchange_rate_to_gbp, active")
-      .eq("id", inputs.profileId!)
-      .maybeSingle();
-    const { data: assignment, error: assignmentError } = await supabaseAdmin
-      .from("vault_product_cost_type_assignments")
-      .select("cost_type_id")
-      .eq("product_id", inputs.parentProductId)
-      .maybeSingle();
-    if (profileError || assignmentError || !profile?.active || profile.supplier_id !== inputs.supplierId || profile.cost_type_id !== assignment?.cost_type_id || (profile.supplier_currency !== "GBP" && Number(profile.exchange_rate_to_gbp) === 1)) {
-      return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The supplier cost profile must be active and match this parent’s assigned supplier and canonical cost type." };
-    }
   }
 
   if (!parentResponse.data) {
@@ -116,12 +126,12 @@ export async function updateCommercialCosts(
       {
         product_id: inputs.parentProductId,
         supplier_id: inputs.supplierId,
-        currency: inputs.currency,
-        exchange_rate_to_gbp: inputs.exchangeRateToGbp,
-        pack_cost: inputs.packCost,
-        units_per_pack: inputs.unitsPerPack,
-        shipping_cost_per_pack: inputs.shippingCostPerPack,
-        import_cost_per_pack: inputs.importCostPerPack,
+        currency: inputs.inheritFx ? existingCostResponse.data?.currency ?? inputs.currency : inputs.currency,
+        exchange_rate_to_gbp: inputs.inheritFx ? existingCostResponse.data?.exchange_rate_to_gbp ?? null : inputs.exchangeRateToGbp,
+        pack_cost: inputs.inheritPackCost ? existingCostResponse.data?.pack_cost ?? null : inputs.packCost,
+        units_per_pack: inputs.inheritUnitsPerPack ? existingCostResponse.data?.units_per_pack ?? null : inputs.unitsPerPack,
+        shipping_cost_per_pack: inputs.inheritShippingCost ? existingCostResponse.data?.shipping_cost_per_pack ?? null : inputs.shippingCostPerPack,
+        import_cost_per_pack: inputs.inheritImportCost ? existingCostResponse.data?.import_cost_per_pack ?? null : inputs.importCostPerPack,
         last_supplier_price_update: inputs.lastSupplierPriceUpdate,
       },
       { onConflict: "product_id" },

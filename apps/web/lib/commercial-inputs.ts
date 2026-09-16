@@ -19,11 +19,11 @@ export type ParsedCommercialInputs = {
   parentProductId: string;
   supplierId: string;
   currency: string;
-  exchangeRateToGbp: number;
-  packCost: number;
-  unitsPerPack: number;
-  shippingCostPerPack: number;
-  importCostPerPack: number;
+  exchangeRateToGbp: number | null;
+  packCost: number | null;
+  unitsPerPack: number | null;
+  shippingCostPerPack: number | null;
+  importCostPerPack: number | null;
   lastSupplierPriceUpdate: string | null;
   profileId: string | null;
   costTypeId: string | null;
@@ -135,19 +135,21 @@ export function parseCommercialInputs(
     throw new Error("Select a supported supplier currency");
   }
 
+  const inheritPackCost = checked(formData, "inherit_pack_cost");
+  const inheritShippingCost = checked(formData, "inherit_shipping_cost");
+  const inheritImportCost = checked(formData, "inherit_import_cost");
+  const inheritUnitsPerPack = checked(formData, "inherit_units_per_pack");
+  const inheritFx = checked(formData, "inherit_fx");
   const exchangeRateToGbp =
-    currency === "GBP"
+    inheritFx ? null : currency === "GBP"
       ? 1
       : requiredPositiveNumber(
           formData.get("exchange_rate_to_gbp"),
           "Exchange rate",
         );
-  const unitsPerPack = requiredPositiveNumber(
-    formData.get("units_per_pack"),
-    "Units per pack",
-  );
+  const unitsPerPack = inheritUnitsPerPack ? null : requiredPositiveNumber(formData.get("units_per_pack"), "Units per pack");
 
-  if (!Number.isInteger(unitsPerPack)) {
+  if (unitsPerPack !== null && !Number.isInteger(unitsPerPack)) {
     throw new Error("Units per pack must be a whole number");
   }
 
@@ -156,28 +158,19 @@ export function parseCommercialInputs(
     supplierId,
     currency,
     exchangeRateToGbp,
-    packCost: requiredPositiveNumber(
-      formData.get("pack_cost"),
-      "Pack cost",
-    ),
+    packCost: inheritPackCost ? null : requiredPositiveNumber(formData.get("pack_cost"), "Pack cost"),
     unitsPerPack,
-    shippingCostPerPack: optionalNonNegativeNumber(
-      formData.get("shipping_cost_per_pack"),
-      "Shipping cost",
-    ),
-    importCostPerPack: optionalNonNegativeNumber(
-      formData.get("import_cost_per_pack"),
-      "Import cost",
-    ),
+    shippingCostPerPack: inheritShippingCost ? null : optionalNonNegativeNumber(formData.get("shipping_cost_per_pack"), "Shipping cost"),
+    importCostPerPack: inheritImportCost ? null : optionalNonNegativeNumber(formData.get("import_cost_per_pack"), "Import cost"),
     lastSupplierPriceUpdate: parseSupplierDate(
       formData.get("last_supplier_price_update"),
     ),
     profileId: optionalProfileId(formData.get("profile_id")),
     costTypeId: optionalCostTypeId(formData.get("cost_type_id")),
-    inheritPackCost: checked(formData, "inherit_pack_cost"),
-    inheritShippingCost: checked(formData, "inherit_shipping_cost"),
-    inheritImportCost: checked(formData, "inherit_import_cost"),
-    inheritUnitsPerPack: checked(formData, "inherit_units_per_pack"),
-    inheritFx: checked(formData, "inherit_fx"),
+    inheritPackCost,
+    inheritShippingCost,
+    inheritImportCost,
+    inheritUnitsPerPack,
+    inheritFx,
   };
 }

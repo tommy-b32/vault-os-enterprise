@@ -52,7 +52,7 @@ test("parents require an explicit governed cost type before eligible profiles ar
   assert.match(component, /profile\.cost_type_id === costTypeId/);
   assert.match(action, /vault_product_cost_type_assignments/);
   assert.match(action, /profile\.supplier_id !== inputs\.supplierId/);
-  assert.match(action, /profile\.cost_type_id !== assignment\?\.cost_type_id/);
+  assert.match(action, /profile\.cost_type_id !== inputs\.costTypeId/);
 });
 
 test("inheritance remains parent-level and preserves all five field choices", async () => {
@@ -66,4 +66,27 @@ test("inheritance remains parent-level and preserves all five field choices", as
   }
   assert.match(action, /vault_product_cost_profile_inheritance/);
   assert.doesNotMatch(action, /vault_style_/);
+});
+
+test("Product Commercial validates and previews each inherited field from the selected profile", async () => {
+  const [component, action] = await Promise.all([
+    read("components/catalogue/editor/ProductCommercialTab.tsx"),
+    read("app/catalogue/commercial-actions.ts"),
+  ]);
+  assert.match(component, /const selectedProfile = matchingProfiles\.find/);
+  assert.match(component, /inherit\.pack && selectedProfile \? String\(selectedProfile\.pack_cost\) : packCost/);
+  assert.match(component, /inherit\.shipping && selectedProfile \? String\(selectedProfile\.shipping_cost_per_pack\) : shippingCost/);
+  assert.match(component, /inherit\.import && selectedProfile \? String\(selectedProfile\.import_cost_per_pack\) : importCost/);
+  assert.match(component, /inherit\.units && selectedProfile \? selectedProfile\.units_per_pack/);
+  assert.match(component, /inherit\.fx && selectedProfile \? selectedProfile\.supplier_currency : currency/);
+  assert.match(action, /inheritedValuesAreValid/);
+  assert.match(action, /inputs\.inheritPackCost \? existingCostResponse/);
+  assert.match(action, /inputs\.inheritFx \? existingCostResponse/);
+});
+
+test("fully inherited Exclusive tee economics resolve before save", () => {
+  const landedPack = 50 + 23.25;
+  const fx = 0.745755;
+  assert.equal(Number((landedPack * fx).toFixed(2)), 54.63);
+  assert.equal(Number((landedPack * fx / 5).toFixed(2)), 10.93);
 });

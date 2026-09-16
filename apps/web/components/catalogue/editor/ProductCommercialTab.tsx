@@ -108,6 +108,7 @@ export function ProductCommercialTab({
   });
   const costTypes = [...new Map(costProfiles.map((profile) => [profile.cost_type_id, profile.cost_type_name])).entries()];
   const matchingProfiles = costProfiles.filter((profile) => profile.supplier_id === product.supplier_id && profile.cost_type_id === costTypeId);
+  const selectedProfile = matchingProfiles.find((profile) => profile.id === profileId) ?? null;
 
   const [currency, setCurrency] =
     useState(commercial.currency ?? "GBP");
@@ -146,6 +147,10 @@ export function ProductCommercialTab({
           ),
     );
 
+  const [unitsPerPack, setUnitsPerPack] = useState(
+    commercial.units_per_pack === null ? "" : String(commercial.units_per_pack),
+  );
+
   const averageSellingPrice = commercial.average_selling_price === null
     ? ""
     : String(commercial.average_selling_price);
@@ -155,16 +160,22 @@ export function ProductCommercialTab({
       commercial.last_supplier_price_update ?? "",
     );
 
+  const effectiveCurrency = inherit.fx && selectedProfile ? selectedProfile.supplier_currency : currency;
+  const effectiveExchangeRateToGbp = inherit.fx && selectedProfile ? String(selectedProfile.exchange_rate_to_gbp) : exchangeRateToGbp;
+  const effectivePackCost = inherit.pack && selectedProfile ? String(selectedProfile.pack_cost) : packCost;
+  const effectiveShippingCost = inherit.shipping && selectedProfile ? String(selectedProfile.shipping_cost_per_pack) : shippingCost;
+  const effectiveImportCost = inherit.import && selectedProfile ? String(selectedProfile.import_cost_per_pack) : importCost;
+  const effectiveUnitsPerPack = inherit.units && selectedProfile ? selectedProfile.units_per_pack : Number(unitsPerPack) || null;
+
   const calculations =
     useCommercialCalculator({
-      currency,
-      exchangeRateToGbp,
-      packCost,
-      shippingCost,
-      importCost,
+      currency: effectiveCurrency,
+      exchangeRateToGbp: effectiveExchangeRateToGbp,
+      packCost: effectivePackCost,
+      shippingCost: effectiveShippingCost,
+      importCost: effectiveImportCost,
       averageSellingPrice,
-      unitsPerPack:
-        commercial.units_per_pack,
+      unitsPerPack: effectiveUnitsPerPack,
     });
 
   const efficiency = getEfficiencyState(
@@ -172,8 +183,7 @@ export function ProductCommercialTab({
   );
 
   const packCostEntered =
-    packCost.trim() !== "" &&
-    Number(packCost) > 0;
+    Number(effectivePackCost) > 0;
 
   const sellingPriceEntered =
     averageSellingPrice.trim() !== "" &&
@@ -252,6 +262,7 @@ export function ProductCommercialTab({
           <span>Supplier currency</span>
 
           <select
+            disabled={inherit.fx}
             name="currency"
             onChange={(event) =>
               setCurrency(event.target.value)
@@ -263,13 +274,14 @@ export function ProductCommercialTab({
             <option value="USD">USD</option>
             <option value="TRY">TRY</option>
           </select>
+          {inherit.fx ? <input name="currency" type="hidden" value={currency} /> : null}
         </label>
 
         <label>
           <span>Exchange rate to GBP</span>
 
           <input
-            disabled={currency === "GBP"}
+            disabled={inherit.fx || currency === "GBP"}
             min="0.000001"
             name="exchange_rate_to_gbp"
             onChange={(event) =>
@@ -296,6 +308,7 @@ export function ProductCommercialTab({
           <span>Pack cost</span>
 
           <input
+            disabled={inherit.pack}
             min="0"
             name="pack_cost"
             onChange={(event) =>
@@ -312,6 +325,7 @@ export function ProductCommercialTab({
           <span>Shipping per pack</span>
 
           <input
+            disabled={inherit.shipping}
             min="0"
             name="shipping_cost_per_pack"
             onChange={(event) =>
@@ -330,6 +344,7 @@ export function ProductCommercialTab({
           <span>Import cost per pack</span>
 
           <input
+            disabled={inherit.import}
             min="0"
             name="import_cost_per_pack"
             onChange={(event) =>
@@ -348,12 +363,14 @@ export function ProductCommercialTab({
           <span>Units per pack</span>
 
           <input
-            defaultValue={commercial.units_per_pack ?? ""}
+            disabled={inherit.units}
             min="1"
             name="units_per_pack"
+            onChange={(event) => setUnitsPerPack(event.target.value)}
             placeholder="Required for unit economics"
             step="1"
             type="number"
+            value={unitsPerPack}
           />
 
           <small>
@@ -377,6 +394,7 @@ export function ProductCommercialTab({
           />
         </label>
       </div>
+      {Object.values(inherit).some(Boolean) ? <small>Disabled fields are inherited from the selected supplier profile; their product overrides are retained but are not the effective values.</small> : null}
 
       <div className="commercial-metrics-heading">
         <span>Unsaved calculation preview</span>
@@ -389,7 +407,7 @@ export function ProductCommercialTab({
           <strong>
             {formatCurrency(
               calculations.landedSupplierCurrency,
-              currency,
+              effectiveCurrency,
             )}
           </strong>
         </article>
@@ -491,7 +509,7 @@ export function ProductCommercialTab({
           Boolean(product.supplier_id)
         }
         unitsPerPack={
-          commercial.units_per_pack
+          effectiveUnitsPerPack
         }
       />
 

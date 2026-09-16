@@ -138,6 +138,12 @@ export type SupplierCostProfile = {
   cost_type_id: string;
   cost_type_name: string;
   active: boolean;
+  supplier_currency: string;
+  exchange_rate_to_gbp: number;
+  pack_cost: number;
+  shipping_cost_per_pack: number;
+  import_cost_per_pack: number;
+  units_per_pack: number;
   price_updated_at: string;
 };
 

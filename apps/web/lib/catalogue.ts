@@ -538,7 +538,7 @@ export async function getCatalogueData():
 
     supabaseAdmin
       .from("vault_supplier_product_type_cost_profiles")
-      .select("id, supplier_id, supplier_currency, price_updated_at, active, vault_suppliers!inner(supplier_name), vault_cost_types!inner(id, display_name)")
+      .select("id, supplier_id, supplier_currency, exchange_rate_to_gbp, pack_cost, shipping_cost_per_pack, import_cost_per_pack, units_per_pack, price_updated_at, active, vault_suppliers!inner(supplier_name), vault_cost_types!inner(id, display_name)")
       .eq("active", true),
 
     supabaseAdmin
@@ -678,6 +678,12 @@ export async function getCatalogueData():
     cost_type_id: row.vault_cost_types.id,
     cost_type_name: row.vault_cost_types.display_name,
     active: row.active,
+    supplier_currency: row.supplier_currency,
+    exchange_rate_to_gbp: row.exchange_rate_to_gbp,
+    pack_cost: row.pack_cost,
+    shipping_cost_per_pack: row.shipping_cost_per_pack,
+    import_cost_per_pack: row.import_cost_per_pack,
+    units_per_pack: row.units_per_pack,
     price_updated_at: row.price_updated_at,
   })) as SupplierCostProfile[];
 
