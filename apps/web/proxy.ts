@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { safeDestination } from "@/lib/auth/redirects";
 import { hasVaultAccess } from "@/lib/auth/rules";
+import { bypassesInteractiveAuthentication } from "@/lib/auth/machine-routes";
 
 function loginRedirect(request: NextRequest): NextResponse {
   const url = request.nextUrl.clone();
@@ -14,6 +15,10 @@ function loginRedirect(request: NextRequest): NextResponse {
 }
 
 export async function proxy(request: NextRequest) {
+  if (bypassesInteractiveAuthentication(request.nextUrl.pathname)) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
