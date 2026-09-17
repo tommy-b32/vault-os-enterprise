@@ -18,6 +18,8 @@ test("temporary governed memory action is owner-guarded and only derives capture
   const action = await read("app/missions/governed-memory-actions.ts");
 
   assert.match(action, /^"use server";/);
+  assert.equal((action.match(/export async function/g) ?? []).length, 1);
+  assert.doesNotMatch(action, /export\s+(?:const|let|var|type|interface|class|\{)/);
   assert.match(action, /requireOperatorRole\("owner"\)/);
   assert.match(action, /const observedAt = new Date\(\)\.toISOString\(\)/);
   assert.match(action, /runGovernedDecisionMemoryCapture\(observedAt\)/);

@@ -2,10 +2,21 @@
 
 import { useActionState } from "react";
 
-import {
-  createFirstGovernedDecisionMemoryBaseline,
-  initialGovernedDecisionMemoryCaptureState,
-} from "@/app/missions/governed-memory-actions";
+import { createFirstGovernedDecisionMemoryBaseline } from "@/app/missions/governed-memory-actions";
+
+type GovernedDecisionMemoryCaptureState =
+  | { status: "idle" }
+  | {
+      status: "success";
+      inserted: boolean;
+      captureKind: string | null;
+      observedAt: string;
+    }
+  | { status: "error"; message: "Governed decision memory capture failed." };
+
+const initialGovernedDecisionMemoryCaptureState: GovernedDecisionMemoryCaptureState = {
+  status: "idle",
+};
 
 export function GovernedDecisionMemoryFirstCaptureControl() {
   const [state, action, pending] = useActionState(

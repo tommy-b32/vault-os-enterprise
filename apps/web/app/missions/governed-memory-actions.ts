@@ -3,7 +3,7 @@
 import { runGovernedDecisionMemoryCapture } from "@/lib/brain/runGovernedDecisionMemoryCapture";
 import { requireOperatorRole } from "@/lib/auth/operators";
 
-export type GovernedDecisionMemoryCaptureState =
+type GovernedDecisionMemoryCaptureState =
   | { status: "idle" }
   | {
       status: "success";
@@ -12,10 +12,6 @@ export type GovernedDecisionMemoryCaptureState =
       observedAt: string;
     }
   | { status: "error"; message: "Governed decision memory capture failed." };
-
-export const initialGovernedDecisionMemoryCaptureState: GovernedDecisionMemoryCaptureState = {
-  status: "idle",
-};
 
 export async function createFirstGovernedDecisionMemoryBaseline(
   _previousState: GovernedDecisionMemoryCaptureState,
