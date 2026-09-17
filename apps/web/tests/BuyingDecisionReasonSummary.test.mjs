@@ -60,7 +60,7 @@ test("Timeline, Command Centre lineage, and Vault Brain consume the propagated s
   const brain = await read("lib/brain/getVaultBrainIntelligence.ts");
   const component = await read("components/brain/VaultBrainV2.tsx");
 
-  assert.match(loader, /BuyingDecisionReasonSummary\.build\(evaluation, generatedAt\)/);
+  assert.match(loader, /runGovernedDecisionEvaluation\(generatedAt\)/);
   assert.match(timeline, /reasonSummary/);
   assert.match(timeline, /reasonSummaryItems/);
   assert.match(brain, /timeline\?\.reasonSummary/);
