@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { aggregateBuyingDecisionOutcome } from "../lib/brain/BuyingDecisionReasonSummary.ts";
 
 const root = new URL("..", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
@@ -41,6 +42,18 @@ test("presentation precedence preserves every reason and never changes eligibili
   assert.match(summary, /qualification\.blockers/);
 });
 
+test("executive outcome aggregation preserves governed no-action, evidence, blocker, action, and mixed meanings", () => {
+  const reasons = (...states) => states.map((state) => ({ state }));
+  assert.equal(aggregateBuyingDecisionOutcome(reasons("NO_ACTION_REQUIRED"), 0).outcome, "NO_ACTION_REQUIRED");
+  assert.equal(aggregateBuyingDecisionOutcome(reasons("GATHERING_EVIDENCE"), 0).outcome, "GATHERING_EVIDENCE");
+  assert.equal(aggregateBuyingDecisionOutcome(reasons("BLOCKED"), 0).outcome, "BLOCKED");
+  assert.equal(aggregateBuyingDecisionOutcome(reasons("NO_ACTION_REQUIRED", "GATHERING_EVIDENCE"), 0).outcome, "MIXED");
+  assert.equal(aggregateBuyingDecisionOutcome(reasons("NO_ACTION_REQUIRED", "BLOCKED"), 0).outcome, "MIXED");
+  assert.equal(aggregateBuyingDecisionOutcome(reasons("NO_ACTION_REQUIRED", "BLOCKED"), 1).outcome, "ACTION_AVAILABLE");
+  assert.equal(aggregateBuyingDecisionOutcome([], 0).outcome, "UNKNOWN");
+  assert.equal(aggregateBuyingDecisionOutcome(reasons("INFORMATIONAL"), 0).outcome, "UNKNOWN");
+});
+
 test("Timeline, Command Centre lineage, and Vault Brain consume the propagated summary", async () => {
   const timeline = await read("lib/brain/CommercialDecisionTimeline.ts");
   const loader = await read("lib/brain/getCommercialDecisionTimeline.ts");
@@ -51,6 +64,8 @@ test("Timeline, Command Centre lineage, and Vault Brain consume the propagated s
   assert.match(timeline, /reasonSummary/);
   assert.match(timeline, /reasonSummaryItems/);
   assert.match(brain, /timeline\?\.reasonSummary/);
+  assert.match(brain, /decisionBoundary\(timeline\?\.reasonSummary/);
+  assert.doesNotMatch(brain, /noCandidate \? "blocked"/);
   assert.match(component, /GOVERNED DECISION REASONS/);
   assert.match(component, /does not create a buying, reorder, or approval recommendation/);
 });

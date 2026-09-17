@@ -52,7 +52,7 @@ test("Vault Brain V2 preserves the governed route contracts for every trace stag
     assert.ok(model.includes(destination), `expected governed route ${destination}`);
   }
   assert.match(model, /No governed aggregate commercial-trust result is exposed/);
-  assert.match(model, /not produced a trusted candidate/);
+  assert.match(model, /No trusted buying action is currently required/);
 });
 
 test("Vault Brain V2 keeps missing evidence fail-closed at every governed boundary", async () => {
@@ -61,6 +61,7 @@ test("Vault Brain V2 keeps missing evidence fail-closed at every governed bounda
   assert.match(model, /domain\.state === "unavailable" \|\| domain\.state === "not_connected"/);
   assert.match(model, /commercial \? timelineState\(commercial\) : "unknown"/);
   assert.match(model, /wallet\.state === "stale" \? "watch" : "unavailable"/);
-  assert.match(model, /noCandidate \? "blocked" : advisorAction \? "proven" : "unknown"/);
+  assert.match(model, /decisionBoundary\(timeline\?\.reasonSummary/);
+  assert.match(model, /outcome === "MIXED" \? "no_trusted_action"/);
   assert.match(model, /this alone does not approve a purchase/);
 });

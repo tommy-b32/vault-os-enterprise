@@ -4,7 +4,8 @@ import type { TrustedBuyingCandidateRejectionReason } from "@/lib/brain/TrustedB
 
 export type BuyingDecisionReasonStage = "INVENTORY" | "DEMAND" | "TRADING_EVIDENCE" | "COMMERCIAL" | "SUPPLIER" | "CAPITAL" | "POLICY" | "QUANTITY" | "CONFIGURATION" | "UNKNOWN";
 export type BuyingDecisionReasonState = "NO_ACTION_REQUIRED" | "GATHERING_EVIDENCE" | "BLOCKED" | "UNAVAILABLE" | "ELIGIBLE" | "INFORMATIONAL" | "UNKNOWN";
-export type BuyingDecisionOutcome = "TRUSTED_CANDIDATE_AVAILABLE" | "NO_TRUSTED_CANDIDATE" | "EVALUATION_UNAVAILABLE";
+export type BuyingDecisionOutcome = "NO_ACTION_REQUIRED" | "GATHERING_EVIDENCE" | "BLOCKED" | "ACTION_AVAILABLE" | "MIXED" | "UNKNOWN";
+export type BuyingDecisionOutcomeSignals = { hasNoAction: boolean; hasGatheringEvidence: boolean; hasBlocked: boolean; hasUnavailable: boolean; hasActionAvailable: boolean };
 
 export type BuyingDecisionReason = {
   code: string;
@@ -20,6 +21,7 @@ export type BuyingDecisionReason = {
 export type BuyingDecisionReasonSummary = {
   generatedAt: string;
   outcome: BuyingDecisionOutcome;
+  outcomeSignals: BuyingDecisionOutcomeSignals;
   totalEvaluated: number;
   trustedCandidateCount: number;
   stages: Array<{ stage: BuyingDecisionReasonStage; state: BuyingDecisionReasonState; affectedCount: number }>;
@@ -79,6 +81,18 @@ function qualificationState(qualification: SupplierPurchasingQualification): Buy
   return qualification.state === "ready_to_purchase" ? "ELIGIBLE" : qualification.state === "evidence_unavailable" ? "UNAVAILABLE" : qualification.state === "blocked_by_capital" || qualification.state === "blocked_by_approval" || qualification.state === "blocked_by_supplier_policy" ? "BLOCKED" : "GATHERING_EVIDENCE";
 }
 
+/** Executive aggregation only: a trusted candidate wins; distinct primary-reason meanings stay MIXED, never a store-wide blocker. */
+export function aggregateBuyingDecisionOutcome(primaryReasons: Array<Pick<BuyingDecisionReason, "state">>, trustedCandidateCount: number): { outcome: BuyingDecisionOutcome; outcomeSignals: BuyingDecisionOutcomeSignals } {
+  const outcomeSignals = { hasNoAction: primaryReasons.some((reason) => reason.state === "NO_ACTION_REQUIRED"), hasGatheringEvidence: primaryReasons.some((reason) => reason.state === "GATHERING_EVIDENCE"), hasBlocked: primaryReasons.some((reason) => reason.state === "BLOCKED"), hasUnavailable: primaryReasons.some((reason) => reason.state === "UNAVAILABLE"), hasActionAvailable: trustedCandidateCount > 0 };
+  if (outcomeSignals.hasActionAvailable) return { outcome: "ACTION_AVAILABLE", outcomeSignals };
+  const meanings = [outcomeSignals.hasNoAction, outcomeSignals.hasGatheringEvidence, outcomeSignals.hasBlocked, outcomeSignals.hasUnavailable].filter(Boolean).length;
+  if (meanings > 1) return { outcome: "MIXED", outcomeSignals };
+  if (outcomeSignals.hasNoAction) return { outcome: "NO_ACTION_REQUIRED", outcomeSignals };
+  if (outcomeSignals.hasGatheringEvidence) return { outcome: "GATHERING_EVIDENCE", outcomeSignals };
+  if (outcomeSignals.hasBlocked) return { outcome: "BLOCKED", outcomeSignals };
+  return { outcome: "UNKNOWN", outcomeSignals };
+}
+
 /**
  * Presentation-only projection of a completed governed evaluation. It neither
  * evaluates a gate nor changes candidate eligibility.
@@ -120,7 +134,8 @@ export function buildBuyingDecisionReasonSummary(evaluation: PurchaseIntelligenc
   const primaryStyleIds = new Map<BuyingDecisionReason, string[]>();
   for (const [styleId, reason] of primaryByStyle) primaryStyleIds.set(reason, [...(primaryStyleIds.get(reason) ?? []), styleId]);
   const primaryReasons = [...primaryStyleIds.entries()].map(([reason, styleIds]) => ({ ...reason, affectedStyleIds: styleIds, affectedParentProductIds: [...new Set(styleIds.map((styleId) => parentByStyle.get(styleId) ?? "").filter(Boolean))] }));
-  return { generatedAt, outcome: trustedCandidateCount > 0 ? "TRUSTED_CANDIDATE_AVAILABLE" : evaluation.candidates.length > 0 ? "NO_TRUSTED_CANDIDATE" : "EVALUATION_UNAVAILABLE", totalEvaluated: evaluation.candidates.length, trustedCandidateCount, stages, reasons, primaryReasons, limitations: evaluation.candidates.length === 0 ? ["No candidate evaluation was available."] : [] };
+  const { outcome, outcomeSignals } = aggregateBuyingDecisionOutcome(primaryReasons, trustedCandidateCount);
+  return { generatedAt, outcome, outcomeSignals, totalEvaluated: evaluation.candidates.length, trustedCandidateCount, stages, reasons, primaryReasons, limitations: evaluation.candidates.length === 0 ? ["No candidate evaluation was available."] : [] };
 }
 
 export const BuyingDecisionReasonSummary = { build: buildBuyingDecisionReasonSummary } as const;
