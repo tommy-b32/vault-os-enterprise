@@ -251,6 +251,7 @@ export type CommandCentreCockpitData = {
     stockValue: CockpitValue<CockpitMoney>;
     freshness: CockpitValue<string>;
     reorderReview: CockpitValue<number>;
+    actionability: Record<"actionRequired" | "watch" | "healthy" | "noActionRequired" | "unavailable", CockpitValue<number>>;
   };
   operations: {
     awaitingFulfilment: CockpitValue<number>;

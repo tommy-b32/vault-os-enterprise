@@ -506,7 +506,11 @@ export function CommandCentreCockpit({ data }: DataProps) {
           <MetricRow label="Out-of-stock styles" value={data.inventory.outOfStockStyles} />
           <MetricRow label="Total stock value" value={data.inventory.stockValue} formatter={(v) => formatMoney(v as CockpitMoney)} />
           <MetricRow label="Inventory" value={data.inventory.freshness} formatter={() => inventoryFreshnessText(data.inventory.freshness, data.generatedAt)} />
-          <MetricRow label="Reorder review" value={data.inventory.reorderReview} />
+          <MetricRow label="Action required" value={data.inventory.actionability.actionRequired} />
+          <MetricRow label="Watch" value={data.inventory.actionability.watch} />
+          <MetricRow label="Healthy" value={data.inventory.actionability.healthy} />
+          <MetricRow label="No action required" value={data.inventory.actionability.noActionRequired} />
+          <MetricRow label="Unavailable" value={data.inventory.actionability.unavailable} />
         </Snapshot>
         <Snapshot title="Marketing Snapshot" subtitle="Meta Ads" icon="target">
           <MetaMetricRows meta={data.meta} scope="snapshot" />

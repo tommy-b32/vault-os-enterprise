@@ -126,11 +126,12 @@ test("premium redesign preserves every original KPI and snapshot field", async (
   for (const label of [
     "Tracked visitors", "Estimated untracked visitors", "Estimated total visitors",
     "Add-to-cart rate", "Checkout rate", "Conversion rate", "Abandoned checkouts",
-    "Low-stock styles", "Out-of-stock styles", "Total stock value", "Inventory", "Reorder review",
+    "Low-stock styles", "Out-of-stock styles", "Total stock value", "Inventory", "Action required", "Watch", "Healthy", "No action required", "Unavailable",
     "Awaiting fulfilment", "Dispatched today", "Refunds today", "Supplier issues", "Late deliveries",
   ]) {
     assert.match(component, new RegExp(`label="${label}"`));
   }
+  assert.doesNotMatch(component, /label="Reorder review"/);
   for (const label of ["Human Shopify sessions", "Shopify checkout sessions", "Shopify completed-checkout sessions"]) {
     assert.match(component, new RegExp(label));
   }

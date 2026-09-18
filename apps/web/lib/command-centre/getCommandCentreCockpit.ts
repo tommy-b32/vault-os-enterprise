@@ -35,6 +35,8 @@ import {
   type DomainPulse,
 } from "@/lib/command-centre/CommandCentreCockpit";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { classifyInventoryActionability, summarizeInventoryActionability } from "@/lib/brain/InventoryActionability";
+import { runGovernedDecisionEvaluation } from "@/lib/brain/runGovernedDecisionEvaluation";
 
 function available<T>(value: T, updatedAt: string | null, stale = false): CockpitValue<T> {
   return { state: stale ? "stale" : "available", value, updatedAt };
@@ -46,8 +48,9 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping, todayPaymentFees, todayPerformance, sevenDayForecast] = await Promise.all([
+  const [timeline, governedEvaluation, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping, todayPaymentFees, todayPerformance, sevenDayForecast] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
+    runGovernedDecisionEvaluation(business.generatedAt).catch(() => null),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
       ledger_balance_gbp,
       protected_reserve_gbp,
@@ -85,6 +88,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
   const inventory = business.inventory.data;
   const inventoryStale = business.inventory.status === "stale";
   const inventoryAt = business.inventory.lastUpdatedAt;
+  const actionability = governedEvaluation ? summarizeInventoryActionability(governedEvaluation.evaluation.demands.map((demand) => classifyInventoryActionability({ demand, tradingEvidenceState: governedEvaluation.evaluation.candidates.find((candidate) => candidate.styleId === demand.styleId)?.tradingEvidence.state ?? null }))) : null;
   const finance = business.finance.data;
   const financeStale = business.finance.status === "stale";
   const wallet = walletResult.error ? null : walletResult.data as PurchasingWalletData;
@@ -155,7 +159,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
         ? "attention"
         : inventory?.sync.syncStatus === "syncing"
           ? "watch"
-        : business.inventory.status === "live" && (inventory?.productsRequiringAttention ?? 0) > 0
+        : business.inventory.status === "live" && (actionability?.action_required ?? 0) > 0
           ? "watch"
           : sourceDomain("Inventory", business.inventory.status).state,
       detail: inventory?.sync.syncStatus === "failed"
@@ -164,8 +168,8 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
           ? "Shopify sync delayed"
           : inventory?.sync.syncStatus === "syncing"
             ? "Shopify sync running"
-        : business.inventory.status === "live" && (inventory?.productsRequiringAttention ?? 0) > 0
-          ? `${inventory?.productsRequiringAttention} styles require attention`
+        : business.inventory.status === "live" && (actionability?.action_required ?? 0) > 0
+          ? `${actionability?.action_required} style${actionability?.action_required === 1 ? "" : "s"} require${actionability?.action_required === 1 ? "s" : ""} action`
           : sourceDomain("Inventory", business.inventory.status).detail,
     },
     {
@@ -473,6 +477,9 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
         )
         : unavailable(),
       reorderReview: inventory ? available(inventory.productsRequiringAttention, inventoryAt, inventoryStale) : unavailable(),
+      actionability: actionability ? {
+        actionRequired: available(actionability.action_required, inventoryAt, inventoryStale), watch: available(actionability.watch, inventoryAt, inventoryStale), healthy: available(actionability.healthy, inventoryAt, inventoryStale), noActionRequired: available(actionability.no_action_required, inventoryAt, inventoryStale), unavailable: available(actionability.unavailable, inventoryAt, inventoryStale),
+      } : { actionRequired: unavailable(), watch: unavailable(), healthy: unavailable(), noActionRequired: unavailable(), unavailable: unavailable() },
     },
     operations: {
       awaitingFulfilment: operationsResult
