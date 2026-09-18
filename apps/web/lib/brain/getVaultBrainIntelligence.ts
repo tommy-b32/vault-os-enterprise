@@ -5,12 +5,13 @@ import { getCommandCentreCockpit } from "@/lib/command-centre/getCommandCentreCo
 import type { CommandCentreCockpitData, DomainPulse } from "@/lib/command-centre/CommandCentreCockpit";
 import type { CommercialDecisionTimelineItem, CommercialDecisionTimelineResult } from "@/lib/brain/CommercialDecisionTimeline";
 import type { BuyingDecisionOutcome, BuyingDecisionReasonSummary } from "@/lib/brain/BuyingDecisionReasonSummary";
+import { getGovernedDecisionMemoryTimeline, type GovernedMemoryTimeline } from "@/lib/brain/getGovernedDecisionMemoryTimeline";
 
 export type VaultBrainEvidenceState = "proven" | "watch" | "gathering_evidence" | "blocked" | "unavailable" | "unknown" | "no_action_required" | "no_trusted_action";
 export type VaultBrainSeverity = "critical" | "high" | "medium" | "low" | "informational";
 export type VaultBrainConclusion = { id: string; headline: string; interpretation: string; severity: VaultBrainSeverity; evidenceState: VaultBrainEvidenceState; freshness: string | null; destination: string };
 export type VaultBrainTraceStage = { id: "inventory" | "trading-evidence" | "commercial-trust" | "supplier-readiness" | "purchasing-capacity" | "trusted-buying-decision"; label: string; state: VaultBrainEvidenceState; explanation: string; source: string; freshness: string | null; destination: string };
-export type VaultBrainIntelligence = { generatedAt: string; conclusions: VaultBrainConclusion[]; decisionTrace: VaultBrainTraceStage[]; blockerExplanations: string[]; noTrustedCandidate: boolean; historyAvailable: false; learningAvailable: false };
+export type VaultBrainIntelligence = { generatedAt: string; conclusions: VaultBrainConclusion[]; decisionTrace: VaultBrainTraceStage[]; blockerExplanations: string[]; noTrustedCandidate: boolean; governedMemory: GovernedMemoryTimeline; learningAvailable: false };
 
 function domainState(domain: DomainPulse | undefined): VaultBrainEvidenceState {
   if (!domain) return "unknown";
@@ -70,7 +71,7 @@ function buildConclusions(trace: VaultBrainTraceStage[]): VaultBrainConclusion[]
 
 /** Read-only explanation model composed from existing governed outputs only. */
 export async function getVaultBrainIntelligence(): Promise<VaultBrainIntelligence> {
-  const cockpit = await getCommandCentreCockpit();
+  const [cockpit, governedMemory] = await Promise.all([getCommandCentreCockpit(), getGovernedDecisionMemoryTimeline()]);
   // The cockpit deliberately does not expose candidate-level timeline blockers.
   // Reuse the existing governed loader; do not reconstruct its policy here.
   const timeline = await getCommercialDecisionTimeline(cockpit.generatedAt);
@@ -80,5 +81,5 @@ export async function getVaultBrainIntelligence(): Promise<VaultBrainIntelligenc
     ? timeline.reasonSummary.primaryReasons.map((reason) => `${reason.affectedStyleIds.length} style${reason.affectedStyleIds.length === 1 ? "" : "s"}: ${reason.explanation}`).slice(0, 6)
     : (timeline?.items ?? []).filter((item) => item.source === "classifier" && (item.status === "blocked" || item.status === "monitoring")).map((item) => item.description ?? item.title).slice(0, 3);
   const limitations = timeline?.reasonSummary?.limitations ?? [];
-  return { generatedAt: cockpit.generatedAt, conclusions: buildConclusions(decisionTrace), decisionTrace, blockerExplanations: [...blockerExplanations, ...limitations], noTrustedCandidate, historyAvailable: false, learningAvailable: false };
+  return { generatedAt: cockpit.generatedAt, conclusions: buildConclusions(decisionTrace), decisionTrace, blockerExplanations: [...blockerExplanations, ...limitations], noTrustedCandidate, governedMemory, learningAvailable: false };
 }

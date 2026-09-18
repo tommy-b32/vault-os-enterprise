@@ -40,9 +40,11 @@ test("Vault Brain V2 fails closed, formats freshness for people, and links speci
   assert.match(component, /Intl\.DateTimeFormat/);
   assert.doesNotMatch(component, /toLocaleString/);
   assert.match(component, /No governed executive conclusion is currently available/);
-  assert.match(component, /href="\/"/);
   assert.match(component, /href="\/intelligence"/);
   assert.match(component, /Open authoritative surface/);
+  assert.match(component, /Europe\/London/);
+  assert.match(component, /Latest governed record/);
+  assert.match(component, /Recent governed history/);
 });
 
 test("Vault Brain V2 preserves the governed route contracts for every trace stage", async () => {
