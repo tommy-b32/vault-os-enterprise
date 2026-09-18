@@ -45,6 +45,8 @@ test("Vault Brain V2 fails closed, formats freshness for people, and links speci
   assert.match(component, /Europe\/London/);
   assert.match(component, /Latest governed record/);
   assert.match(component, /Recent governed history/);
+  assert.match(component, /Supporting stored changes/);
+  assert.match(component, /causeMessage/);
 });
 
 test("Vault Brain V2 preserves the governed route contracts for every trace stage", async () => {

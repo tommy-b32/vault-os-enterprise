@@ -15,7 +15,6 @@ test("governed memory timeline is a bounded read-only stored-history model", () 
 
 test("governed memory timeline fails closed and preserves safe presentation boundaries", () => {
   for (const text of ["No governed memory has been recorded yet.", "No earlier governed record is available for comparison.", "Daily baseline captured", "Governed evidence refreshed", "Governed evaluation version changed", "Comparison unavailable for this record.", "Governed memory history is currently unavailable.", "No meaningful governed change recorded in recent history."]) assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(source, /currency: "GBP"/);
-  assert.match(source, /A style changed governed state/);
-  assert.match(source, /A supplier qualification changed/);
+  assert.match(source, /interpretGovernedDecisionMemoryChange/);
+  assert.doesNotMatch(source, /runGovernedDecisionEvaluation|runGovernedDecisionMemoryCapture|recordGovernedDecisionMemory/);
 });

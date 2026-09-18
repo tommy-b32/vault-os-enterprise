@@ -69,6 +69,16 @@ const reasonMetadata: Record<TrustedBuyingCandidateRejectionReason, ReasonMetada
   protected_reserve_breach: { stage: "CAPITAL", state: "BLOCKED", explanation: "The protected reserve would be breached." },
 };
 
+/** Stable, presentation-only labels for stored governed primary-reason codes. */
+export function governedPrimaryReasonExplanation(code: string): string | null {
+  if (code === "demand_no_replenishment_required") return "Canonical demand does not currently require replenishment.";
+  if (code === "demand_evidence_unavailable") return "Demand evidence is incomplete.";
+  if (code === "demand_excluded_by_strategy") return "The style is excluded by inventory strategy.";
+  return Object.prototype.hasOwnProperty.call(reasonMetadata, code)
+    ? reasonMetadata[code as TrustedBuyingCandidateRejectionReason].explanation
+    : null;
+}
+
 function groupedReason(input: Omit<BuyingDecisionReason, "affectedStyleIds" | "affectedParentProductIds" | "details"> & { styleIds?: Iterable<string>; parentIds?: Iterable<string>; details?: Iterable<string> }): BuyingDecisionReason {
   return { ...input, affectedStyleIds: [...new Set(input.styleIds ?? [])].filter(Boolean), affectedParentProductIds: [...new Set(input.parentIds ?? [])].filter(Boolean), details: [...new Set(input.details ?? [])].filter(Boolean) };
 }
