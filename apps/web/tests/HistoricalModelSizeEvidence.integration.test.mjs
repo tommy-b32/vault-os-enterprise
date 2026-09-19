@@ -9,6 +9,7 @@ const currentMigration = await readFile(new URL("../../../supabase/migrations/20
 const migration = await readFile(new URL("../../../supabase/migrations/20261005000000_canonical_historical_model_size_evidence.sql", import.meta.url), "utf8");
 const assessmentMigration = await readFile(new URL("../../../supabase/migrations/20261006000000_size_distribution_evidence_assessment.sql", import.meta.url), "utf8");
 const sufficiencyMigration = await readFile(new URL("../../../supabase/migrations/20261007000000_size_evidence_sufficiency_foundation.sql", import.meta.url), "utf8");
+const sufficiencySetsFixMigration = await readFile(new URL("../../../supabase/migrations/20261008000000_fix_size_evidence_sufficiency_sets.sql", import.meta.url), "utf8");
 const container = `vault-phase1b3-test-${process.pid}`;
 const password = "phase1b3-disposable-only";
 let started = false;
@@ -109,4 +110,27 @@ test("Phase 1B3 preserves current model-size evidence and fails historical evide
   assert.equal(alphaSufficiency.availability_censoring_limitation, "NOT_EVALUATED");
   assert.equal(deltaSufficiency.availability_censoring_limitation, "NOT_EVALUATED", "censoring limitation does not change state");
   assert.equal(Object.keys(alphaSufficiency).some((key) => /curve|buy|reorder|recommend/i.test(key)), false, "no curve or buying output may be introduced");
+  sql(sufficiencySetsFixMigration);
+  const assessmentAfterSetsFix = query("select coalesce(json_agg(v order by canonical_style_id,canonical_size),'[]') from vault_size_distribution_evidence_assessment v");
+  assert.deepEqual(assessmentAfterSetsFix, assessmentBeforeSufficiency, "forward set fix must not alter Phase 1B4 evidence");
+  const fixedSufficiency = query("select coalesce(json_agg(v order by canonical_style_id),'[]') from vault_size_evidence_sufficiency v");
+  const alphaFixed = fixedSufficiency.find((row) => row.canonical_style_id === `${id(1)}::Alpha`);
+  const deltaFixed = fixedSufficiency.find((row) => row.canonical_style_id === `${id(4)}::Delta`);
+  const alphaAssessment = assessmentAfterSetsFix.find((row) => row.canonical_style_id === `${id(1)}::Alpha`);
+  const deltaAssessment = assessmentAfterSetsFix.find((row) => row.canonical_style_id === `${id(4)}::Delta`);
+  for (const field of ["sizes_observed_current", "sizes_observed_historically", "sizes_observed_both", "sizes_observed_current_only", "sizes_observed_historical_only"]) {
+    assert.deepEqual(alphaFixed[field], alphaAssessment[field], `${field} must exactly preserve governed assessment semantics`);
+    assert.deepEqual(deltaFixed[field], deltaAssessment[field], `${field} must preserve zero-observation null/array semantics`);
+  }
+  assert.notEqual(alphaFixed.sizes_observed_historically, null, "positive multi-size evidence must not lose its historical set");
+  assert.equal(alphaFixed.historically_observed_size_count, 3);
+  assert.equal(alphaFixed.size_evidence_sufficiency_state, alphaSufficiency.size_evidence_sufficiency_state);
+  assert.equal(alphaFixed.historical_distinct_commercial_orders, alphaSufficiency.historical_distinct_commercial_orders);
+  assert.equal(alphaFixed.historical_distinct_selling_dates, alphaSufficiency.historical_distinct_selling_dates);
+  assert.equal(alphaFixed.historical_distinct_selling_weeks, alphaSufficiency.historical_distinct_selling_weeks);
+  assert.equal(alphaFixed.historical_first_observed_at, alphaSufficiency.historical_first_observed_at);
+  assert.equal(alphaFixed.historical_latest_observed_at, alphaSufficiency.historical_latest_observed_at);
+  assert.equal(alphaFixed.historical_observation_span, alphaSufficiency.historical_observation_span);
+  assert.equal(alphaFixed.has_multiple_historical_orders, alphaSufficiency.has_multiple_historical_orders);
+  assert.equal(alphaFixed.availability_censoring_limitation, "NOT_EVALUATED");
 });
