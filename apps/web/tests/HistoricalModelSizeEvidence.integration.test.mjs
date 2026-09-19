@@ -7,6 +7,7 @@ const root = new URL("../../../", import.meta.url);
 const schema = await readFile(new URL("fixtures/phase3d1-postgres-schema.sql", import.meta.url), "utf8");
 const currentMigration = await readFile(new URL("../../../supabase/migrations/20260912000000_canonical_model_size_replenishment_evidence.sql", import.meta.url), "utf8");
 const migration = await readFile(new URL("../../../supabase/migrations/20261005000000_canonical_historical_model_size_evidence.sql", import.meta.url), "utf8");
+const assessmentMigration = await readFile(new URL("../../../supabase/migrations/20261006000000_size_distribution_evidence_assessment.sql", import.meta.url), "utf8");
 const container = `vault-phase1b3-test-${process.pid}`;
 const password = "phase1b3-disposable-only";
 let started = false;
@@ -23,7 +24,7 @@ test("Phase 1B3 preserves current model-size evidence and fails historical evide
   sql(schema); sql(currentMigration);
   sql(`
     create table test_trading (style_id text primary key, parent_product_id uuid, style_name text, verified_live_at timestamptz, evidence_as_of timestamptz, coverage_complete boolean, order_evidence_fresh boolean);
-    create view public.vault_style_trading_evidence as select * from test_trading;
+    create view public.vault_style_trading_evidence as select test_trading.*, 'SUFFICIENT_EVIDENCE'::text as maturity_state from test_trading;
     insert into public.vault_products values ('${id(1)}','shopify','ACTIVE'),('${id(2)}','shopify','ACTIVE'),('${id(3)}','shopify','ACTIVE'),('${id(4)}','shopify','ACTIVE');
     insert into public.vault_variants values
       ('${id(101)}','${id(1)}','shopify','alpha-xl','Alpha','XL',true,'resolved'),
@@ -66,4 +67,16 @@ test("Phase 1B3 preserves current model-size evidence and fails historical evide
   assert.equal(delta.historical_evidence_available, true); assert.equal(delta.total_historical_size_attributable_observed_units, 0); assert.equal(delta.historical_observed_demand_share, null);
   assert.equal(query("select count(*) from public.vault_model_size_replenishment_intelligence where normalized_size='2XL'"), 1);
   assert.equal(query("select available_stock from public.vault_model_size_replenishment_intelligence where normalized_size='2XL'"), 0);
+  sql(`create table public.vault_shopify_inventory_sync_runs (id uuid primary key, sync_status text not null);
+    create table public.vault_locations (id uuid primary key);
+    create table public.vault_inventory_level_snapshots (id uuid primary key, inventory_sync_run_id uuid, variant_id uuid, location_id uuid, observed_at timestamptz, available integer);
+    insert into vault_shopify_inventory_sync_runs values ('${id(2001)}','current'); insert into vault_locations values ('${id(2002)}');
+    insert into vault_inventory_level_snapshots values ('${id(2003)}','${id(2001)}','${id(101)}','${id(2002)}',now()-interval '2 days',2),('${id(2004)}','${id(2001)}','${id(101)}','${id(2002)}',now()-interval '1 day',0),('${id(2005)}','${id(2001)}','${id(102)}','${id(2002)}',now()-interval '1 day',1);`);
+  const baseBefore = query("select coalesce(json_agg(json_build_object('order_line_id',order_line_id,'shopify_variant_id',shopify_variant_id,'shopify_created_at',shopify_created_at,'net_units',net_units,'parent_product_id',parent_product_id,'model_design',model_design,'normalized_size',normalized_size,'mapping_status',mapping_status) order by order_line_id),'[]') from vault_canonical_resolved_commercial_order_lines");
+  sql(assessmentMigration);
+  const baseAfter = query("select coalesce(json_agg(json_build_object('order_line_id',order_line_id,'shopify_variant_id',shopify_variant_id,'shopify_created_at',shopify_created_at,'net_units',net_units,'parent_product_id',parent_product_id,'model_design',model_design,'normalized_size',normalized_size,'mapping_status',mapping_status) order by order_line_id),'[]') from vault_canonical_resolved_commercial_order_lines");
+  assert.deepEqual(baseAfter, baseBefore, "shared commercial-line fields retain exact pre/post parity");
+  const assessment = query("select coalesce(json_agg(v order by canonical_style_id,canonical_size),'[]') from vault_size_distribution_evidence_assessment v");
+  const alphaXLAssessment = assessment.find((row) => row.canonical_style_id === `${id(1)}::Alpha` && row.canonical_size === 'XL');
+  assert.equal(alphaXLAssessment.historical_distinct_order_count, 1); assert.equal(alphaXLAssessment.retained_inventory_observation_count, 2); assert.equal(alphaXLAssessment.retained_positive_availability_observations, 1); assert.equal(alphaXLAssessment.retained_zero_or_negative_availability_observations, 1); assert.equal(alphaXLAssessment.historical_availability_opportunity, 'not_evaluated');
 });
