@@ -145,6 +145,18 @@ async function recordDailyMemberAttestations(supabase: SupabaseClient, runId: st
   if (error) throw error;
 }
 
+async function recordDailyMemberLocationQuantities(supabase: SupabaseClient, runId: string, evidenceDate: string, observedAt: Date, variants: VaultVariant[], returnedIds: Set<string>, processedIds: Set<string>, levels: PendingInventoryLevel[]) {
+  const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+  const rows = levels.flatMap((level) => {
+    const variant = variantById.get(level.variant_id);
+    if (!variant || !returnedIds.has(variant.source_inventory_item_id) || !processedIds.has(variant.id)) return [];
+    return [{ evidence_date: evidenceDate, attesting_inventory_sync_run_id: runId, variant_id: variant.id, shopify_variant_id: variant.source_variant_id, shopify_inventory_item_id: variant.source_inventory_item_id, ...canonicalMembership(variant), shopify_location_id: level.source_location_id, available: level.available_quantity, committed: level.committed_quantity, incoming: level.incoming_quantity, on_hand: level.on_hand_quantity, observed_at: observedAt.toISOString() }];
+  });
+  if (!rows.length) return;
+  const { error } = await supabase.from("vault_inventory_observation_daily_member_location_quantities").upsert(rows, { onConflict: "evidence_date,variant_id,shopify_inventory_item_id,parent_product_id,model_design,normalized_size,canonical_style_id,canonical_mapping_status,shopify_location_id", ignoreDuplicates: true });
+  if (error) throw error;
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", {
@@ -683,6 +695,7 @@ Deno.serve(async (request: Request) => {
       new Set(inventoryRows.map((row) => row.variant_id)),
       pendingLevels,
     );
+    await recordDailyMemberLocationQuantities(supabase, run.id, evidenceDate, completedAt, processableVariants, new Set(returnedInventoryItems.map((item) => item.id)), new Set(inventoryRows.map((row) => row.variant_id)), pendingLevels);
 
     try {
       await emitCommandCentreRefreshEvent({
