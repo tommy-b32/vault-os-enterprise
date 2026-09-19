@@ -27,27 +27,11 @@ function writeJson(key: string, value: unknown) {
   }
 }
 
-function playKerChing(context: AudioContext) {
-  const now = context.currentTime;
-  const notes = [
-    { frequency: 1046.5, start: 0, duration: 0.11, gain: 0.12 },
-    { frequency: 1318.5, start: 0.08, duration: 0.14, gain: 0.1 },
-    { frequency: 1568, start: 0.17, duration: 0.42, gain: 0.12 },
-    { frequency: 2093, start: 0.22, duration: 0.55, gain: 0.08 },
-  ];
-
-  notes.forEach(({ frequency, start, duration, gain }) => {
-    const oscillator = context.createOscillator();
-    const envelope = context.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(frequency, now + start);
-    envelope.gain.setValueAtTime(0.0001, now + start);
-    envelope.gain.exponentialRampToValueAtTime(gain, now + start + 0.015);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
-    oscillator.connect(envelope);
-    envelope.connect(context.destination);
-    oscillator.start(now + start);
-    oscillator.stop(now + start + duration + 0.02);
+function playSaleSound(audio: HTMLAudioElement | null) {
+  if (!audio) return;
+  audio.currentTime = 0;
+  void audio.play().catch(() => {
+    // Browsers can block playback until the user has interacted with the page.
   });
 }
 
@@ -58,7 +42,7 @@ export function VaultSaleCelebration({
 }) {
   const [pending, setPending] = useState<RecentOrder[]>([]);
   const [ready, setReady] = useState(false);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const saleAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const currentOrders = useMemo(
     () => recentOrders.value ?? [],
@@ -66,13 +50,13 @@ export function VaultSaleCelebration({
   );
 
   useEffect(() => {
+    const audio = new Audio("/sale-celebration/shopify_sale_sound.mp3");
+    audio.preload = "auto";
+    audio.volume = 1;
+    saleAudioRef.current = audio;
+
     const unlockAudio = () => {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
-      }
-      if (audioContextRef.current.state === "suspended") {
-        void audioContextRef.current.resume();
-      }
+      audio.load();
     };
 
     window.addEventListener("pointerdown", unlockAudio, { once: true });
@@ -80,6 +64,8 @@ export function VaultSaleCelebration({
     return () => {
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
+      audio.pause();
+      saleAudioRef.current = null;
     };
   }, []);
 
@@ -116,9 +102,7 @@ export function VaultSaleCelebration({
 
     newlyDetected.forEach((_, index) => {
       window.setTimeout(() => {
-        const context = audioContextRef.current;
-        if (!context || context.state !== "running") return;
-        playKerChing(context);
+        playSaleSound(saleAudioRef.current);
       }, index * 850);
     });
   }, [currentOrders, ready]);
@@ -170,8 +154,7 @@ export function VaultSaleCelebration({
       writeJson(PENDING_ORDERS_KEY, next);
       return next;
     });
-    const context = audioContextRef.current;
-    if (context?.state === "running") playKerChing(context);
+    playSaleSound(saleAudioRef.current);
   };
 
   return (
