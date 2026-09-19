@@ -8,6 +8,7 @@ const schema = await readFile(new URL("fixtures/phase3d1-postgres-schema.sql", i
 const currentMigration = await readFile(new URL("../../../supabase/migrations/20260912000000_canonical_model_size_replenishment_evidence.sql", import.meta.url), "utf8");
 const migration = await readFile(new URL("../../../supabase/migrations/20261005000000_canonical_historical_model_size_evidence.sql", import.meta.url), "utf8");
 const assessmentMigration = await readFile(new URL("../../../supabase/migrations/20261006000000_size_distribution_evidence_assessment.sql", import.meta.url), "utf8");
+const sufficiencyMigration = await readFile(new URL("../../../supabase/migrations/20261007000000_size_evidence_sufficiency_foundation.sql", import.meta.url), "utf8");
 const container = `vault-phase1b3-test-${process.pid}`;
 const password = "phase1b3-disposable-only";
 let started = false;
@@ -38,9 +39,9 @@ test("Phase 1B3 preserves current model-size evidence and fails historical evide
     insert into public.vault_inventory_levels values ('${id(901)}','${id(101)}',5,1,2,now()),('${id(902)}','${id(102)}',4,0,0,now()),('${id(903)}','${id(201)}',2,0,0,now());
     insert into public.vault_shopify_order_sync_runs values ('${id(1001)}',30,now());
     insert into public.vault_shopify_orders values
-      ('${id(1101)}',now()-interval '31 days',null,'{}'),('${id(1102)}',now()-interval '10 days',null,'{}'),('${id(1103)}',now()-interval '5 days',null,'{}'),('${id(1104)}',now()-interval '2 days',null,'{}'),('${id(1105)}',now()-interval '3 days',now(),'{}'),('${id(1106)}',now()-interval '3 days',null,'{"test":true}'),('${id(1107)}',now()-interval '4 days',null,'{}');
+      ('${id(1101)}',now()-interval '31 days',null,'{}'),('${id(1102)}',now()-interval '10 days',null,'{}'),('${id(1103)}',now()-interval '5 days',null,'{}'),('${id(1104)}',now()-interval '2 days',null,'{}'),('${id(1105)}',now()-interval '3 days',now(),'{}'),('${id(1106)}',now()-interval '3 days',null,'{"test":true}'),('${id(1107)}',now()-interval '4 days',null,'{}'),('${id(1108)}',now()-interval '50 days',null,'{}');
     insert into public.vault_shopify_order_lines values
-      ('${id(1201)}','${id(1101)}','alpha-xl',1,0),('${id(1202)}','${id(1102)}','alpha-l',3,1),('${id(1203)}','${id(1103)}','alpha-xl',3,3),('${id(1204)}','${id(1104)}','alpha-old',4,0),('${id(1205)}','${id(1105)}','alpha-xl',99,0),('${id(1206)}','${id(1106)}','alpha-xl',99,0),('${id(1207)}','${id(1107)}','beta-unresolved',2,0);
+      ('${id(1201)}','${id(1101)}','alpha-xl',1,0),('${id(1202)}','${id(1102)}','alpha-l',3,1),('${id(1203)}','${id(1103)}','alpha-xl',3,3),('${id(1204)}','${id(1104)}','alpha-old',4,0),('${id(1205)}','${id(1105)}','alpha-xl',99,0),('${id(1206)}','${id(1106)}','alpha-xl',99,0),('${id(1207)}','${id(1107)}','beta-unresolved',2,0),('${id(1208)}','${id(1108)}','alpha-xl',1,0);
     insert into test_trading values
       ('${id(1)}::Alpha','${id(1)}','Alpha',now()-interval '40 days',now()-interval '1 minute',true,true),
       ('${id(2)}::Beta','${id(2)}','Beta',now()-interval '40 days',now()-interval '1 minute',true,true),
@@ -51,7 +52,7 @@ test("Phase 1B3 preserves current model-size evidence and fails historical evide
   sql(migration);
   const after = query("select coalesce(json_agg(v order by model_size_id),'[]') from public.vault_model_size_replenishment_intelligence v");
   assert.deepEqual(after, before, "current model-size projection must be exact pre/post parity");
-  assert.equal(query("select count(*) from public.vault_canonical_resolved_commercial_order_lines where shopify_variant_id='alpha-xl'"), 2);
+  assert.equal(query("select count(*) from public.vault_canonical_resolved_commercial_order_lines where shopify_variant_id='alpha-xl'"), 3);
   const historical = query("select coalesce(json_agg(v order by style_id,normalized_size),'[]') from public.vault_historical_model_size_evidence v");
   const alpha = historical.filter((row) => row.style_id === `${id(1)}::Alpha`);
   assert.equal(alpha.every((row) => row.historical_evidence_available), true);
@@ -79,4 +80,33 @@ test("Phase 1B3 preserves current model-size evidence and fails historical evide
   const assessment = query("select coalesce(json_agg(v order by canonical_style_id,canonical_size),'[]') from vault_size_distribution_evidence_assessment v");
   const alphaXLAssessment = assessment.find((row) => row.canonical_style_id === `${id(1)}::Alpha` && row.canonical_size === 'XL');
   assert.equal(alphaXLAssessment.historical_distinct_order_count, 1); assert.equal(alphaXLAssessment.retained_inventory_observation_count, 2); assert.equal(alphaXLAssessment.retained_positive_availability_observations, 1); assert.equal(alphaXLAssessment.retained_zero_or_negative_availability_observations, 1); assert.equal(alphaXLAssessment.historical_availability_opportunity, 'not_evaluated');
+  sql(`update public.vault_variants set model_design='Beta', normalized_size='M', identity_resolution_status='resolved' where id='${id(202)}';
+    update public.vault_variants set source_active=true where id='${id(103)}';
+    insert into public.vault_inventory_levels values ('${id(904)}','${id(103)}',1,0,0,now()),('${id(905)}','${id(401)}',1,0,0,now()),('${id(906)}','${id(202)}',1,0,0,now());`);
+  const assessmentBeforeSufficiency = query("select coalesce(json_agg(v order by canonical_style_id,canonical_size),'[]') from vault_size_distribution_evidence_assessment v");
+  sql(sufficiencyMigration);
+  const assessmentAfterSufficiency = query("select coalesce(json_agg(v order by canonical_style_id,canonical_size),'[]') from vault_size_distribution_evidence_assessment v");
+  assert.deepEqual(assessmentAfterSufficiency, assessmentBeforeSufficiency, "Phase 1B5B must not alter Phase 1B4 factual evidence");
+  const sufficiency = query("select coalesce(json_agg(v order by canonical_style_id),'[]') from vault_size_evidence_sufficiency v");
+  assert.equal(sufficiency.length, 4, "sufficiency is style-level, not size-level");
+  const alphaSufficiency = sufficiency.find((row) => row.canonical_style_id === `${id(1)}::Alpha`);
+  const betaSufficiency = sufficiency.find((row) => row.canonical_style_id === `${id(2)}::Beta`);
+  const gammaSufficiency = sufficiency.find((row) => row.canonical_style_id === `${id(3)}::Gamma`);
+  const deltaSufficiency = sufficiency.find((row) => row.canonical_style_id === `${id(4)}::Delta`);
+  assert.equal(alphaSufficiency.size_evidence_sufficiency_state, "DESCRIPTIVE_ONLY");
+  assert.equal(betaSufficiency.size_evidence_sufficiency_state, "DESCRIPTIVE_ONLY", "one observed size remains descriptive only");
+  assert.equal(betaSufficiency.historically_observed_size_count, 1);
+  assert.equal(deltaSufficiency.size_evidence_sufficiency_state, "NOT_OBSERVED");
+  assert.equal(gammaSufficiency.size_evidence_sufficiency_state, "UNAVAILABLE");
+  assert.equal(gammaSufficiency.size_evidence_sufficiency_state === "NOT_OBSERVED", false, "unavailable evidence is never converted to zero observations");
+  assert.equal(alphaSufficiency.historical_distinct_commercial_orders, 3, "style order count must be distinct across sizes, not a sum of size counts");
+  assert.equal(alphaSufficiency.historical_first_observed_at > new Date(Date.now() - 40 * 86400000).toISOString(), true, "out-of-interval positive commercial lines must not affect style-level historical facts");
+  assert.equal(alphaSufficiency.has_multiple_historical_orders, true);
+  assert.equal(alphaSufficiency.has_multiple_historical_selling_dates, true);
+  assert.equal(alphaSufficiency.has_multiple_historical_selling_weeks, true);
+  assert.equal(alphaSufficiency.has_multiple_historically_observed_sizes, true);
+  assert.equal(alphaSufficiency.historical_adds_sizes_beyond_current, true);
+  assert.equal(alphaSufficiency.availability_censoring_limitation, "NOT_EVALUATED");
+  assert.equal(deltaSufficiency.availability_censoring_limitation, "NOT_EVALUATED", "censoring limitation does not change state");
+  assert.equal(Object.keys(alphaSufficiency).some((key) => /curve|buy|reorder|recommend/i.test(key)), false, "no curve or buying output may be introduced");
 });
