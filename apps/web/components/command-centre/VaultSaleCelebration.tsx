@@ -133,7 +133,7 @@ export function VaultSaleCelebration({
     };
   }, [pending.length, ready]);
 
-  if (!ready || !pending.length) return null;
+  if (!ready) return null;
 
   const totalRevenue = pending.reduce((sum, order) => sum + order.netRevenue, 0);
   const currency = pending[0]?.currency ?? "GBP";
@@ -150,8 +150,32 @@ export function VaultSaleCelebration({
     writeJson(PENDING_ORDERS_KEY, []);
   };
 
+  const triggerTestSale = () => {
+    const testOrder: RecentOrder = {
+      id: `test-${Date.now()}`,
+      displayName: "#TEST",
+      fulfilmentStatus: "unfulfilled",
+      quantity: 2,
+      netRevenue: 70,
+      currency: "GBP",
+      createdAt: new Date().toISOString(),
+      destination: "/orders",
+    };
+    setPending((existing) => {
+      const next = [testOrder, ...existing];
+      writeJson(PENDING_ORDERS_KEY, next);
+      return next;
+    });
+    const context = audioContextRef.current;
+    if (context?.state === "running") playKerChing(context);
+  };
+
   return (
-    <div className="vault-sale-celebration" aria-live="assertive">
+    <>
+      {process.env.NODE_ENV === "development" && !pending.length ? (
+        <button className="vault-test-sale-button" type="button" onClick={triggerTestSale}>£ TEST SALE</button>
+      ) : null}
+      {pending.length ? <div className="vault-sale-celebration" aria-live="assertive">
       <div className="vault-money-rain" aria-hidden="true">
         {Array.from({ length: 28 }, (_, index) => (
           <span
@@ -184,7 +208,9 @@ export function VaultSaleCelebration({
         </button>
       </section>
 
+      </div> : null}
       <style>{`
+        .vault-test-sale-button{position:fixed;right:18px;bottom:18px;z-index:9998;min-height:38px;padding:0 14px;border:1px solid rgba(232,188,67,.65);border-radius:7px;background:#111613;color:#e8bc43;font:800 11px/1 inherit;letter-spacing:.06em;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.35)}.vault-test-sale-button:hover{background:#191f1b}.vault-test-sale-button:focus-visible{outline:2px solid #fff;outline-offset:3px}
         .vault-sale-celebration{position:fixed;inset:0;z-index:9999;pointer-events:none;overflow:hidden}
         .vault-money-rain{position:absolute;inset:-15vh 0 0;overflow:hidden}
         .vault-money-rain span{position:absolute;top:-12vh;color:#e8bc43;font-weight:900;text-shadow:0 2px 8px #000,0 0 16px rgba(232,188,67,.35);opacity:.9;animation:vault-money-fall linear infinite;will-change:transform}
@@ -200,6 +226,6 @@ export function VaultSaleCelebration({
         @media (prefers-reduced-motion:reduce){.vault-money-rain span{animation-duration:14s!important}}
         @media (max-width:600px){.vault-sale-card{top:14px;padding:18px}.vault-sale-card>strong{font-size:30px}}
       `}</style>
-    </div>
+    </>
   );
 }
