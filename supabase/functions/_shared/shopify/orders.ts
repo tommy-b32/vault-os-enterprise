@@ -28,7 +28,8 @@ type ShopifyOrderLine = {
   originalTotalSet: MoneyBag;
   discountedTotalSet: MoneyBag;
   product: { id: string } | null;
-  variant: { id: string } | null;
+  variant: { id: string; image: { url: string } | null } | null;
+  image: { url: string } | null;
 };
 
 export type ShopifyOrderNode = {
@@ -115,7 +116,8 @@ const ORDER_FIELDS = `
         shopMoney { amount currencyCode }
       }
       product { id }
-      variant { id }
+      variant { id image { url } }
+      image { url }
     }
     pageInfo { hasNextPage }
   }
@@ -373,7 +375,9 @@ export async function upsertShopifyOrder(
       discount_allocation: Math.max(0, originalTotal - discountedTotal),
       refunded_quantity: refund.quantity,
       net_line_revenue: Math.max(0, discountedTotal - refund.subtotal),
-      metadata: {},
+      metadata: {
+        image_url: line.variant?.image?.url ?? line.image?.url ?? null,
+      },
       synced_at: syncedAt,
       updated_at: syncedAt,
     };

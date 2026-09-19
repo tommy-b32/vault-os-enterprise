@@ -1,0 +1,235 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import type { CommandCentreCockpitData } from "@/lib/command-centre/CommandCentreCockpit";
+
+type RecentOrder = NonNullable<CommandCentreCockpitData["trading"]["recentOrders"]["value"]>[number];
+
+const KNOWN_ORDERS_KEY = "vault-os-sale-celebration-known-orders-v1";
+const PENDING_ORDERS_KEY = "vault-os-sale-celebration-pending-orders-v1";
+const BASE_TITLE = "Vault OS";
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key: string, value: unknown) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Celebration persistence is non-critical; the dashboard must keep working.
+  }
+}
+
+function playSaleSound(audio: HTMLAudioElement | null) {
+  if (!audio) return;
+  audio.currentTime = 0;
+  void audio.play().catch(() => {
+    // Browsers can block playback until the user has interacted with the page.
+  });
+}
+
+export function VaultSaleCelebration({
+  recentOrders,
+}: {
+  recentOrders: CommandCentreCockpitData["trading"]["recentOrders"];
+}) {
+  const [pending, setPending] = useState<RecentOrder[]>([]);
+  const [ready, setReady] = useState(false);
+  const saleAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const currentOrders = useMemo(
+    () => recentOrders.value ?? [],
+    [recentOrders.value],
+  );
+
+  useEffect(() => {
+    const audio = new Audio("/sale-celebration/shopify_sale_sound.mp3");
+    audio.preload = "auto";
+    audio.volume = 1;
+    saleAudioRef.current = audio;
+
+    const unlockAudio = () => {
+      audio.load();
+    };
+
+    window.addEventListener("pointerdown", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      audio.pause();
+      saleAudioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const storedPending = readJson<RecentOrder[]>(PENDING_ORDERS_KEY, []);
+    setPending(storedPending);
+
+    const known = readJson<string[] | null>(KNOWN_ORDERS_KEY, null);
+    if (known === null) {
+      writeJson(KNOWN_ORDERS_KEY, currentOrders.map((order) => order.id));
+    }
+    setReady(true);
+    // Establish the first-load baseline once. New orders are handled below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !currentOrders.length) return;
+
+    const knownIds = new Set(readJson<string[]>(KNOWN_ORDERS_KEY, []));
+    const newlyDetected = currentOrders.filter((order) => !knownIds.has(order.id));
+    if (!newlyDetected.length) return;
+
+    currentOrders.forEach((order) => knownIds.add(order.id));
+    writeJson(KNOWN_ORDERS_KEY, Array.from(knownIds).slice(-100));
+
+    setPending((existing) => {
+      const pendingIds = new Set(existing.map((order) => order.id));
+      const additions = newlyDetected.filter((order) => !pendingIds.has(order.id));
+      const next = [...additions, ...existing];
+      writeJson(PENDING_ORDERS_KEY, next);
+      return next;
+    });
+
+    newlyDetected.forEach((_, index) => {
+      window.setTimeout(() => {
+        playSaleSound(saleAudioRef.current);
+      }, index * 850);
+    });
+  }, [currentOrders, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    document.title = pending.length
+      ? `💷 (${pending.length}) NEW ORDER${pending.length === 1 ? "" : "S"} | Vault OS`
+      : BASE_TITLE;
+    return () => {
+      document.title = BASE_TITLE;
+    };
+  }, [pending.length, ready]);
+
+  if (!ready) return null;
+
+  const totalRevenue = pending.reduce((sum, order) => sum + order.netRevenue, 0);
+  const currency = pending[0]?.currency ?? "GBP";
+  const totalItems = pending.reduce((sum, order) => sum + (order.quantity ?? 0), 0);
+  const formatter = new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  const acknowledge = () => {
+    setPending([]);
+    writeJson(PENDING_ORDERS_KEY, []);
+  };
+
+  const triggerTestSale = () => {
+    const testOrder: RecentOrder = {
+      id: `test-${Date.now()}`,
+      displayName: "#TEST",
+      fulfilmentStatus: "unfulfilled",
+      quantity: 2,
+      netRevenue: 70,
+      currency: "GBP",
+      createdAt: new Date().toISOString(),
+      destination: "/orders",
+      items: [
+        { id: "test-tee-1", title: "Vault Premium Tee", variantTitle: "Black · Large", quantity: 1, imageUrl: null },
+        { id: "test-tee-2", title: "Vault Premium Tee", variantTitle: "White · Large", quantity: 1, imageUrl: null },
+      ],
+    };
+    setPending((existing) => {
+      const next = [testOrder, ...existing];
+      writeJson(PENDING_ORDERS_KEY, next);
+      return next;
+    });
+    playSaleSound(saleAudioRef.current);
+  };
+
+  return (
+    <>
+      {process.env.NODE_ENV === "development" && !pending.length ? (
+        <button className="vault-test-sale-button" type="button" onClick={triggerTestSale}>£ TEST SALE</button>
+      ) : null}
+      {pending.length ? <div className="vault-sale-celebration" aria-live="assertive">
+      <div className="vault-money-rain" aria-hidden="true">
+        {Array.from({ length: 34 }, (_, index) => (
+          <span
+            key={index}
+            style={{
+              left: `${(index * 37) % 97}%`,
+              animationDelay: `-${(index * 0.43) % 7}s`,
+              animationDuration: `${5.2 + (index % 7) * 0.48}s`,
+              fontSize: `${22 + (index % 5) * 5}px`,
+            }}
+          >
+            {index % 6 === 0 ? <img className="vault-note-image vault-note-50-image" src="/sale-celebration/gbp-50.png" alt="" /> : index % 4 === 0 ? <img className="vault-note-image vault-note-20-image" src="/sale-celebration/gbp-20.png" alt="" /> : "£"}
+          </span>
+        ))}
+      </div>
+
+      <div className="vault-sale-backdrop" aria-hidden="true" />
+      <div className="vault-sale-burst" aria-hidden="true"><i className="burst-core" /><i className="burst-ring burst-ring-one" /><i className="burst-ring burst-ring-two" />{Array.from({ length: 22 }, (_, index) => <b key={index} style={{ "--ray": index } as React.CSSProperties} />)}</div>
+      <section className="vault-sale-card" role="alert">
+        <div className="vault-sale-card-flare" aria-hidden="true" />
+        <div className="vault-sale-sparks" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index} style={{ "--spark": index } as React.CSSProperties} />)}</div>
+        <div className="vault-sale-logo" aria-label="The Fabric Vault"><img src="/sale-celebration/fabric-vault-logo.png" alt="The Fabric Vault" /></div>
+        <div className="vault-sale-kicker"><i />ACCESS GRANTED<i /></div>
+        <div className="vault-sale-title">
+          {pending.length === 1 ? "NEW VAULT ORDER" : `${pending.length} NEW VAULT ORDERS`}
+        </div>
+        <strong>{formatter.format(totalRevenue)}</strong>
+        <p className="vault-order-meta">
+          {pending.length === 1
+            ? `${pending[0].displayName} · ${pending[0].quantity ?? "?"} item${pending[0].quantity === 1 ? "" : "s"}`
+            : `${totalItems || "?"} items · ${pending.map((order) => order.displayName).join(" · ")}`}
+        </p>
+        {pending.length === 1 && pending[0].items?.length ? (
+          <div className="vault-sale-items">
+            {pending[0].items.slice(0, 4).map((item) => (
+              <div className="vault-sale-item" key={item.id}>
+                <div className="vault-sale-item-thumb" aria-hidden="true">{item.imageUrl ? <img src={item.imageUrl} alt="" /> : "V"}</div>
+                <div className="vault-sale-item-copy"><b>{item.title}</b><span>{item.variantTitle ?? "Vault item"}</span><em>× {item.quantity}</em></div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <button type="button" onClick={acknowledge}>
+          ✓ ACKNOWLEDGE {pending.length === 1 ? "ORDER" : `${pending.length} ORDERS`}
+        </button>
+        <div className="vault-sale-footer">ANOTHER STEP FORWARD <b>V</b></div>
+      </section>
+
+      </div> : null}
+      <style>{`
+        .vault-test-sale-button{position:fixed;right:18px;bottom:18px;z-index:9998;min-height:38px;padding:0 14px;border:1px solid rgba(232,188,67,.65);border-radius:7px;background:#111613;color:#e8bc43;font:800 11px/1 inherit;letter-spacing:.06em;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.35)}.vault-test-sale-button:hover{background:#191f1b}.vault-test-sale-button:focus-visible{outline:2px solid #fff;outline-offset:3px}
+        .vault-sale-celebration{position:fixed;inset:0;z-index:9999;pointer-events:none;overflow:hidden}.vault-sale-backdrop{position:absolute;inset:0;z-index:1;background:rgba(0,0,0,.58);backdrop-filter:blur(1.5px)}.vault-sale-burst{position:absolute;z-index:2;left:50%;top:50%;width:min(1120px,96vw);height:min(900px,94vh);transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;animation:vault-burst 2.2s ease-in-out infinite alternate}.vault-sale-burst:before{content:"";position:absolute;inset:7%;border-radius:50%;background:radial-gradient(circle,rgba(255,242,177,.78) 0,rgba(255,192,47,.42) 11%,rgba(231,150,18,.18) 29%,rgba(176,103,4,.06) 48%,transparent 68%);filter:blur(12px)}.burst-core{position:absolute;left:50%;top:48%;width:470px;height:470px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(255,244,190,.5),rgba(255,185,35,.18) 30%,transparent 69%);filter:blur(14px)}.burst-ring{position:absolute;left:50%;top:48%;border:1px solid rgba(255,194,48,.18);border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 38px rgba(255,172,21,.13)}.burst-ring-one{width:690px;height:690px}.burst-ring-two{width:870px;height:870px}.vault-sale-burst b{--ray-angle:calc(var(--ray) * 16.36deg);position:absolute;left:50%;top:48%;width:4px;height:150px;transform-origin:50% 0;transform:rotate(var(--ray-angle)) translateY(-325px);background:linear-gradient(180deg,rgba(255,221,113,.9),rgba(235,153,20,.18) 45%,transparent);filter:blur(1px);opacity:.48}
+        .vault-money-rain{position:absolute;inset:-15vh 0 0;overflow:hidden;z-index:4;filter:none}
+        .vault-money-rain span{position:absolute;top:-12vh;color:#e8bc43;font-weight:900;text-shadow:0 2px 8px #000,0 0 16px rgba(232,188,67,.35);opacity:.9;animation:vault-money-fall linear infinite;will-change:transform}
+        .vault-note-image{display:block;width:112px;height:auto;filter:drop-shadow(0 8px 10px rgba(0,0,0,.62));border-radius:2px;transform:rotate(-4deg);user-select:none}.vault-note-20-image{width:116px}.vault-note-50-image{width:108px}
+        .vault-sale-card{pointer-events:auto;position:absolute;z-index:3;top:50%;left:50%;width:min(690px,calc(100vw - 32px));transform:translate(-50%,-50%);padding:30px 40px 24px;border:2px solid rgba(255,199,67,.9);border-radius:13px;background:radial-gradient(circle at 50% 12%,rgba(159,103,12,.22),transparent 35%),linear-gradient(145deg,rgba(20,20,15,.91),rgba(5,8,7,.95));backdrop-filter:blur(5px);box-shadow:0 24px 90px rgba(0,0,0,.72),0 0 24px rgba(255,206,81,.75),0 0 90px rgba(232,157,20,.45),0 0 180px rgba(196,112,4,.22),inset 0 0 70px rgba(225,155,22,.1);text-align:center;color:#f5f1e7}.vault-sale-card:before{content:"";position:absolute;inset:-2px;z-index:-1;border-radius:13px;box-shadow:0 0 28px rgba(255,190,42,.7);animation:vault-card-glow 1.6s ease-in-out infinite alternate}
+        .vault-sale-card-flare{position:absolute;z-index:0;left:50%;top:-22px;width:500px;height:220px;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(255,202,72,.38),rgba(226,150,18,.13) 36%,transparent 70%);filter:blur(10px);pointer-events:none}.vault-sale-sparks{position:absolute;z-index:0;inset:0;overflow:hidden;border-radius:12px;pointer-events:none}.vault-sale-sparks i{--angle:calc(var(--spark) * 25.7deg);position:absolute;left:50%;top:11%;width:3px;height:3px;border-radius:50%;background:#ffd76a;box-shadow:0 0 8px #f2ae20;transform:rotate(var(--angle)) translateY(calc(72px + (var(--spark) % 4) * 18px));opacity:.7}.vault-sale-logo{position:relative;z-index:1;width:112px;height:112px;margin:-12px auto 12px;display:flex;align-items:center;justify-content:center;overflow:hidden;filter:drop-shadow(0 0 26px rgba(255,191,43,.42))}.vault-sale-logo img{display:block;width:112px;height:112px;margin:0 auto;object-fit:cover;object-position:center center;transform:none}.vault-sale-kicker{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:13px;color:#f3ce69;font-size:12px;font-weight:900;letter-spacing:.28em}.vault-sale-kicker i{width:46px;height:1px;background:linear-gradient(90deg,transparent,#e8bc43)}.vault-sale-kicker i:last-child{transform:scaleX(-1)}
+        .vault-sale-title{position:relative;z-index:1;margin-top:14px;padding-top:16px;border-top:1px solid rgba(232,188,67,.2);color:#fff7df;font-size:34px;font-weight:900;letter-spacing:.055em;text-shadow:0 2px 0 #7e5819,0 0 18px rgba(255,203,83,.22)}
+        .vault-sale-card>strong{position:relative;z-index:1;display:block;margin:8px 0 2px;color:#54f56f;font-size:66px;text-shadow:0 2px 0 #0b6727,0 0 10px rgba(74,255,111,.95),0 0 26px rgba(42,236,87,.78),0 0 52px rgba(31,196,70,.5);line-height:1.05;animation:vault-order-value-pulse 1.55s ease-in-out infinite;will-change:transform,filter}
+        .vault-sale-card p{position:relative;z-index:1;margin:8px 0 14px;color:#ded7c8;font-size:12px;font-weight:700;letter-spacing:.08em;line-height:1.45}.vault-sale-items{position:relative;z-index:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0 auto 18px;max-width:500px;text-align:left}.vault-sale-item{display:block;padding:8px;min-height:0;border:1px solid rgba(232,188,67,.55);border-radius:9px;background:linear-gradient(145deg,rgba(26,26,21,.95),rgba(8,11,10,.98));box-shadow:0 0 18px rgba(225,157,26,.08)}.vault-sale-item-thumb{display:grid;width:100%;height:104px;place-items:center;border:1px solid rgba(232,188,67,.35);border-radius:6px;background:linear-gradient(145deg,#171d1a,#080b0a);color:#e8bc43;font-weight:900;overflow:hidden}.vault-sale-item-thumb img{width:100%;height:100%;object-fit:contain;display:block;background:#f0f0ed}.vault-sale-item-thumb:not(:has(img)){background:radial-gradient(circle at 50% 45%,rgba(232,188,67,.13),transparent 42%),linear-gradient(145deg,#151914,#080b09);font-size:22px;text-shadow:0 0 15px rgba(232,188,67,.4)}.vault-sale-item-copy{padding:8px 3px 2px}.vault-sale-item b,.vault-sale-item span,.vault-sale-item em{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vault-sale-item b{color:#fff8e8;font-size:12px}.vault-sale-item span{margin-top:4px;color:#b9b1a1;font-size:11px}.vault-sale-item em{margin-top:4px;color:#fff;font-size:13px;font-style:normal;font-weight:800}
+        .vault-sale-card button{position:relative;z-index:1;width:100%;min-height:52px;padding:0 20px;border:1px solid #e8bc43;border-radius:7px;background:linear-gradient(180deg,#fff0b3 0%,#f6c94f 48%,#dca420 100%);color:#0b0d0b;font:900 14px/1 inherit;letter-spacing:.045em;cursor:pointer;box-shadow:0 0 22px rgba(255,190,43,.42),0 8px 22px rgba(0,0,0,.4),inset 0 1px 0 #fff7d8}
+        .vault-sale-card button:hover{filter:brightness(1.08)}
+        .vault-sale-card button:focus-visible{outline:2px solid #fff;outline-offset:3px}
+        .vault-sale-footer{position:relative;z-index:1;margin-top:20px;color:#e3b94c;font-size:10px;font-weight:800;letter-spacing:.34em}.vault-sale-footer b{margin-left:8px;color:#f6ce68;font-size:20px;text-shadow:0 0 12px rgba(255,190,43,.45)}@keyframes vault-order-value-pulse{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.055);filter:brightness(1.24) drop-shadow(0 0 12px rgba(65,255,104,.55))}}@keyframes vault-card-glow{from{opacity:.55}to{opacity:1}}@keyframes vault-burst{from{transform:translate(-50%,-50%) scale(.96);opacity:.72}to{transform:translate(-50%,-50%) scale(1.06);opacity:1}}@keyframes vault-money-fall{0%{transform:translate3d(0,-12vh,0) rotate(-16deg);opacity:0}8%{opacity:.9}50%{transform:translate3d(28px,55vh,0) rotate(150deg)}92%{opacity:.9}100%{transform:translate3d(-18px,118vh,0) rotate(330deg);opacity:0}}
+        @media (prefers-reduced-motion:reduce){.vault-money-rain span{animation-duration:14s!important}}
+        @media (max-width:600px){.vault-sale-card{top:50%;padding:20px}.vault-sale-title{font-size:22px}.vault-sale-card>strong{font-size:42px}.vault-sale-items{grid-template-columns:1fr}.vault-sale-logo{width:76px;height:64px;margin-top:-8px}.vault-sale-logo img{width:96px;height:96px}}
+      `}</style>
+    </>
+  );
+}

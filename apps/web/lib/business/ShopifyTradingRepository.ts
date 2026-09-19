@@ -29,6 +29,14 @@ export type ShopifyTodaySummary = {
   profit: null;
 };
 
+export type ShopifyRecentOrderLineSummary = {
+  id: string;
+  title: string;
+  variantTitle: string | null;
+  quantity: number;
+  imageUrl: string | null;
+};
+
 export type ShopifyRecentOrderSummary = {
   id: string;
   displayName: string;
@@ -37,6 +45,7 @@ export type ShopifyRecentOrderSummary = {
   netRevenue: number;
   currency: string;
   createdAt: string;
+  items: ShopifyRecentOrderLineSummary[];
 };
 
 export type ShopifyRecentOrder = {
@@ -543,11 +552,12 @@ export const ShopifyTradingRepository = {
     if (!orders.length) return [];
 
     const quantities = new Map<string, number>();
+    const orderItems = new Map<string, ShopifyRecentOrderLineSummary[]>();
     // Page line quantities so API row limits cannot silently undercount units.
     for (let offset = 0; ; offset += 500) {
       const { data: lines, error: lineError } = await supabaseAdmin
         .from("vault_shopify_order_lines")
-        .select("id, order_id, quantity")
+        .select("id, order_id, title, variant_title, quantity, metadata")
         .in("order_id", orders.map((order) => order.id))
         .order("id")
         .range(offset, offset + 499);
@@ -555,6 +565,12 @@ export const ShopifyTradingRepository = {
       for (const line of lines) {
         if (!Number.isSafeInteger(line.quantity) || line.quantity < 0) throw new Error("Invalid order quantity");
         quantities.set(line.order_id, (quantities.get(line.order_id) ?? 0) + line.quantity);
+        const items = orderItems.get(line.order_id) ?? [];
+        const metadata = line.metadata && typeof line.metadata === "object" ? line.metadata as Record<string, unknown> : {};
+        const imageUrl = [metadata.image_url, metadata.imageUrl, metadata.variant_image, metadata.featured_image]
+          .find((value): value is string => typeof value === "string" && (value.startsWith("https://") || value.startsWith("http://"))) ?? null;
+        items.push({ id: line.id, title: line.title || "Item", variantTitle: line.variant_title || null, quantity: line.quantity, imageUrl });
+        orderItems.set(line.order_id, items);
       }
       if (lines.length < 500) break;
     }
@@ -571,6 +587,7 @@ export const ShopifyTradingRepository = {
         netRevenue: numberFromDatabase(order.net_revenue),
         currency: order.currency,
         createdAt: order.shopify_created_at,
+        items: orderItems.get(order.id) ?? [],
       };
     });
   },

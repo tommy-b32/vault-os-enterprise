@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import VaultIcon, { type VaultIconName } from "@/components/brain/workspace/VaultIcon";
 import { CommandCentreLiveRefresh } from "@/components/command-centre/CommandCentreLiveRefresh";
+import { VaultSaleCelebration } from "@/components/command-centre/VaultSaleCelebration";
 import type {
   CockpitMoney,
   CockpitTrendPoint,
@@ -355,6 +356,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 
   return (
     <div className="cc-page">
+      <VaultSaleCelebration recentOrders={data.trading.recentOrders} />
       <header className="cc-page-header">
         <div><p>THE FABRIC VAULT</p><h1>Command Centre</h1><span>Your business. At a glance.</span></div>
         <div className={`cc-pulse is-${data.businessPulse.state}`} aria-label={`Business Pulse: ${data.businessPulse.label}`}>
