@@ -34,6 +34,7 @@ export type ShopifyRecentOrderLineSummary = {
   title: string;
   variantTitle: string | null;
   quantity: number;
+  imageUrl: string | null;
 };
 
 export type ShopifyRecentOrderSummary = {
@@ -556,7 +557,7 @@ export const ShopifyTradingRepository = {
     for (let offset = 0; ; offset += 500) {
       const { data: lines, error: lineError } = await supabaseAdmin
         .from("vault_shopify_order_lines")
-        .select("id, order_id, title, variant_title, quantity")
+        .select("id, order_id, title, variant_title, quantity, metadata")
         .in("order_id", orders.map((order) => order.id))
         .order("id")
         .range(offset, offset + 499);
@@ -565,7 +566,10 @@ export const ShopifyTradingRepository = {
         if (!Number.isSafeInteger(line.quantity) || line.quantity < 0) throw new Error("Invalid order quantity");
         quantities.set(line.order_id, (quantities.get(line.order_id) ?? 0) + line.quantity);
         const items = orderItems.get(line.order_id) ?? [];
-        items.push({ id: line.id, title: line.title || "Item", variantTitle: line.variant_title || null, quantity: line.quantity });
+        const metadata = line.metadata && typeof line.metadata === "object" ? line.metadata as Record<string, unknown> : {};
+        const imageUrl = [metadata.image_url, metadata.imageUrl, metadata.variant_image, metadata.featured_image]
+          .find((value): value is string => typeof value === "string" && /^https?:\\/\\//.test(value)) ?? null;
+        items.push({ id: line.id, title: line.title || "Item", variantTitle: line.variant_title || null, quantity: line.quantity, imageUrl });
         orderItems.set(line.order_id, items);
       }
       if (lines.length < 500) break;
