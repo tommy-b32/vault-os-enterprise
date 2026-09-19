@@ -121,6 +121,30 @@ async function recordGovernanceExceptions(supabase: SupabaseClient, runId: strin
   if (error) throw error;
 }
 
+async function recordDailyMemberAttestations(supabase: SupabaseClient, runId: string, evidenceDate: string, selectedAt: Date, variants: VaultVariant[], returnedInventoryItemIds: Set<string>, processedVariantIds: Set<string>, inventoryRows: PendingInventoryLevel[]) {
+  const rows = variants
+    .filter((variant) => returnedInventoryItemIds.has(variant.source_inventory_item_id) && processedVariantIds.has(variant.id))
+    .map((variant) => ({
+      evidence_date: evidenceDate,
+      attesting_inventory_sync_run_id: runId,
+      variant_id: variant.id,
+      shopify_variant_id: variant.source_variant_id,
+      shopify_inventory_item_id: variant.source_inventory_item_id,
+      ...canonicalMembership(variant),
+      observed_inventory_level_count: inventoryRows.filter((row) => row.variant_id === variant.id).length,
+      observed_location_count: new Set(inventoryRows.filter((row) => row.variant_id === variant.id).map((row) => row.source_location_id)).size,
+      attested_at: selectedAt.toISOString(),
+    }));
+  if (!rows.length) return;
+  const { error } = await supabase
+    .from("vault_inventory_observation_daily_member_attestations")
+    .upsert(rows, {
+      onConflict: "evidence_date,variant_id,shopify_inventory_item_id,parent_product_id,model_design,normalized_size,canonical_style_id,canonical_mapping_status",
+      ignoreDuplicates: true,
+    });
+  if (error) throw error;
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", {
@@ -648,6 +672,17 @@ Deno.serve(async (request: Request) => {
       terminal_run_status: "current",
       completed_at: completedAt.toISOString(),
     });
+
+    await recordDailyMemberAttestations(
+      supabase,
+      run.id,
+      evidenceDate,
+      completedAt,
+      processableVariants,
+      new Set(returnedInventoryItems.map((item) => item.id)),
+      new Set(inventoryRows.map((row) => row.variant_id)),
+      pendingLevels,
+    );
 
     try {
       await emitCommandCentreRefreshEvent({
