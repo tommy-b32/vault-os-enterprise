@@ -568,7 +568,7 @@ export const ShopifyTradingRepository = {
         const items = orderItems.get(line.order_id) ?? [];
         const metadata = line.metadata && typeof line.metadata === "object" ? line.metadata as Record<string, unknown> : {};
         const imageUrl = [metadata.image_url, metadata.imageUrl, metadata.variant_image, metadata.featured_image]
-          .find((value): value is string => typeof value === "string" && /^https?:\\/\\//.test(value)) ?? null;
+          .find((value): value is string => typeof value === "string" && (value.startsWith("https://") || value.startsWith("http://"))) ?? null;
         items.push({ id: line.id, title: line.title || "Item", variantTitle: line.variant_title || null, quantity: line.quantity, imageUrl });
         orderItems.set(line.order_id, items);
       }
