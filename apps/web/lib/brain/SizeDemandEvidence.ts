@@ -1,13 +1,25 @@
 import type { ModelSizeReplenishmentEvidence } from "@/lib/model-size-replenishment-evidence";
 import type { TradingEvidenceState } from "@/lib/brain/TradingEvidencePolicy";
 
+/** A limitation the current read-only size-evidence projection does not evaluate. */
+export type SizeDemandEvidenceEvaluationState = "not_evaluated";
+
 export type SizeDemandEvidence = {
   canonicalStyleId: string;
   parentProductId: string;
   modelDesign: string;
   tradingEvidenceMaturity: TradingEvidenceState | null;
+  /**
+   * True only when the current governed 30-day observed window passes the
+   * existing canonical mapping, freshness, and history requirements. It does
+   * not establish a long-term customer size distribution.
+   */
   sizeEvidenceAvailable: boolean;
   sizeEvidenceUnavailableReason: string | null;
+  /** Long-term size-distribution establishment is outside this projection. */
+  sizeDistributionEstablishment: SizeDemandEvidenceEvaluationState;
+  /** Historical availability censoring is outside this projection. */
+  historicalAvailabilityCensoring: SizeDemandEvidenceEvaluationState;
   totalSizeAttributableUnits: number | null;
   sizes: Array<{
     canonicalSize: string;
@@ -61,6 +73,8 @@ export function projectSizeDemandEvidence(
       tradingEvidenceMaturity: tradingEvidenceByStyle.get(canonicalStyleId) ?? null,
       sizeEvidenceAvailable: available,
       sizeEvidenceUnavailableReason: reason,
+      sizeDistributionEstablishment: "not_evaluated",
+      historicalAvailabilityCensoring: "not_evaluated",
       totalSizeAttributableUnits: total,
       sizes,
       demandServiceableShare: serviceableUnits === null || total === null ? null : serviceableUnits / total,

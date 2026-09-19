@@ -6,14 +6,20 @@ function row(size, stock, sold, overrides = {}) { return { model_size_id: `style
 
 test("size demand evidence calculates factual serviceability and exposure from observed attributable units", () => {
   const all = projectSizeDemandEvidence([row("S", 2, 8), row("M", 1, 12)])[0];
-  assert.equal(all.sizeEvidenceAvailable, true); assert.equal(all.demandServiceableShare, 1); assert.equal(all.demandExposedShare, 0);
+  assert.equal(all.sizeEvidenceAvailable, true);
+  assert.equal(all.sizeEvidenceUnavailableReason, null);
+  assert.equal(all.sizeDistributionEstablishment, "not_evaluated");
+  assert.equal(all.historicalAvailabilityCensoring, "not_evaluated");
+  assert.equal(all.demandServiceableShare, 1); assert.equal(all.demandExposedShare, 0);
   const exposed = projectSizeDemandEvidence([row("S", 2, 8), row("M", 0, 12), row("L", -1, 0)])[0];
   assert.equal(exposed.totalSizeAttributableUnits, 20); assert.equal(exposed.demandServiceableShare, .4); assert.equal(exposed.demandExposedShare, .6); assert.deepEqual(exposed.unavailableDemandedSizes, ["M"]); assert.equal(exposed.sizes.find((size) => size.canonicalSize === "L").currentlyServiceable, false);
 });
 
 test("size demand evidence fails closed for untrusted attribution and never invents zero-sales demand", () => {
   const unavailable = projectSizeDemandEvidence([row("S", 1, null, { trusted: false, sales_30_day_units: null, missing_requirements: ["style_sales_mapping_incomplete"] })])[0];
-  assert.equal(unavailable.sizeEvidenceAvailable, false); assert.equal(unavailable.totalSizeAttributableUnits, null); assert.equal(unavailable.sizes[0].observedDemandShare, null);
+  assert.equal(unavailable.sizeEvidenceAvailable, false);
+  assert.equal(unavailable.sizeEvidenceUnavailableReason, "style_sales_mapping_incomplete");
+  assert.equal(unavailable.totalSizeAttributableUnits, null); assert.equal(unavailable.sizes[0].observedDemandShare, null);
   const zero = projectSizeDemandEvidence([row("S", 1, 0), row("M", 0, 0)])[0];
   assert.equal(zero.totalSizeAttributableUnits, 0); assert.equal(zero.demandServiceableShare, null); assert.equal(zero.demandExposedShare, null);
 });
@@ -26,4 +32,5 @@ test("canonical styles remain separate", () => {
   );
   assert.deepEqual(projection.map((item) => item.canonicalStyleId), ["other", "style"]);
   assert.equal(projection[1].tradingEvidenceMaturity, "SUFFICIENT_EVIDENCE");
+  assert.equal(projection[1].sizeDistributionEstablishment, "not_evaluated");
 });
