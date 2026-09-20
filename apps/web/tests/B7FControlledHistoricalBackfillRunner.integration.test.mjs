@@ -5,6 +5,7 @@ import test from "node:test";
 
 const runnerMigration = await readFile(new URL("../../../supabase/migrations/20261015000000_b7f_controlled_historical_backfill_runner.sql", import.meta.url), "utf8");
 const safetyMigration = await readFile(new URL("../../../supabase/migrations/20261016000000_b7f_historical_backfill_runner_transaction_safety.sql", import.meta.url), "utf8");
+const ambiguityFixMigration = await readFile(new URL("../../../supabase/migrations/20261018000000_b7f_historical_backfill_runner_ambiguity_fix.sql", import.meta.url), "utf8");
 const adoptionMigration = await readFile(new URL("../../../supabase/migrations/20261017000000_b7f_historical_backfill_adoption_only.sql", import.meta.url), "utf8");
 const name = `vault-b7f-runner-${process.pid}`, docker = spawnSync("docker", ["info"], { encoding: "utf8" }).status === 0;
 const id = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
@@ -21,6 +22,7 @@ test("transaction-safe B7F runner commits only durable receipts and preserves on
   sql(`create extension pgcrypto;create role anon;create role authenticated;create role service_role;create schema vault;create table vault.decrypted_secrets(name text, decrypted_secret text, created_at timestamptz);insert into vault.decrypted_secrets values('vault_shopify_order_sync_service_role_jwt','test-jwt',now()),('vault_order_sync_secret','test-secret',now());create schema net;create sequence net.request_seq;create table net._http_response(id bigint,status_code integer,timed_out boolean,error_msg text,content text,created timestamptz default now());create function net.http_post(url text,body jsonb default '{}'::jsonb,params jsonb default '{}'::jsonb,headers jsonb default '{}'::jsonb,timeout_milliseconds integer default 2000) returns bigint language sql as $$select nextval('net.request_seq')$$;create table public.vault_shopify_order_sync_runs(id uuid primary key,sync_mode text,created_from timestamptz,created_before timestamptz,orders_synced integer,order_lines_synced integer,completed_at timestamptz);`);
   sql(runnerMigration);
   sql(safetyMigration);
+  sql(ambiguityFixMigration);
   sql(adoptionMigration);
   sql(`insert into vault_shopify_order_sync_runs values('${id(1)}','historical_orders_by_created_at','2026-01-01T00:00:00Z','2026-01-08T00:00:00Z',0,0,now()),('${id(2)}','recent_orders_by_updated_at','2026-01-08T00:00:00Z','2026-01-15T00:00:00Z',99,99,now());select initialize_b7f_historical_backfill_job();`);
   assert.equal(call()[0], "adopted", "exact existing January receipt is adopted without HTTP submission");
@@ -84,6 +86,9 @@ test("transaction-safe runner source contract retains explicit retry, no cron, V
   assert.match(safetyMigration, /state = 'uncertain'/);
   assert.match(safetyMigration, /holding the submission-phase locks[\s\S]*b7f_backfill_complete_if_attested\(w\.id\)/, "a receipt committed after reservation is adopted before pg_net submission");
   assert.match(safetyMigration, /language plpgsql\s+as \$\$/, "the transaction-controlling procedure is invoker-security");
+  assert.match(ambiguityFixMigration, /on conflict do nothing/, "the OUT parameter job_id cannot collide with an inferred conflict-column list");
+  assert.doesNotMatch(ambiguityFixMigration, /on conflict\s*\(\s*job_id\s*,\s*created_from\s*,\s*created_before\s*\)/i, "no ambiguous ON CONFLICT inference references remain");
+  assert.match(ambiguityFixMigration, /from public\.vault_b7f_historical_backfill_windows as existing_window\s+where existing_window\.job_id = j\.id\s+and existing_window\.created_from = j\.next_window_start\s+and existing_window\.created_before = v_before/s, "OUT-parameter names are qualified in the conflict recovery lookup");
   assert.doesNotMatch(safetyMigration, /cron\.schedule|decrypted_secret.*into .*vault_b7f/i);
   assert.match(adoptionMigration, /for update[\s\S]*pg_advisory_xact_lock/, "adoption uses the normal runner lock discipline");
   assert.match(adoptionMigration, /order by completed_at desc, id desc/, "exact receipts are selected deterministically");
