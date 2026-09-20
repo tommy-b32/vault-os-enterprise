@@ -34,3 +34,13 @@ Expected boundaries remain 2026-01-01T00:00:00Z through exclusive 2026-09-20T09:
 Do not query `net.http_request_queue`: it may contain authorization headers. `net._http_response` may be inspected by request ID for non-secret response metadata/body only. A missing response after the grace period produces `uncertain`; do not retry it automatically. Retry remains an explicit separately reviewed action.
 
 No credentials are supplied to this command or returned by it. Vault decryption occurs only within the database during the submission phase.
+
+## Adoption-only receipt advancement
+
+Where exact completed historical receipts already exist, the database-admin `postgres` operator may execute this single top-level statement:
+
+```sql
+call public.adopt_b7f_historical_backfill_receipts_safely();
+```
+
+It never calls Shopify, `pg_net`, Vault, or the normal advance procedure. It adopts only consecutive exact `historical_orders_by_created_at` receipts and stops successfully before the first missing receipt. As with normal advance, never wrap it in `BEGIN`/`COMMIT`.
