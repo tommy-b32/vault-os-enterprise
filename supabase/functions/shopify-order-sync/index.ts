@@ -129,6 +129,7 @@ Deno.serve(async (request: Request) => {
     for (const order of orders) {
       const result = await upsertShopifyOrder(supabase, order, {
         omitCustomerData: Boolean(historicalWindow),
+        demandEvidenceMode: historicalWindow ? "legacy" : "prospective",
       });
       linesSynced += result.linesSynced;
     }

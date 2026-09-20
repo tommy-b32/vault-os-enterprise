@@ -71,6 +71,10 @@ test("cancellations refunds and exact Shopify IDs remain preserved", async () =>
   assert.match(source, /shopify_variant_id: line\.variant\?\.id/);
   assert.match(source, /historical \? 50 : 250/);
   assert.match(source, /historical \? 25 : 100/);
+  assert.match(source, /refunds \{\s*id\s*createdAt/);
+  assert.match(source, /source_event_key: `refund:\$\{refund\.id\}:\$\{line\.id\}`/);
+  assert.match(source, /vault_shopify_demand_evidence_governance/);
+  assert.match(source, /Date\.parse\(order\.createdAt\) < Date\.parse\(governance\.prospective_started_at\)/);
 });
 
 test("invalid and incomplete ranges are rejected", () => {
@@ -104,7 +108,7 @@ const fixture = () => ({
   subtotalPriceSet: money(100), totalDiscountsSet: money(0), totalShippingPriceSet: money(0), totalTaxSet: money(0), totalRefundedSet: money(25), totalPriceSet: money(100), currentTotalPriceSet: money(75),
   test: true, tags: [], email: "fixture@example.invalid", customer: { id: "fixture-customer", displayName: "Fixture" },
   lineItems: { nodes: [{ id: "fixture-line", title: "Fixture", variantTitle: null, sku: null, quantity: 4, originalUnitPriceSet: money(25), originalTotalSet: money(100), discountedTotalSet: money(100), product: null, variant: null }], pageInfo: { hasNextPage: false } },
-  refunds: [{ refundLineItems: { nodes: [{ quantity: 1, subtotalSet: money(25), lineItem: { id: "fixture-line" } }], pageInfo: { hasNextPage: false } } }],
+  refunds: [{ id: "fixture-refund", createdAt: "2026-08-01T12:00:00Z", refundLineItems: { nodes: [{ id: "fixture-refund-line", quantity: 1, subtotalSet: money(25), lineItem: { id: "fixture-line" } }], pageInfo: { hasNextPage: false } } }],
 });
 
 test("historical reads fail closed if the active cached token lacks full order-history access", async () => {
@@ -152,12 +156,16 @@ test("replaying after a line-write failure updates canonical keys without duplic
   const savedOrders = new Map();
   const savedLines = new Map();
   let failLines = true;
-  const client = { from(table) { return { upsert(rows, options) {
+  const client = { from(table) {
+    if (table === "vault_shopify_demand_evidence_governance") return { select() { return { eq() { return { maybeSingle: async () => ({ data: { prospective_started_at: "2026-01-01T00:00:00Z" }, error: null }) }; } }; } };
+    if (table === "vault_variants") return { select() { return { eq() { return { in: async () => ({ data: [], error: null }) }; } }; } };
+    return { upsert(rows, options) {
     if (table === "vault_shopify_orders") {
       assert.equal(options.onConflict, "source,shopify_order_id");
       savedOrders.set(rows.shopify_order_id, rows);
       return { select() { return { single: async () => ({ data: { id: "canonical-fixture" }, error: null }) }; } };
     }
+    if (table === "vault_shopify_demand_line_observations" || table === "vault_shopify_demand_lifecycle_adjustments") return Promise.resolve({ error: null });
     assert.equal(options.onConflict, "source,shopify_line_item_id");
     if (failLines) { failLines = false; return Promise.resolve({ error: new Error("Simulated line failure") }); }
     for (const row of rows) savedLines.set(row.shopify_line_item_id, row);

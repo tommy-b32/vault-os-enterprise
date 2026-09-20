@@ -13,6 +13,7 @@ type MoneyBag = {
 };
 
 type ShopifyRefundLine = {
+  id: string;
   quantity: number;
   subtotalSet: MoneyBag;
   lineItem: { id: string } | null;
@@ -62,6 +63,8 @@ export type ShopifyOrderNode = {
     pageInfo: { hasNextPage: boolean };
   };
   refunds: Array<{
+    id: string;
+    createdAt: string;
     refundLineItems: {
       nodes: ShopifyRefundLine[];
       pageInfo: { hasNextPage: boolean };
@@ -122,8 +125,11 @@ const ORDER_FIELDS = `
     pageInfo { hasNextPage }
   }
   refunds {
+    id
+    createdAt
     refundLineItems(first: 100) {
       nodes {
+        id
         quantity
         subtotalSet { shopMoney { amount currencyCode } }
         lineItem { id }
@@ -304,7 +310,7 @@ export async function fetchShopifyOrderById(
 export async function upsertShopifyOrder(
   supabase: SupabaseClient,
   order: ShopifyOrderNode,
-  options: { omitCustomerData?: boolean } = {},
+  options: { omitCustomerData?: boolean; demandEvidenceMode?: "prospective" | "legacy" } = {},
 ): Promise<{ orderId: string; linesSynced: number }> {
   assertCompleteOrder(order);
 
@@ -395,8 +401,100 @@ export async function upsertShopifyOrder(
     }
   }
 
+  await upsertShopifyDemandEvidence(supabase, order, options.demandEvidenceMode ?? "prospective", syncedAt);
+
   return {
     orderId: savedOrder.id,
     linesSynced: lineRows.length,
   };
+}
+
+type CanonicalVariant = {
+  product_id: string;
+  source_variant_id: string | null;
+  model_design: string | null;
+  normalized_size: string | null;
+  size_domain: string | null;
+  size_system: string | null;
+  identity_resolution_status: string;
+};
+
+/** B7F snapshots identity once.  Replays use ignoreDuplicates, never a current-catalogue rewrite. */
+async function upsertShopifyDemandEvidence(
+  supabase: SupabaseClient,
+  order: ShopifyOrderNode,
+  mode: "prospective" | "legacy",
+  observedAt: string,
+): Promise<void> {
+  let effectiveMode = mode;
+  if (mode === "prospective") {
+    // A reconciliation can discover an old order only after B7F rolls out.  The
+    // database-persisted boundary keeps that history explicitly legacy-qualified.
+    const { data: governance, error: governanceError } = await supabase
+      .from("vault_shopify_demand_evidence_governance")
+      .select("prospective_started_at")
+      .eq("singleton", true)
+      .maybeSingle();
+    if (governanceError || !governance) throw governanceError ?? new Error("B7F demand evidence rollout boundary is unavailable");
+    if (Date.parse(order.createdAt) < Date.parse(governance.prospective_started_at)) effectiveMode = "legacy";
+  }
+  const variantIds = [...new Set(order.lineItems.nodes.map((line) => line.variant?.id).filter((id): id is string => Boolean(id)))];
+  const variantsBySourceId = new Map<string, CanonicalVariant[]>();
+  if (variantIds.length > 0) {
+    const { data, error } = await supabase.from("vault_variants")
+      .select("product_id,source_variant_id,model_design,normalized_size,size_domain,size_system,identity_resolution_status")
+      .eq("source", "shopify").in("source_variant_id", variantIds);
+    if (error) throw error;
+    for (const variant of (data ?? []) as CanonicalVariant[]) {
+      if (!variant.source_variant_id) continue;
+      variantsBySourceId.set(variant.source_variant_id, [...(variantsBySourceId.get(variant.source_variant_id) ?? []), variant]);
+    }
+  }
+  const evidenceRows = order.lineItems.nodes.map((line) => {
+    const matches = line.variant?.id ? variantsBySourceId.get(line.variant.id) ?? [] : [];
+    const variant = matches.length === 1 && matches[0].identity_resolution_status === "resolved" &&
+      Boolean(variantOrNull(matches[0].model_design)) && Boolean(variantOrNull(matches[0].normalized_size)) ? matches[0] : null;
+    const resolved = Boolean(variant);
+    const isTest = order.test;
+    return {
+      source: "shopify", shopify_order_id: order.id, shopify_line_item_id: line.id,
+      shopify_product_id: line.product?.id ?? null, shopify_variant_id: line.variant?.id ?? null,
+      ordered_at: order.createdAt, source_updated_at: order.updatedAt, observed_at: observedAt,
+      gross_ordered_units: line.quantity, is_test_order: isTest, financial_status: order.displayFinancialStatus,
+      fulfilment_status: order.displayFulfillmentStatus, line_title: line.title, variant_title: line.variantTitle,
+      sku: line.sku, raw_size: line.variantTitle,
+      canonical_product_id: variant?.product_id ?? null,
+      canonical_style_id: variant ? `${variant.product_id}::${variantOrNull(variant.model_design)}` : null,
+      model_design: variantOrNull(variant?.model_design), normalized_size: variantOrNull(variant?.normalized_size),
+      size_domain: variant?.size_domain ?? null, size_system: variant?.size_system ?? null,
+      canonical_mapping_state: resolved ? "resolved" : matches.length > 1 ? "ambiguous" : "unresolved",
+      evidence_state: isTest ? "excluded_test_order" : resolved
+        ? effectiveMode === "prospective" ? "prospective_governed_resolved" : "legacy_current_mapping_qualified"
+        : effectiveMode === "prospective" ? "prospective_unresolved" : "legacy_unresolved",
+      identity_observed_at: observedAt,
+    };
+  });
+  if (evidenceRows.length > 0) {
+    const { error } = await supabase.from("vault_shopify_demand_line_observations")
+      .upsert(evidenceRows, { onConflict: "source,shopify_line_item_id", ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  const adjustments: Array<Record<string, unknown>> = [];
+  for (const line of order.lineItems.nodes) {
+    if (order.cancelledAt) adjustments.push({ source: "shopify", source_event_key: `whole-order-cancellation:${order.id}:${line.id}`, adjustment_type: "whole_order_cancellation", shopify_order_id: order.id, shopify_line_item_id: line.id, shopify_refund_id: null, shopify_refund_line_item_id: null, occurred_at: order.cancelledAt, adjusted_units: line.quantity, adjusted_amount: null, source_observed_at: observedAt, metadata: { semantics: "whole_order_only" } });
+  }
+  for (const refund of order.refunds) for (const line of refund.refundLineItems.nodes) {
+    if (!line.lineItem) continue;
+    adjustments.push({ source: "shopify", source_event_key: `refund:${refund.id}:${line.id}`, adjustment_type: "refund", shopify_order_id: order.id, shopify_line_item_id: line.lineItem.id, shopify_refund_id: refund.id, shopify_refund_line_item_id: line.id, occurred_at: refund.createdAt, adjusted_units: line.quantity, adjusted_amount: money(line.subtotalSet), source_observed_at: observedAt, metadata: {} });
+  }
+  if (adjustments.length > 0) {
+    const { error } = await supabase.from("vault_shopify_demand_lifecycle_adjustments")
+      .upsert(adjustments, { onConflict: "source,source_event_key", ignoreDuplicates: true });
+    if (error) throw error;
+  }
+}
+
+function variantOrNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
