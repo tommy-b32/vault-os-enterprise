@@ -94,9 +94,15 @@ function loadOrders(graphql, scopes = ["read_orders", "read_all_orders"]) {
   return readFile(ordersUrl, "utf8").then((source) => {
     const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
     const exports = {};
-    new Function("require", "exports", outputText)(() => ({ shopifyGraphQL: (query, ...args) => query.includes("VaultHistoricalAccess")
-      ? Promise.resolve({ currentAppInstallation: { accessScopes: scopes.map((handle) => ({ handle })) } })
-      : graphql(query, ...args) }), exports);
+    new Function("require", "exports", outputText)((specifier) => {
+      if (specifier.includes("financial-evidence")) return {
+        buildFinancialEvidence: (_order, _observedAt, mode) => ({ capture_mode: mode, applications: [], allocations: [], refunds: [], refund_lines: [], refund_transactions: [] }),
+        persistFinancialEvidence: async () => {},
+      };
+      return { shopifyGraphQL: (query, ...args) => query.includes("VaultHistoricalAccess")
+        ? Promise.resolve({ currentAppInstallation: { accessScopes: scopes.map((handle) => ({ handle })) } })
+        : graphql(query, ...args) };
+    }, exports);
     return exports;
   });
 }
@@ -107,8 +113,9 @@ const fixture = () => ({
   cancelledAt: "2026-08-01T12:00:00Z", currencyCode: "GBP", displayFinancialStatus: "PARTIALLY_REFUNDED", displayFulfillmentStatus: "UNFULFILLED",
   subtotalPriceSet: money(100), totalDiscountsSet: money(0), totalShippingPriceSet: money(0), totalTaxSet: money(0), totalRefundedSet: money(25), totalPriceSet: money(100), currentTotalPriceSet: money(75),
   test: true, tags: [], email: "fixture@example.invalid", customer: { id: "fixture-customer", displayName: "Fixture" },
-  lineItems: { nodes: [{ id: "fixture-line", title: "Fixture", variantTitle: null, sku: null, quantity: 4, originalUnitPriceSet: money(25), originalTotalSet: money(100), discountedTotalSet: money(100), product: null, variant: null }], pageInfo: { hasNextPage: false } },
-  refunds: [{ id: "fixture-refund", createdAt: "2026-08-01T12:00:00Z", refundLineItems: { nodes: [{ id: "fixture-refund-line", quantity: 1, subtotalSet: money(25), lineItem: { id: "fixture-line" } }], pageInfo: { hasNextPage: false } } }],
+  discountApplications: { nodes: [], pageInfo: { hasNextPage: false } },
+  lineItems: { nodes: [{ id: "fixture-line", title: "Fixture", variantTitle: null, sku: null, quantity: 4, originalUnitPriceSet: money(25), originalTotalSet: money(100), discountedTotalSet: money(100), product: null, variant: null, discountAllocations: { nodes: [], pageInfo: { hasNextPage: false } } }], pageInfo: { hasNextPage: false } },
+  refunds: [{ id: "fixture-refund", createdAt: "2026-08-01T12:00:00Z", updatedAt: "2026-08-01T12:00:00Z", processedAt: "2026-08-01T12:00:00Z", totalRefundedSet: money(25), refundLineItems: { nodes: [{ id: "fixture-refund-line", quantity: 1, subtotalSet: money(25), priceSet: money(25), totalTaxSet: money(0), lineItem: { id: "fixture-line" }, restocked: true, restockType: "RETURN", location: null }], pageInfo: { hasNextPage: false } }, transactions: { nodes: [], pageInfo: { hasNextPage: false } } }],
 });
 
 test("historical reads fail closed if the active cached token lacks full order-history access", async () => {

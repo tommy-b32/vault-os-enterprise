@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { shopifyGraphQL } from "./graphql.ts";
+import { buildFinancialEvidence, persistFinancialEvidence } from "./financial-evidence.ts";
 
 const ORDER_PAGE_SIZE = 50;
 const MAX_ORDER_PAGES = 50;
@@ -16,7 +17,12 @@ type ShopifyRefundLine = {
   id: string;
   quantity: number;
   subtotalSet: MoneyBag;
+  priceSet: MoneyBag;
+  totalTaxSet: MoneyBag;
   lineItem: { id: string } | null;
+  restocked: boolean;
+  restockType: string;
+  location: { id: string } | null;
 };
 
 type ShopifyOrderLine = {
@@ -31,6 +37,7 @@ type ShopifyOrderLine = {
   product: { id: string } | null;
   variant: { id: string; image: { url: string } | null } | null;
   image: { url: string } | null;
+  discountAllocations: { nodes: Array<{ allocatedAmountSet: MoneyBag; discountApplication: { index: number } | null }>; pageInfo: { hasNextPage: boolean } };
 };
 
 export type ShopifyOrderNode = {
@@ -58,6 +65,7 @@ export type ShopifyOrderNode = {
   } | null;
   test: boolean;
   tags: string[];
+  discountApplications: { nodes: any[]; pageInfo: { hasNextPage: boolean } };
   lineItems: {
     nodes: ShopifyOrderLine[];
     pageInfo: { hasNextPage: boolean };
@@ -65,10 +73,14 @@ export type ShopifyOrderNode = {
   refunds: Array<{
     id: string;
     createdAt: string;
+    updatedAt: string;
+    processedAt: string | null;
+    totalRefundedSet: MoneyBag;
     refundLineItems: {
       nodes: ShopifyRefundLine[];
       pageInfo: { hasNextPage: boolean };
     };
+    transactions: { nodes: any[]; pageInfo: { hasNextPage: boolean } };
   }>;
 };
 
@@ -106,6 +118,7 @@ const ORDER_FIELDS = `
   currentTotalPriceSet { shopMoney { amount currencyCode } }
   test
   tags
+  discountApplications(first: 50) { nodes { __typename index allocationMethod targetSelection targetType value { __typename ... on MoneyV2 { amount currencyCode } ... on PricingPercentageValue { percentage } } ... on AutomaticDiscountApplication { title } ... on DiscountCodeApplication { code } ... on ManualDiscountApplication { title description } ... on ScriptDiscountApplication { title } } pageInfo { hasNextPage } }
   lineItems(first: 250) {
     nodes {
       id
@@ -121,21 +134,26 @@ const ORDER_FIELDS = `
       product { id }
       variant { id image { url } }
       image { url }
+      discountAllocations { nodes { allocatedAmountSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } } discountApplication { index } } pageInfo { hasNextPage } }
     }
     pageInfo { hasNextPage }
   }
   refunds {
     id
     createdAt
+    updatedAt
+    processedAt
+    totalRefundedSet { shopMoney { amount currencyCode } }
     refundLineItems(first: 100) {
       nodes {
         id
         quantity
-        subtotalSet { shopMoney { amount currencyCode } }
-        lineItem { id }
+        subtotalSet { shopMoney { amount currencyCode } } priceSet { shopMoney { amount currencyCode } } totalTaxSet { shopMoney { amount currencyCode } }
+        lineItem { id } restocked restockType location { id }
       }
       pageInfo { hasNextPage }
     }
+    transactions(first: 100) { nodes { id parentTransaction { id } kind status gateway amountSet { shopMoney { amount currencyCode } } createdAt processedAt test } pageInfo { hasNextPage } }
   }
 `;
 
@@ -168,6 +186,12 @@ function assertCompleteOrder(order: ShopifyOrderNode, historical = false): void 
     throw new Error(
       `Shopify order has a refund exceeding the supported ${historical ? 25 : 100} line-item limit`,
     );
+  }
+
+  if (order.discountApplications.pageInfo.hasNextPage ||
+    order.lineItems.nodes.some((line) => line.discountAllocations.pageInfo.hasNextPage) ||
+    order.refunds.some((refund) => refund.transactions.pageInfo.hasNextPage)) {
+    throw new Error("Shopify financial evidence exceeds supported page limit");
   }
 }
 
@@ -255,7 +279,7 @@ async function fetchShopifyOrders({
             query: $query
             sortKey: $sortKey
           ) {
-            nodes { ${historical ? ORDER_FIELDS.replace("lineItems(first: 250)", "lineItems(first: 50)").replace("refundLineItems(first: 100)", "refundLineItems(first: 25)") : ORDER_FIELDS} ${historical ? "" : "email customer { id displayName }"} }
+            nodes { ${historical ? ORDER_FIELDS.replace("discountApplications(first: 50)", "discountApplications(first: 25)").replace("lineItems(first: 250)", "lineItems(first: 50)").replace("refundLineItems(first: 100)", "refundLineItems(first: 25)").replace("transactions(first: 100)", "transactions(first: 25)") : ORDER_FIELDS} ${historical ? "" : "email customer { id displayName }"} }
             pageInfo { hasNextPage endCursor }
           }
         }`,
@@ -315,6 +339,9 @@ export async function upsertShopifyOrder(
   assertCompleteOrder(order);
 
   const syncedAt = new Date().toISOString();
+  const financialMode = options.demandEvidenceMode === "legacy" ? "historical" : "prospective";
+  // Fail C2 capture before existing order/B7F persistence if source evidence is incomplete.
+  const financialEvidence = buildFinancialEvidence(order, syncedAt, financialMode);
   const { data: savedOrder, error: orderError } = await supabase
     .from("vault_shopify_orders")
     .upsert(
@@ -400,8 +427,8 @@ export async function upsertShopifyOrder(
       throw linesError;
     }
   }
-
   await upsertShopifyDemandEvidence(supabase, order, options.demandEvidenceMode ?? "prospective", syncedAt);
+  await persistFinancialEvidence(supabase, financialEvidence);
 
   return {
     orderId: savedOrder.id,
