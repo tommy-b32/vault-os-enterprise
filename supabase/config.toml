@@ -10,6 +10,9 @@ project_id = "vault-os-enterprise"
 [functions.shopify-order-sync]
 verify_jwt = true
 
+[functions.shopify-financial-evidence-repair]
+verify_jwt = true
+
 [functions.shopify-order-webhook]
 verify_jwt = false
 
