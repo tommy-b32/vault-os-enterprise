@@ -37,7 +37,8 @@ type ShopifyOrderLine = {
   product: { id: string } | null;
   variant: { id: string; image: { url: string } | null } | null;
   image: { url: string } | null;
-  discountAllocations: { nodes: Array<{ allocatedAmountSet: MoneyBag; discountApplication: { index: number } | null }>; pageInfo: { hasNextPage: boolean } };
+  // Shopify Admin GraphQL exposes this as a non-paginated list, not a connection.
+  discountAllocations: Array<{ allocatedAmountSet: MoneyBag; discountApplication: { index: number } | null }>;
 };
 
 export type ShopifyOrderNode = {
@@ -134,7 +135,7 @@ const ORDER_FIELDS = `
       product { id }
       variant { id image { url } }
       image { url }
-      discountAllocations { nodes { allocatedAmountSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } } discountApplication { index } } pageInfo { hasNextPage } }
+      discountAllocations { allocatedAmountSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } } discountApplication { index } }
     }
     pageInfo { hasNextPage }
   }
@@ -189,7 +190,6 @@ function assertCompleteOrder(order: ShopifyOrderNode, historical = false): void 
   }
 
   if (order.discountApplications.pageInfo.hasNextPage ||
-    order.lineItems.nodes.some((line) => line.discountAllocations.pageInfo.hasNextPage) ||
     order.refunds.some((refund) => refund.transactions.pageInfo.hasNextPage)) {
     throw new Error("Shopify financial evidence exceeds supported page limit");
   }

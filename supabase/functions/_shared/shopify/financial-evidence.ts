@@ -39,8 +39,8 @@ export function buildFinancialEvidence(order: any, observedAt: string, mode: Fin
     applications.push({ ...row, payload_fingerprint: fingerprint(row) });
   }
   for (const line of order.lineItems.nodes) {
-    requireComplete(line.discountAllocations, "FINANCIAL_DISCOUNT_ALLOCATIONS_INCOMPLETE");
-    for (const allocation of line.discountAllocations.nodes) {
+    if (!Array.isArray(line.discountAllocations)) throw new Error("INVALID_DISCOUNT_ALLOCATIONS");
+    for (const allocation of line.discountAllocations) {
       const applicationIndex = allocation.discountApplication?.index;
       if (!applicationIndexes.has(applicationIndex)) throw new Error("UNLINKED_DISCOUNT_ALLOCATION");
       const amount = money(allocation.allocatedAmountSet);
