@@ -10,6 +10,7 @@ const TABLES = [
   ["refunds", "vault_shopify_refund_observations", ["source", "shopify_refund_id", "refund_source_updated_at"]],
   ["refund_lines", "vault_shopify_refund_line_observations", ["source", "shopify_refund_id", "shopify_refund_line_item_id", "refund_source_updated_at"]],
   ["refund_transactions", "vault_shopify_refund_transaction_observations", ["source", "shopify_order_transaction_id", "refund_source_updated_at"]],
+  ["completeness", "vault_shopify_financial_capture_completeness_observations", ["source", "shopify_order_id", "order_source_updated_at"]],
 ] as const;
 const SOURCE_FIELDS: Record<string, string[]> = {
   applications: ["application_type", "code", "title", "description", "allocation_method", "target_selection", "target_type", "pricing_value_type", "pricing_value", "pricing_currency"],
@@ -17,6 +18,7 @@ const SOURCE_FIELDS: Record<string, string[]> = {
   refunds: ["shopify_order_id", "refund_created_at", "refund_processed_at", "total_refunded_amount", "currency"],
   refund_lines: ["shopify_order_id", "shopify_line_item_id", "quantity", "price_amount", "subtotal_amount", "tax_amount", "currency", "restocked", "restock_type", "restock_location_id"],
   refund_transactions: ["shopify_order_id", "shopify_refund_id", "parent_transaction_id", "transaction_kind", "transaction_status", "gateway", "amount", "currency", "transaction_created_at", "processed_at", "is_test"],
+  completeness: ["evidence_mode", "discount_application_count", "discount_allocation_count", "refund_count", "refund_line_count", "refund_transaction_count", "discount_applications_complete", "line_items_complete", "refunds_complete", "refund_lines_complete", "refund_transactions_complete", "fingerprint_contract_version", "source_content_fingerprint"],
 };
 
 function response(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }); }

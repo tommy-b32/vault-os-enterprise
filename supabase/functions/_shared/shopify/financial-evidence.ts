@@ -36,6 +36,7 @@ function requireComplete(connection: { pageInfo: { hasNextPage: boolean } }, cod
 export function buildFinancialEvidence(order: any, observedAt: string, mode: FinancialMode): FinancialEvidencePayload {
   requireComplete(order.discountApplications, "FINANCIAL_DISCOUNT_APPLICATIONS_INCOMPLETE");
   requireComplete(order.lineItems, "FINANCIAL_LINE_ITEMS_INCOMPLETE");
+  if (!Array.isArray(order.refunds)) throw new Error("FINANCIAL_REFUNDS_INCOMPLETE");
   const applications: Record<string, unknown>[] = [];
   const allocations: Record<string, unknown>[] = [];
   const applicationIndexes = new Set<number>();
@@ -89,7 +90,34 @@ export function buildFinancialEvidence(order: any, observedAt: string, mode: Fin
       refund_transactions.push({ ...row, fingerprint_contract_version: FINANCIAL_FINGERPRINT_CONTRACT_VERSION, source_content_fingerprint, payload_fingerprint: source_content_fingerprint });
     }
   }
-  return { observed_at: observedAt, capture_mode: mode, applications, allocations, refunds, refund_lines, refund_transactions };
+  // This is an affirmative observation, not an inference from empty evidence arrays.
+  // It is produced only after every financial structure above has been retrieved
+  // completely and validated, including every refund's nested connections.
+  const completenessSourceContent = {
+    source: "shopify",
+    shopify_order_id: order.id,
+    order_source_updated_at: order.updatedAt,
+    discount_application_count: applications.length,
+    discount_allocation_count: allocations.length,
+    refund_count: refunds.length,
+    refund_line_count: refund_lines.length,
+    refund_transaction_count: refund_transactions.length,
+  };
+  const source_content_fingerprint = sourceContentFingerprint(completenessSourceContent);
+  const completeness = {
+    ...completenessSourceContent,
+    evidence_mode: mode,
+    observed_at: observedAt,
+    discount_applications_complete: true,
+    line_items_complete: true,
+    refunds_complete: true,
+    refund_lines_complete: true,
+    refund_transactions_complete: true,
+    fingerprint_contract_version: FINANCIAL_FINGERPRINT_CONTRACT_VERSION,
+    source_content_fingerprint,
+    payload_fingerprint: source_content_fingerprint,
+  };
+  return { observed_at: observedAt, capture_mode: mode, applications, allocations, refunds, refund_lines, refund_transactions, completeness };
 }
 
 export async function persistFinancialEvidence(supabase: SupabaseClient, payload: FinancialEvidencePayload): Promise<void> {
