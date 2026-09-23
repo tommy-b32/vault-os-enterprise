@@ -58,6 +58,7 @@ test("canonical navigation exposes only implemented primary destinations", () =>
   assert.ok(hrefs.includes("/orders"));
   assert.ok(hrefs.includes("/supplier-catalogue/review"));
   assert.ok(hrefs.includes("/purchase-intelligence"));
+  assert.ok(hrefs.includes("/financial-intelligence"));
   assert.ok(!hrefs.includes("/partners"));
   assert.ok(!hrefs.includes("/analytics"));
   assert.ok(!hrefs.includes("/settings"));

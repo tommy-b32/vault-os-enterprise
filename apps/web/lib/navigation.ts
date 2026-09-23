@@ -15,6 +15,7 @@ export const VAULT_NAVIGATION = [
   { label: "Match Review", icon: "missions", href: "/supplier-catalogue/review" },
   { label: "Orders", icon: "orders", href: "/orders" },
   { label: "Store Intelligence", icon: "analytics", href: "/intelligence" },
+  { label: "Financial Intelligence", icon: "analytics", href: "/financial-intelligence" },
   { label: "Purchase Orders", icon: "orders", href: "/purchase-orders" },
   { label: "Purchase Intelligence", icon: "advisor", href: "/purchase-intelligence" },
   { label: "Commercial Intelligence", icon: "analytics", href: "/commercial" },
