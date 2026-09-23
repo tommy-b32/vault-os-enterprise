@@ -32,9 +32,19 @@ function requestBody(value: unknown) {
   return { createdFrom, createdBefore, dryRun: body.dry_run };
 }
 
+export function rowsForInspection(payload: Record<string, unknown>, family: string): Record<string, unknown>[] {
+  const value = payload[family];
+  if (family === "completeness") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("INVALID_FINANCIAL_COMPLETENESS_PAYLOAD");
+    return [value as Record<string, unknown>];
+  }
+  if (!Array.isArray(value)) throw new Error("INVALID_FINANCIAL_EVIDENCE_PAYLOAD");
+  return value as Record<string, unknown>[];
+}
+
 async function inspect(supabase: any, payload: any) {
   let wouldInsert = 0, noOp = 0, conflicts = 0;
-  for (const [family, table, keys] of TABLES) for (const row of payload[family] as Record<string, unknown>[]) {
+  for (const [family, table, keys] of TABLES) for (const row of rowsForInspection(payload, family)) {
     let query = supabase.from(table).select("*");
     for (const key of keys) query = query.eq(key, row[key]);
     const { data, error } = await query.maybeSingle(); if (error) throw error;
