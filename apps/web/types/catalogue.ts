@@ -120,11 +120,14 @@ export type InventoryStrategy =
   | "discontinued"
   | "service";
 
-export type PackProfile =
-  | "single"
-  | "pack"
-  | "mixed"
-  | null;
+export type PackProfile = string | null;
+
+export type GovernedPackProfile = {
+  id: string;
+  display_name: string;
+  units_per_pack: number | null;
+  active: boolean;
+};
 
 export type CatalogueSupplier = {
   id: string;

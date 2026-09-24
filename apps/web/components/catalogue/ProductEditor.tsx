@@ -26,12 +26,14 @@ import type {
   CatalogueProduct,
   CatalogueSupplier,
   SupplierCostProfile,
+  GovernedPackProfile,
 } from "@/types/catalogue";
 
 type ProductEditorProps = {
   product: CatalogueProduct | null;
   suppliers: CatalogueSupplier[];
   costProfiles: SupplierCostProfile[];
+  packProfiles: GovernedPackProfile[];
   remediation?: string | null;
 };
 
@@ -72,6 +74,7 @@ export function ProductEditor({
   product,
   suppliers,
   costProfiles,
+  packProfiles,
   remediation = null,
 }: ProductEditorProps) {
   const initialState: ProductSettingsActionState = {
@@ -386,6 +389,7 @@ export function ProductEditor({
           <ProductBusinessTab
             product={product}
             suppliers={suppliers}
+            packProfiles={packProfiles}
             actionFooter={<footer className="product-editor-footer"><div><strong>Save product settings</strong><p>Saving updates Inventory Intelligence, supplier planning and future Vault Advisor recommendations.</p></div><ProductSaveButton /></footer>}
           />
 

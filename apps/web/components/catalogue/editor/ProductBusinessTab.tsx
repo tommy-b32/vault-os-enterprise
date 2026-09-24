@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 import type {
   CatalogueProduct,
   CatalogueSupplier,
+  GovernedPackProfile,
 } from "@/types/catalogue";
 import {
   approveProductForReorder,
@@ -12,6 +14,7 @@ import {
 type ProductBusinessTabProps = {
   product: CatalogueProduct;
   suppliers: CatalogueSupplier[];
+  packProfiles: GovernedPackProfile[];
   actionFooter?: ReactNode;
 };
 
@@ -23,7 +26,7 @@ const strategies = [
   ["service", "Service"],
 ] as const;
 
-const packProfiles = [
+const legacyPackProfiles = [
   ["", "No pack profile"],
   ["tee_5_piece", "Tee — 5 piece"],
   ["polo_6_piece", "Polo — 6 piece"],
@@ -42,6 +45,7 @@ function formatApprovalTimestamp(value: string): string {
 export function ProductBusinessTab({
   product,
   suppliers,
+  packProfiles,
   actionFooter,
 }: ProductBusinessTabProps) {
   const approval = product.reorder_approval;
@@ -120,16 +124,31 @@ export function ProductBusinessTab({
         <label>
           <span>Pack profile</span>
 
+          <small>
+            <Link href="/catalogue/pack-profiles">
+              Manage reusable pack profiles
+            </Link>
+          </small>
+
           <select
             defaultValue={product.pack_profile ?? ""}
             name="pack_profile"
           >
-            {packProfiles.map(([value, label]) => (
+            <option value="">No pack profile</option>
+            {packProfiles
+              .filter((profile) =>
+                profile.active || profile.id === product.pack_profile,
+              )
+              .map((profile) => (
               <option
-                key={value}
-                value={value}
+                key={profile.id}
+                value={profile.id}
               >
-                {label}
+                {profile.display_name}
+                {profile.units_per_pack === null
+                  ? ""
+                  : ` — ${profile.units_per_pack} piece`}
+                {profile.active ? "" : " (inactive)"}
               </option>
             ))}
           </select>

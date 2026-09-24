@@ -169,14 +169,6 @@ const allowedStrategies = new Set([
   "service",
 ]);
 
-const allowedPackProfiles = new Set([
-  "",
-  "tee_5_piece",
-  "polo_6_piece",
-  "hoodie",
-  "custom",
-]);
-
 function optionalInteger(
   value: FormDataEntryValue | null,
 ): number | null {
@@ -243,10 +235,7 @@ export async function updateProductSettings(
     );
   }
 
-  if (
-    typeof packProfile !== "string" ||
-    !allowedPackProfiles.has(packProfile)
-  ) {
+  if (typeof packProfile !== "string") {
     throw new Error(
       "The selected pack profile is invalid",
     );
@@ -301,6 +290,34 @@ export async function updateProductSettings(
     };
   }
 
+  if (packProfile.length > 0) {
+    const [profileResponse, settingsResponse] = await Promise.all([
+      supabaseAdmin
+        .from("vault_pack_profiles")
+        .select("id, active")
+        .eq("id", packProfile)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("vault_product_settings")
+        .select("pack_profile")
+        .eq("product_id", parentProductId)
+        .maybeSingle(),
+    ]);
+
+    if (
+      profileResponse.error ||
+      settingsResponse.error ||
+      !profileResponse.data ||
+      (!profileResponse.data.active &&
+        settingsResponse.data?.pack_profile !== packProfile)
+    ) {
+      return {
+        status: "error",
+        message: "Choose an active governed pack profile.",
+      };
+    }
+  }
+
   const { error } = await supabaseAdmin
     .from("vault_product_settings")
     .upsert(payload, {
@@ -329,4 +346,35 @@ export async function updateProductSettings(
   status: "success",
   message: "Product settings saved successfully.",
 };
+}
+
+function profileId(name: string, unitsPerPack: number): string {
+  return `${name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}_${unitsPerPack}_piece`;
+}
+
+export async function savePackProfile(formData: FormData): Promise<void> {
+  await requireOperatorRole("owner", "operator");
+  const name = optionalText(formData.get("display_name"));
+  const unitsPerPack = optionalInteger(formData.get("units_per_pack"));
+  const existingId = optionalText(formData.get("profile_id"));
+
+  if (!name || name.length > 80 || (!existingId && (unitsPerPack === null || unitsPerPack <= 0))) {
+    throw new Error("Provide a pack-profile name and a whole units-per-pack value greater than zero.");
+  }
+
+  const id = existingId ?? profileId(name, unitsPerPack!);
+  if (!/^[a-z0-9_]+$/.test(id)) {
+    throw new Error("The pack profile identifier is invalid.");
+  }
+
+  const { error } = await supabaseAdmin
+    .from("vault_pack_profiles")
+    .upsert({ id, display_name: name, units_per_pack: unitsPerPack, active: formData.get("active") === "on" }, { onConflict: "id" });
+
+  if (error) {
+    throw new Error("The pack profile could not be saved. A profile with this name and pack size may already exist.");
+  }
+
+  revalidatePath("/catalogue");
+  revalidatePath("/catalogue/pack-profiles");
 }

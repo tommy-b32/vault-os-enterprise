@@ -15,12 +15,14 @@ import type {
   CatalogueProduct,
   CatalogueSupplier,
   SupplierCostProfile,
+  GovernedPackProfile,
 } from "@/types/catalogue";
 
 type CatalogueWorkspaceProps = {
   products: CatalogueProduct[];
   suppliers: CatalogueSupplier[];
   costProfiles?: SupplierCostProfile[];
+  packProfiles?: GovernedPackProfile[];
   attention?: string | null;
   attentionProductIds?: string[];
   remediationTitle?: string;
@@ -30,6 +32,7 @@ export function CatalogueWorkspace({
   products,
   suppliers,
   costProfiles = [],
+  packProfiles = [],
   attention = null,
   attentionProductIds = [],
   remediationTitle,
@@ -93,7 +96,8 @@ export function CatalogueWorkspace({
         <ProductEditor
           product={selectedProduct}
           suppliers={suppliers}
-          costProfiles={costProfiles}
+        costProfiles={costProfiles}
+        packProfiles={packProfiles}
           remediation={attention}
         />
       </div>

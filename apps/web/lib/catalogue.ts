@@ -13,6 +13,7 @@ import type {
   ConfigurationState,
   InventoryStrategy,
   PackProfile,
+  GovernedPackProfile,
   ProductCommercialCost,
   ProductIntelligenceProfile,
   ProductReorderApproval,
@@ -172,6 +173,7 @@ export type CatalogueData = {
   products: CatalogueProduct[];
   suppliers: CatalogueSupplier[];
   costProfiles: SupplierCostProfile[];
+  packProfiles: GovernedPackProfile[];
   summary: CatalogueConfigurationSummary;
 };
 
@@ -467,6 +469,7 @@ export async function getCatalogueData():
     productVisionByProductId,
     approvalResponse,
     operatorResponse,
+    packProfileResponse,
   ] = await Promise.all([
     supabaseAdmin
       .from(
@@ -647,6 +650,11 @@ export async function getCatalogueData():
     supabaseAdmin
       .from("vault_operators")
       .select("id, display_name"),
+
+    supabaseAdmin
+      .from("vault_pack_profiles")
+      .select("id, display_name, units_per_pack, active")
+      .order("display_name", { ascending: true }),
   ]);
 
   const error =
@@ -656,7 +664,7 @@ export async function getCatalogueData():
     replenishmentResponse.error ??
     tradingEvidenceResponse.error ??
     approvalResponse.error ??
-    operatorResponse.error ?? costProfileResponse.error;
+    operatorResponse.error ?? costProfileResponse.error ?? packProfileResponse.error;
 
   if (error) {
     throw new Error(
@@ -671,6 +679,7 @@ export async function getCatalogueData():
   const suppliers =
     (supplierResponse.data ??
       []) as CatalogueSupplier[];
+  const packProfiles = (packProfileResponse.data ?? []) as GovernedPackProfile[];
   const costProfiles = (costProfileResponse.data ?? []).map((row: any) => ({
     id: row.id,
     supplier_id: row.supplier_id,
@@ -1161,6 +1170,7 @@ export async function getCatalogueData():
     products,
     suppliers,
     costProfiles,
+    packProfiles,
 
     summary:
       buildSummary(
