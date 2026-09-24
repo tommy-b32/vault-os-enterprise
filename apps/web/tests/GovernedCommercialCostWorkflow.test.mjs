@@ -26,7 +26,7 @@ test("the confirmed Exclusive tee profile calculates governed USD to GBP economi
   assert.notEqual(fx, 1);
 });
 
-test("profile edit preview is driven by live draft state and preserves effective_from", async () => {
+test("profile edit preview is driven by live draft state and records a new version when saved", async () => {
   const [component, page] = await Promise.all([
     read("components/commercial/SupplierCostProfiles.tsx"),
     read("app/commercial/page.tsx"),
@@ -39,7 +39,8 @@ test("profile edit preview is driven by live draft state and preserves effective
   assert.match(component, /value=\{draft\.shipping\}/);
   assert.match(component, /value=\{draft\.importCost\}/);
   assert.match(component, /value=\{draft\.units\}/);
-  assert.match(component, /effectiveFrom: profile\.effective_from\.slice\(0, 16\)/);
+  assert.match(component, /value="Recorded when saved"/);
+  assert.match(component, /immutable profile version is recorded when saved/);
   assert.match(page, /effective_from/);
 });
 

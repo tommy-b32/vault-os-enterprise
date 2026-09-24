@@ -43,16 +43,30 @@ export async function saveSupplierCostProfile(
 ): Promise<SupplierCostProfileActionState> {
   try {
     const operator = await requireOperatorRole("owner", "operator");
-    const supplierId = text(formData, "supplier_id");
-    const costTypeId = text(formData, "cost_type_id").toLowerCase();
+    const submittedSupplierId = text(formData, "supplier_id");
+    const submittedCostTypeId = text(formData, "cost_type_id").toLowerCase();
+    const profileId = text(formData, "profile_id");
     const costTypeName = text(formData, "cost_type_name");
     const currency = text(formData, "supplier_currency").toUpperCase();
-    if (!/^[a-z0-9_]+$/.test(costTypeId) || !costTypeName) throw new Error("Choose a governed cost type identifier and display name.");
+    if (profileId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(profileId)) throw new Error("Choose a valid replacement-cost profile to edit.");
+    if (!/^[a-z0-9_]+$/.test(submittedCostTypeId) || !costTypeName) throw new Error("Choose a governed cost type identifier and display name.");
     if (!["GBP", "EUR", "USD", "TRY"].includes(currency)) throw new Error("Choose a supported supplier currency.");
+    const editedProfile = profileId
+      ? await supabaseAdmin.from("vault_supplier_product_type_cost_profiles").select("id, supplier_id, cost_type_id, active").eq("id", profileId).maybeSingle()
+      : { data: null, error: null };
+    if (editedProfile.error || (profileId && !editedProfile.data?.active)) throw new Error("The replacement-cost profile is unavailable for editing.");
+    if (editedProfile.data && (editedProfile.data.supplier_id !== submittedSupplierId || editedProfile.data.cost_type_id !== submittedCostTypeId)) throw new Error("A profile's supplier and canonical cost type cannot change during edit. Create a new governed profile instead.");
+    const supplierId = editedProfile.data?.supplier_id ?? submittedSupplierId;
+    const costTypeId = editedProfile.data?.cost_type_id ?? submittedCostTypeId;
     const supplier = await supabaseAdmin.from("vault_suppliers").select("id, is_active").eq("id", supplierId).maybeSingle();
     if (supplier.error || !supplier.data?.is_active) throw new Error("Choose an active canonical supplier.");
-    const { error: typeError } = await supabaseAdmin.from("vault_cost_types").upsert({ id: costTypeId, display_name: costTypeName }, { onConflict: "id" });
-    if (typeError) throw new Error("The governed cost type could not be saved.");
+    if (editedProfile.data) {
+      const costType = await supabaseAdmin.from("vault_cost_types").select("id, active").eq("id", costTypeId).maybeSingle();
+      if (costType.error || !costType.data?.active) throw new Error("The canonical cost type is unavailable for editing.");
+    } else {
+      const { error: typeError } = await supabaseAdmin.from("vault_cost_types").upsert({ id: costTypeId, display_name: costTypeName }, { onConflict: "id" });
+      if (typeError) throw new Error("The governed cost type could not be saved.");
+    }
     const exchangeRateToGbp = currency === "GBP" ? 1 : requiredPositive(formData, "exchange_rate_to_gbp", "Exchange rate");
     if (currency !== "GBP" && exchangeRateToGbp === 1) throw new Error("A non-GBP supplier profile cannot use the default 1.000000 FX rate. Enter a verified GBP value for one unit of supplier currency.");
     const profile = {
@@ -62,15 +76,16 @@ export async function saveSupplierCostProfile(
       shipping_cost_per_pack: Number(text(formData, "shipping_cost_per_pack") || 0),
       import_cost_per_pack: Number(text(formData, "import_cost_per_pack") || 0),
       units_per_pack: requiredPositive(formData, "units_per_pack", "Units per pack"),
-      price_updated_at: text(formData, "price_updated_at"), effective_from: text(formData, "effective_from") || new Date().toISOString(),
-      active: true, updated_by_operator_id: operator.id, created_by_operator_id: operator.id,
+      price_updated_at: text(formData, "price_updated_at"), effective_from: new Date().toISOString(),
+      active: true, updated_by_operator_id: operator.id,
       notes: text(formData, "notes") || null,
     };
     if (!Number.isInteger(profile.units_per_pack) || profile.shipping_cost_per_pack < 0 || profile.import_cost_per_pack < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(profile.price_updated_at)) throw new Error("Check the non-negative costs, whole pack quantity, and price date.");
-    const existing = await supabaseAdmin.from("vault_supplier_product_type_cost_profiles").select("id").eq("supplier_id", supplierId).eq("cost_type_id", costTypeId).eq("active", true).maybeSingle();
+    const existing = editedProfile.data ? { data: editedProfile.data, error: null } : await supabaseAdmin.from("vault_supplier_product_type_cost_profiles").select("id").eq("supplier_id", supplierId).eq("cost_type_id", costTypeId).eq("active", true).maybeSingle();
+    if (existing.error) throw new Error("The existing replacement-cost profile identity is ambiguous and must be remediated before saving.");
     const write = existing.data
       ? supabaseAdmin.from("vault_supplier_product_type_cost_profiles").update(profile).eq("id", existing.data.id)
-      : supabaseAdmin.from("vault_supplier_product_type_cost_profiles").insert(profile);
+      : supabaseAdmin.from("vault_supplier_product_type_cost_profiles").insert({ ...profile, created_by_operator_id: operator.id });
     const { error } = await write;
     if (error) throw new Error("The supplier cost profile could not be saved.");
     revalidateSupplierRuleConsumers();

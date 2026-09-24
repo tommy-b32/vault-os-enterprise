@@ -6,6 +6,8 @@ const migration = readFileSync(new URL("../../../supabase/migrations/20260928000
 const tab = readFileSync(new URL("../components/catalogue/editor/ProductCommercialTab.tsx", import.meta.url), "utf8");
 const catalogue = readFileSync(new URL("../lib/catalogue.ts", import.meta.url), "utf8");
 const action = readFileSync(new URL("../app/catalogue/commercial-actions.ts", import.meta.url), "utf8");
+const profileAction = readFileSync(new URL("../app/commercial/actions.ts", import.meta.url), "utf8");
+const profileEditor = readFileSync(new URL("../components/commercial/SupplierCostProfiles.tsx", import.meta.url), "utf8");
 
 test("supplier/type profiles are governed, explicit, versioned and never inferred from raw Shopify type", () => {
   assert.match(migration, /create table public\.vault_cost_types/);
@@ -31,6 +33,30 @@ test("profile changes append immutable parent cost snapshots without rewriting r
   assert.match(migration, /matched_profile_version_id as effective_profile_version_id/);
   assert.match(migration, /Supplier cost profile versions are immutable/);
   assert.doesNotMatch(migration, /update public\.vault_product_costs/);
+});
+
+test("profile creation inserts a governed identity while edits update that exact active profile", () => {
+  assert.match(profileAction, /const profileId = text\(formData, "profile_id"\)/);
+  assert.match(profileAction, /editedProfile\.data\?\.supplier_id/);
+  assert.match(profileAction, /editedProfile\.data\?\.cost_type_id/);
+  assert.match(profileAction, /\.update\(profile\)\.eq\("id", existing\.data\.id\)/);
+  assert.match(profileAction, /\.insert\(\{ \.\.\.profile, created_by_operator_id: operator\.id \}\)/);
+  assert.match(profileAction, /effective_from: new Date\(\)\.toISOString\(\)/);
+});
+
+test("profile editing locks supplier and canonical type, and ambiguous active identities fail closed", () => {
+  assert.match(profileEditor, /name="profile_id" type="hidden" value=\{selected\.id\}/);
+  assert.match(profileEditor, /disabled=\{Boolean\(selected\)\} name="supplier_id"/);
+  assert.match(profileEditor, /disabled=\{Boolean\(selected\)\} name="cost_type_id"/);
+  assert.match(profileAction, /supplier and canonical cost type cannot change during edit/);
+  assert.match(profileAction, /identity is ambiguous and must be remediated before saving/);
+  assert.match(migration, /on public\.vault_supplier_product_type_cost_profiles\(supplier_id, cost_type_id\) where active/);
+});
+
+test("product inheritance resolves a single active profile by profile identity and canonical supplier/type", () => {
+  assert.match(migration, /on profile\.id = inheritance\.profile_id and profile\.active/);
+  assert.match(migration, /profile\.supplier_id = legacy\.supplier_id and profile\.cost_type_id = assignment\.cost_type_id/);
+  assert.match(migration, /vault_supplier_product_type_cost_profile_versions/);
 });
 
 test("physical pack conflicts remain an explicit commercial-trust failure", () => {
