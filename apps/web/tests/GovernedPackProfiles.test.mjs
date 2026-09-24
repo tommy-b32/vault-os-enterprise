@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const migration = await readFile(new URL("../../../supabase/migrations/20261029000000_governed_pack_profiles.sql", import.meta.url), "utf8");
+const compatibilityMigration = await readFile(new URL("../../../supabase/migrations/20261030000000_remove_legacy_pack_profile_check.sql", import.meta.url), "utf8");
 const actions = await readFile(new URL("../app/catalogue/actions.ts", import.meta.url), "utf8");
 const businessTab = await readFile(new URL("../components/catalogue/editor/ProductBusinessTab.tsx", import.meta.url), "utf8");
 const manager = await readFile(new URL("../app/catalogue/pack-profiles/page.tsx", import.meta.url), "utf8");
@@ -22,6 +23,11 @@ test("product selection is validated against active governed profiles, not a har
   assert.match(actions, /from\("vault_pack_profiles"\)/);
   assert.match(actions, /Choose an active governed pack profile/);
   assert.match(actions, /savePackProfile/);
+});
+
+test("the governed foreign key replaces the obsolete fixed-profile allow-list", () => {
+  assert.match(compatibilityMigration, /drop constraint vault_product_settings_pack_profile_check/);
+  assert.match(migration, /foreign key \(pack_profile\) references public\.vault_pack_profiles\(id\)/);
 });
 
 test("operators can manage reusable profiles and products receive the dynamic list", () => {
