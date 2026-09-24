@@ -1,4 +1,4 @@
-import { normalizeShopifySize } from "../../../../supabase/functions/_shared/shopify/option-roles.ts";
+import { normalizeShopifySize } from "../../../../shared/shopify/option-roles.ts";
 
 export type CatalogueVariant = { id: string; productId: string; sourceVariantId: string; option1: string | null; option2: string | null; option3: string | null; sourceActive: boolean; availableForSale: boolean; available: number | null };
 export type CanonicalCatalogueVariant = CatalogueVariant & { modelDesign: string | null; normalizedSize: string | null; identityResolutionStatus: string | null };

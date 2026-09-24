@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveShopifyOptionIdentity } from "../../../supabase/functions/_shared/shopify/option-roles.ts";
+import { resolveShopifyOptionIdentity } from "../../../shared/shopify/option-roles.ts";
 
 const identity = (size, colour = "black") => resolveShopifyOptionIdentity([{ name: "Shoe size", value: size }, { name: "Color", value: colour }]);
 

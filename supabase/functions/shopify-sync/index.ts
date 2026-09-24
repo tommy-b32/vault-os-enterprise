@@ -8,7 +8,7 @@ import {
   classifyCatalogueWrites,
   findStaleCanonicalVariantIds,
 } from "../_shared/shopify/catalogue-reconciliation.ts";
-import { resolveShopifyOptionIdentity } from "../_shared/shopify/option-roles.ts";
+import { resolveShopifyOptionIdentity } from "../../../shared/shopify/option-roles.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
