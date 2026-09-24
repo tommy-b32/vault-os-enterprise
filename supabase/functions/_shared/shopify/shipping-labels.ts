@@ -91,7 +91,7 @@ export async function syncShippingBatch(supabase: SupabaseClient, input: ReturnT
     shopifyqlQuery: { parseErrors: string[]; tableData: Table | null } | null;
   }>(`query VaultShippingCosts($query: String!, $orderIds: [ID!]!) {
     shop { id currencyCode ianaTimezone }
-    nodes(ids: $orderIds) { ... on Order { id fulfillments { shippingLabel { id } } } }
+    nodes(ids: $orderIds) { ... on Order { id fulfillments(first: 250) { shippingLabel { id } } } }
     shopifyqlQuery(query: $query) { parseErrors tableData { columns { name } rows } }
   }`, { query, orderIds: orders.map(order => order.shopify_order_id) }, Date.now() + 25000);
   if (!response.shopifyqlQuery || response.shopifyqlQuery.parseErrors.length || !response.shopifyqlQuery.tableData ||

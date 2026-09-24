@@ -38,6 +38,11 @@ test("a confirmed Shopify label without a ShopifyQL amount is explicitly retryab
   assert.throws(() => mod.confirmedShippingLabels([{ id: "gid://shopify/Order/2", fulfillments: [] }], [order]));
 });
 
+test("shipping confirmation requests the complete supported fulfillment slice", () => {
+  const compiled = source.replace(/\s+/g, " ");
+  assert.match(compiled, /fulfillments\(first: 250\) \{ shippingLabel \{ id \} \}/);
+});
+
 test("backfill requests are bounded, reproducible and cursor validated", () => {
   const input = mod.parseShippingRequest({}, new Date(at));
   assert.equal(input.createdBefore, new Date(at).toISOString());
