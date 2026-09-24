@@ -36,3 +36,6 @@ verify_jwt = true
 
 [functions.shopify-sync]
 verify_jwt = true
+
+[functions.shopify-shipping-label-diagnostic]
+verify_jwt = true
