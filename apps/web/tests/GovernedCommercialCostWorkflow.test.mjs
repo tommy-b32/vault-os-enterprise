@@ -55,6 +55,22 @@ test("parents require an explicit governed cost type before eligible profiles ar
   assert.match(action, /profile\.cost_type_id !== inputs\.costTypeId/);
 });
 
+test("a canonical cost type can be saved before costs or inheritance without creating incomplete cost evidence", async () => {
+  const [inputs, action] = await Promise.all([
+    read("lib/commercial-inputs.ts"),
+    read("app/catalogue/commercial-actions.ts"),
+  ]);
+  assert.match(inputs, /const costTypeOnly = Boolean\(costTypeId\)/);
+  assert.match(inputs, /\["pack_cost", "units_per_pack", "shipping_cost_per_pack", "import_cost_per_pack"\]/);
+  assert.match(action, /if \(inputs\.costTypeOnly\)/);
+  assert.match(action, /Canonical cost type saved\. Select a matching supplier cost profile/);
+  const costTypeOnly = action.indexOf("if (inputs.costTypeOnly)");
+  const costWrite = action.indexOf("const { error: saveError }");
+  const inheritanceWrite = action.indexOf("const { error: inheritanceError }");
+  assert.ok(costTypeOnly < costWrite);
+  assert.ok(costTypeOnly < inheritanceWrite);
+});
+
 test("inheritance remains parent-level and preserves all five field choices", async () => {
   const [component, action] = await Promise.all([
     read("components/catalogue/editor/ProductCommercialTab.tsx"),

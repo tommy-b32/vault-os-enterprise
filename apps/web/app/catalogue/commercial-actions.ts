@@ -94,13 +94,6 @@ export async function updateCommercialCosts(
       return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The supplier cost profile must be active and match this parent’s assigned supplier and canonical cost type, with safe complete values for each inherited field." };
     }
   }
-  if (inputs.costTypeId) {
-    const { data: costType, error: costTypeError } = await supabaseAdmin.from("vault_cost_types").select("id, active").eq("id", inputs.costTypeId).maybeSingle();
-    if (costTypeError || !costType?.active) return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "Choose an active governed canonical cost type." };
-    const { error: assignmentError } = await supabaseAdmin.from("vault_product_cost_type_assignments").upsert({ product_id: inputs.parentProductId, cost_type_id: inputs.costTypeId }, { onConflict: "product_id" });
-    if (assignmentError) return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The canonical cost type could not be saved." };
-  }
-
   if (!parentResponse.data) {
     return {
       ...INITIAL_COMMERCIAL_ACTION_STATE,
@@ -117,6 +110,27 @@ export async function updateCommercialCosts(
       ...INITIAL_COMMERCIAL_ACTION_STATE,
       status: "error",
       message: "Assign an active canonical supplier before saving commercial data.",
+    };
+  }
+
+  if (inputs.costTypeId) {
+    const { data: costType, error: costTypeError } = await supabaseAdmin.from("vault_cost_types").select("id, active").eq("id", inputs.costTypeId).maybeSingle();
+    if (costTypeError || !costType?.active) return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "Choose an active governed canonical cost type." };
+    const { error: assignmentError } = await supabaseAdmin.from("vault_product_cost_type_assignments").upsert({ product_id: inputs.parentProductId, cost_type_id: inputs.costTypeId }, { onConflict: "product_id" });
+    if (assignmentError) return { ...INITIAL_COMMERCIAL_ACTION_STATE, status: "error", message: "The canonical cost type could not be saved." };
+  }
+
+  if (inputs.costTypeOnly) {
+    revalidatePath("/catalogue");
+    return {
+      status: "success",
+      message: "Canonical cost type saved. Select a matching supplier cost profile to enable inheritance.",
+      commercialState: "untrusted",
+      landedCostAvailable: false,
+      grossProfitAvailable: false,
+      marginAvailable: false,
+      returnAvailable: false,
+      missingRequirements: [],
     };
   }
 
