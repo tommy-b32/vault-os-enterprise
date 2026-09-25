@@ -21,6 +21,15 @@ const WEEKDAYS = [
 
 type Weekday = (typeof WEEKDAYS)[number];
 type Confidence = "low" | "medium" | "high";
+export type ProfitPeriod = "7d" | "30d" | "90d" | "all";
+export function parseProfitPeriod(value: unknown): ProfitPeriod { return value === "7d" || value === "30d" || value === "90d" || value === "all" ? value : "30d"; }
+export function profitPeriodBounds(period: ProfitPeriod, now = new Date()): { from: string; to: string } | null {
+  if (period === "all") return null;
+  const days = Number(period.slice(0, -1));
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const end = new Date(`${today}T00:00:00+00:00`); const from = new Date(end); from.setUTCDate(from.getUTCDate() - days);
+  return { from: from.toISOString(), to: end.toISOString() };
+}
 
 type OrderRow = {
   id: string;
@@ -461,7 +470,7 @@ function buildInsights(
 }
 
 export const StoreIntelligence = {
-  async getSnapshot(): Promise<StoreIntelligenceSnapshot> {
+  async getSnapshot(profitPeriod: ProfitPeriod = "30d"): Promise<StoreIntelligenceSnapshot> {
     const ordersResult = await supabaseAdmin
       .from("vault_shopify_orders")
       .select("id, shopify_created_at, net_revenue, gross_total, refunds, cancelled_at, metadata")
@@ -471,20 +480,22 @@ export const StoreIntelligence = {
 
     if (ordersResult.error) throw new Error(ordersResult.error.message);
 
+    const profitBounds = profitPeriodBounds(profitPeriod);
+    const profitabilityQuery = supabaseAdmin.from("vault_shopify_verified_product_profitability_line_allocations").select("shopify_created_at,product_id,product_name,order_id,eligible_units,allocated_total_revenue_gbp,trusted_direct_sale_time_cogs_gbp,allocated_shipping_cost_gbp,allocated_payment_fees_gbp,operational_contribution_gbp");
+    const coverageQuery = supabaseAdmin.from("vault_shopify_product_profitability_coverage_lines").select("shopify_created_at,product_id,order_id,stage_1_eligible,units,revenue");
     const [profitabilityResult, coverageResult] = await Promise.all([
-      supabaseAdmin.from("vault_shopify_verified_product_profitability").select("product_id,product_name,eligible_units,eligible_net_revenue,trusted_direct_sale_time_cogs_gbp,allocated_shipping_cost_gbp,allocated_payment_fees_gbp,operational_contribution_gbp,contribution_per_eligible_unit_gbp,contribution_margin_pct"),
-      supabaseAdmin.from("vault_shopify_product_profitability_coverage").select("product_id,excluded_orders,eligible_revenue,excluded_revenue"),
+      profitBounds ? profitabilityQuery.gte("shopify_created_at", profitBounds.from).lt("shopify_created_at", profitBounds.to) : profitabilityQuery,
+      profitBounds ? coverageQuery.gte("shopify_created_at", profitBounds.from).lt("shopify_created_at", profitBounds.to) : coverageQuery,
     ]);
     if (profitabilityResult.error) throw new Error(profitabilityResult.error.message);
     if (coverageResult.error) throw new Error(coverageResult.error.message);
-    const coverageByProduct = new Map((coverageResult.data ?? []).map((row: any) => [row.product_id, row]));
-    const productProfitability = (profitabilityResult.data ?? []).map((row: any): ProductProfitability => {
-      const coverage = coverageByProduct.get(row.product_id); const eligibleRevenue = amount(coverage?.eligible_revenue ?? 0); const excludedRevenue = amount(coverage?.excluded_revenue ?? 0);
-      return { productId: row.product_id, productName: row.product_name, eligibleUnits: amount(row.eligible_units), verifiedRevenue: amount(row.eligible_net_revenue), cogs: amount(row.trusted_direct_sale_time_cogs_gbp), shippingCost: amount(row.allocated_shipping_cost_gbp), paymentFees: amount(row.allocated_payment_fees_gbp), contribution: amount(row.operational_contribution_gbp), contributionPerUnit: row.contribution_per_eligible_unit_gbp === null ? null : amount(row.contribution_per_eligible_unit_gbp), contributionMarginPct: row.contribution_margin_pct === null ? null : amount(row.contribution_margin_pct), revenueCoveragePct: eligibleRevenue + excludedRevenue > 0 ? eligibleRevenue / (eligibleRevenue + excludedRevenue) : null, excludedOrders: amount(coverage?.excluded_orders ?? 0) };
-    }).sort((a, b) => b.contribution - a.contribution || a.productName.localeCompare(b.productName));
+    const coverageByProduct = new Map<string, { eligibleRevenue: number; excludedRevenue: number; excludedOrders: Set<string> }>();
+    for (const row of coverageResult.data ?? []) { const item = coverageByProduct.get((row as any).product_id) ?? { eligibleRevenue: 0, excludedRevenue: 0, excludedOrders: new Set<string>() }; if ((row as any).stage_1_eligible) item.eligibleRevenue += amount((row as any).revenue); else { item.excludedRevenue += amount((row as any).revenue); item.excludedOrders.add((row as any).order_id); } coverageByProduct.set((row as any).product_id, item); }
+    const totals = new Map<string, any>(); for (const row of profitabilityResult.data ?? []) { const current = totals.get((row as any).product_id) ?? { ...row, eligible_units: 0, allocated_total_revenue_gbp: 0, trusted_direct_sale_time_cogs_gbp: 0, allocated_shipping_cost_gbp: 0, allocated_payment_fees_gbp: 0, operational_contribution_gbp: 0 }; for (const key of ["eligible_units","allocated_total_revenue_gbp","trusted_direct_sale_time_cogs_gbp","allocated_shipping_cost_gbp","allocated_payment_fees_gbp","operational_contribution_gbp"]) current[key] += amount((row as any)[key]); totals.set((row as any).product_id, current); }
+    const productProfitability = [...totals.values()].map((row: any): ProductProfitability => { const coverage = coverageByProduct.get(row.product_id); const eligibleRevenue = coverage?.eligibleRevenue ?? 0, excludedRevenue = coverage?.excludedRevenue ?? 0; const contribution = amount(row.operational_contribution_gbp), units = amount(row.eligible_units), revenue = amount(row.allocated_total_revenue_gbp); return { productId: row.product_id, productName: row.product_name, eligibleUnits: units, verifiedRevenue: revenue, cogs: amount(row.trusted_direct_sale_time_cogs_gbp), shippingCost: amount(row.allocated_shipping_cost_gbp), paymentFees: amount(row.allocated_payment_fees_gbp), contribution, contributionPerUnit: units > 0 ? contribution / units : null, contributionMarginPct: revenue > 0 ? contribution / revenue * 100 : null, revenueCoveragePct: eligibleRevenue + excludedRevenue > 0 ? eligibleRevenue / (eligibleRevenue + excludedRevenue) : null, excludedOrders: coverage?.excludedOrders.size ?? 0 }; }).sort((a,b)=>b.contribution-a.contribution||a.productName.localeCompare(b.productName));
     const verifiedRevenue = productProfitability.reduce((sum, row) => sum + row.verifiedRevenue, 0);
-    const eligibleCoverageRevenue = (coverageResult.data ?? []).reduce((sum: number, row: any) => sum + amount(row.eligible_revenue), 0);
-    const excludedCoverageRevenue = (coverageResult.data ?? []).reduce((sum: number, row: any) => sum + amount(row.excluded_revenue), 0);
+    const eligibleCoverageRevenue = [...coverageByProduct.values()].reduce((sum, row) => sum + row.eligibleRevenue, 0);
+    const excludedCoverageRevenue = [...coverageByProduct.values()].reduce((sum, row) => sum + row.excludedRevenue, 0);
     const productProfitabilitySummary: ProductProfitabilitySummary = { verifiedContribution: productProfitability.reduce((sum, row) => sum + row.contribution, 0), verifiedRevenue, verifiedRevenueCoveragePct: eligibleCoverageRevenue + excludedCoverageRevenue > 0 ? eligibleCoverageRevenue / (eligibleCoverageRevenue + excludedCoverageRevenue) : null };
 
     const orders = ((ordersResult.data ?? []) as OrderRow[]).filter(
