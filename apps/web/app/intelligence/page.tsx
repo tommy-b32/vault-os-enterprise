@@ -143,6 +143,12 @@ export default async function IntelligencePage() {
         </section>
 
         <section className="intelligence-panel intelligence-insights-panel">
+          <div className="intelligence-panel-heading"><div><span>PRODUCT PROFITABILITY</span><h2>All-time verified product profitability</h2></div></div>
+          <div className="trend-metrics"><div><small>Verified contribution</small><strong>{money(snapshot.productProfitabilitySummary.verifiedContribution)}</strong><span>Financially verified sales only</span></div><div><small>Verified revenue</small><strong>{money(snapshot.productProfitabilitySummary.verifiedRevenue)}</strong><span>Includes allocated customer shipping revenue</span></div><div><small>Verified revenue coverage</small><strong>{snapshot.productProfitabilitySummary.verifiedRevenueCoveragePct === null ? "—" : `${(snapshot.productProfitabilitySummary.verifiedRevenueCoveragePct * 100).toFixed(1)}%`}</strong><span>Excluded sales are not contribution</span></div></div>
+          {snapshot.productProfitability.length ? <div className="weekday-table-wrap"><table className="weekday-table"><thead><tr><th>Product</th><th>Units</th><th>Verified revenue</th><th>Product cost</th><th>Shipping cost</th><th>Payment fees</th><th>Contribution</th><th>Contribution / unit</th><th>Margin</th><th>Revenue coverage</th></tr></thead><tbody>{snapshot.productProfitability.map(row => <tr key={row.productId}><td><strong>{row.productName}</strong>{row.excludedOrders > 0 ? <small>{row.excludedOrders} excluded {row.excludedOrders === 1 ? "order" : "orders"} · Not included in contribution</small> : null}</td><td>{row.eligibleUnits}</td><td>{money(row.verifiedRevenue)}</td><td>{money(row.cogs)}</td><td>{money(row.shippingCost)}</td><td>{money(row.paymentFees)}</td><td>{money(row.contribution)}</td><td>{row.contributionPerUnit === null ? "—" : money(row.contributionPerUnit)}</td><td>{row.contributionMarginPct === null ? "—" : `${row.contributionMarginPct.toFixed(1)}%`}</td><td>{row.revenueCoveragePct === null ? "—" : `${(row.revenueCoveragePct * 100).toFixed(1)}%`}</td></tr>)}</tbody></table></div> : <p className="intelligence-muted">No financially verified product profitability is available yet.</p>}
+        </section>
+
+        <section className="intelligence-panel intelligence-insights-panel">
           <div className="intelligence-panel-heading"><div><span>PRODUCT MOMENTUM</span><h2>Last 14 days vs previous 14 days</h2></div></div>
           <div className="momentum-grid">
             {snapshot.productMomentum.map((product) => (

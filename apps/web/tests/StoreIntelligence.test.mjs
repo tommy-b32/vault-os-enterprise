@@ -68,4 +68,8 @@ test("keeps Meta recommendations explicitly locked and preserves the analytics b
   assert.match(engine, /2026-05-04T00:00:00\+01:00/);
   assert.match(engine, /metaStatus: "pending"/);
   assert.match(page, /Budget recommendations locked/);
+  assert.match(engine, /vault_shopify_verified_product_profitability/);
+  assert.match(engine, /vault_shopify_product_profitability_coverage/);
+  assert.match(engine, /b\.contribution - a\.contribution/);
+  assert.match(page, /Not included in contribution/);
 });

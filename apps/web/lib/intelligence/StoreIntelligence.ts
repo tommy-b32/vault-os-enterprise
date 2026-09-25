@@ -96,6 +96,15 @@ export type ProductMomentum = {
   modelGrouping: "resolved" | "ambiguous" | "unavailable";
 };
 
+export type ProductProfitability = {
+  productId: string; productName: string; eligibleUnits: number; verifiedRevenue: number;
+  cogs: number; shippingCost: number; paymentFees: number; contribution: number;
+  contributionPerUnit: number | null; contributionMarginPct: number | null;
+  revenueCoveragePct: number | null; excludedOrders: number;
+};
+
+export type ProductProfitabilitySummary = { verifiedContribution: number; verifiedRevenue: number; verifiedRevenueCoveragePct: number | null };
+
 type ShopifyVariantRow = {
   id: string;
   product_id: string;
@@ -139,6 +148,8 @@ export type StoreIntelligenceSnapshot = {
   trends: PeriodTrend[];
   topProducts: ProductPerformance[];
   productMomentum: ProductMomentum[];
+  productProfitability: ProductProfitability[];
+  productProfitabilitySummary: ProductProfitabilitySummary;
   insights: StoreInsight[];
   metaStatus: "pending";
 };
@@ -460,6 +471,22 @@ export const StoreIntelligence = {
 
     if (ordersResult.error) throw new Error(ordersResult.error.message);
 
+    const [profitabilityResult, coverageResult] = await Promise.all([
+      supabaseAdmin.from("vault_shopify_verified_product_profitability").select("product_id,product_name,eligible_units,eligible_net_revenue,trusted_direct_sale_time_cogs_gbp,allocated_shipping_cost_gbp,allocated_payment_fees_gbp,operational_contribution_gbp,contribution_per_eligible_unit_gbp,contribution_margin_pct"),
+      supabaseAdmin.from("vault_shopify_product_profitability_coverage").select("product_id,excluded_orders,eligible_revenue,excluded_revenue"),
+    ]);
+    if (profitabilityResult.error) throw new Error(profitabilityResult.error.message);
+    if (coverageResult.error) throw new Error(coverageResult.error.message);
+    const coverageByProduct = new Map((coverageResult.data ?? []).map((row: any) => [row.product_id, row]));
+    const productProfitability = (profitabilityResult.data ?? []).map((row: any): ProductProfitability => {
+      const coverage = coverageByProduct.get(row.product_id); const eligibleRevenue = amount(coverage?.eligible_revenue ?? 0); const excludedRevenue = amount(coverage?.excluded_revenue ?? 0);
+      return { productId: row.product_id, productName: row.product_name, eligibleUnits: amount(row.eligible_units), verifiedRevenue: amount(row.eligible_net_revenue), cogs: amount(row.trusted_direct_sale_time_cogs_gbp), shippingCost: amount(row.allocated_shipping_cost_gbp), paymentFees: amount(row.allocated_payment_fees_gbp), contribution: amount(row.operational_contribution_gbp), contributionPerUnit: row.contribution_per_eligible_unit_gbp === null ? null : amount(row.contribution_per_eligible_unit_gbp), contributionMarginPct: row.contribution_margin_pct === null ? null : amount(row.contribution_margin_pct), revenueCoveragePct: eligibleRevenue + excludedRevenue > 0 ? eligibleRevenue / (eligibleRevenue + excludedRevenue) : null, excludedOrders: amount(coverage?.excluded_orders ?? 0) };
+    }).sort((a, b) => b.contribution - a.contribution || a.productName.localeCompare(b.productName));
+    const verifiedRevenue = productProfitability.reduce((sum, row) => sum + row.verifiedRevenue, 0);
+    const eligibleCoverageRevenue = (coverageResult.data ?? []).reduce((sum: number, row: any) => sum + amount(row.eligible_revenue), 0);
+    const excludedCoverageRevenue = (coverageResult.data ?? []).reduce((sum: number, row: any) => sum + amount(row.excluded_revenue), 0);
+    const productProfitabilitySummary: ProductProfitabilitySummary = { verifiedContribution: productProfitability.reduce((sum, row) => sum + row.contribution, 0), verifiedRevenue, verifiedRevenueCoveragePct: eligibleCoverageRevenue + excludedCoverageRevenue > 0 ? eligibleCoverageRevenue / (eligibleCoverageRevenue + excludedCoverageRevenue) : null };
+
     const orders = ((ordersResult.data ?? []) as OrderRow[]).filter(
       (order) => !order.cancelled_at && !isTestOrder(order.metadata),
     );
@@ -608,6 +635,8 @@ export const StoreIntelligence = {
       trends,
       topProducts,
       productMomentum: momentum,
+      productProfitability,
+      productProfitabilitySummary,
       insights: buildInsights(weekdays, twoItemOrderShare, bestSundayWindow, trends, momentum),
       metaStatus: "pending",
     };
