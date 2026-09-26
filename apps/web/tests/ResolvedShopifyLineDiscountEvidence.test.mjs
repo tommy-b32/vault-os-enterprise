@@ -1,0 +1,3 @@
+import assert from 'node:assert/strict';import{readFile}from'node:fs/promises';import test from'node:test';
+const sql=await readFile(new URL('../../../supabase/migrations/20261041000000_resolved_shopify_line_discount_evidence.sql',import.meta.url),'utf8');
+test('resolved line discounts require immutable complete exact-line evidence',()=>{assert.match(sql,/vault_shopify_line_discount_allocation_observations/);assert.match(sql,/shopify_order_id.*shopify_line_item_id/);assert.match(sql,/sum\(allocated_shop_amount\)/);assert.match(sql,/vault_shopify_verified_order_financials/);assert.doesNotMatch(sql,/update public\.vault_shopify_order_lines/i);});
