@@ -7,6 +7,7 @@ import { parsePositiveAmountToPence, penceToDatabaseAmount } from "@/lib/busines
 import {
   approvePurchaseOrderDraft,
   cancelPurchaseOrder,
+  createBlankSupplierPurchaseOrder,
   createPurchaseOrderDraft,
   markPurchaseOrderOrdered,
   markPurchaseOrderShipped,
@@ -22,6 +23,24 @@ import { addPendingCatalogueProductToDraft, type AddPendingCatalogueProductInput
 import { linkPendingCatalogueProduct } from "@/lib/purchase-orders/PendingCatalogueLinkRepository";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function createBlankSupplierPurchaseOrderAction(input: { supplierId: string; idempotencyKey: string }): Promise<{ success: true; purchaseOrderId: string } | { success: false; error: string }> {
+  try {
+    const supplierId = typeof input?.supplierId === "string" ? input.supplierId.trim() : "";
+    const idempotencyKey = typeof input?.idempotencyKey === "string" ? input.idempotencyKey.trim() : "";
+    if (!UUID_PATTERN.test(supplierId) || !idempotencyKey || idempotencyKey.length > 200) {
+      return { success: false, error: "Select an active supplier before creating a draft." };
+    }
+    const operator = await requireAuthenticatedOperator();
+    const result = await createBlankSupplierPurchaseOrder({ supplierId, operatorId: operator.id, idempotencyKey });
+    revalidatePath("/purchase-orders");
+    revalidatePath(`/purchase-orders/${result.purchaseOrderId}`);
+    return { success: true, purchaseOrderId: result.purchaseOrderId };
+  } catch (error) {
+    console.error("Unable to create blank supplier purchase order", error);
+    return { success: false, error: error instanceof Error ? error.message : "Blank purchase-order creation failed." };
+  }
+}
 
 export async function addFixedPackRecommendationToDraftAction(input: AddFixedPackRecommendationInput): Promise<FixedPackDraftResult> {
   try {

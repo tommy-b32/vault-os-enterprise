@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import VaultAppShell from "@/components/layout/VaultAppShell";
+import { BlankSupplierPurchaseOrderPanel } from "@/components/purchase-orders/BlankSupplierPurchaseOrderPanel";
 import {
   PurchaseOrderDraftWorkspace,
   type SupplierDraftOrder,
@@ -438,6 +439,10 @@ export default async function PurchaseOrdersPage() {
               : "No buying basket"}
           </span>
         </header>
+
+        <BlankSupplierPurchaseOrderPanel
+          suppliers={supplierRows.filter((supplier) => supplier.is_active).map((supplier) => ({ id: supplier.id, supplierName: supplier.supplier_name }))}
+        />
 
         {orders.length > 0 ? (
           <PurchaseOrderDraftWorkspace

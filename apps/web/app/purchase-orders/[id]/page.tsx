@@ -176,6 +176,7 @@ export default async function PurchaseOrderDetailPage({
   const lines =
     (draft.vault_purchase_order_lines ??
       []) as SavedPurchaseOrderLine[];
+  const mixedIntakeCompatible = lines.every((line) => ["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase", "pending_catalogue_purchase"].includes(line.source_recommendation_type));
   const manualCandidates = await loadManualFixedPackCandidates(draft.id);
   const pendingLinkContexts = await loadPendingCatalogueLinkContexts(draft.id);
   const [pendingGovernedOptions, pendingDuplicateCandidates] = await Promise.all([loadPendingCatalogueGovernedOptions(draft.supplier_id), loadPendingCatalogueDuplicateCandidates(draft.supplier_id)]);
@@ -538,7 +539,7 @@ export default async function PurchaseOrderDetailPage({
 
           {manualCandidates.status === "compatible" ? <ManualFixedPackAddPanel purchaseOrderId={manualCandidates.purchaseOrderId} supplierName={manualCandidates.supplierName} supplierMinimumOrderPacks={manualCandidates.supplierMinimumOrderPacks} currentBasketPacks={manualCandidates.currentBasketPacks} remainingPacksToMinimum={manualCandidates.remainingPacksToMinimum} candidates={manualCandidates.candidates} /> : null}
 
-        {draft.status === "draft" && lines.every((line) => line.source_recommendation_type === "pending_catalogue_purchase") ? <PendingCatalogueAddPanel purchaseOrderId={draft.id} supplierName={supplierName} governedOptions={pendingGovernedOptions} duplicateCandidates={pendingDuplicateCandidates} /> : null}
+        {draft.status === "draft" && mixedIntakeCompatible ? <PendingCatalogueAddPanel purchaseOrderId={draft.id} supplierName={supplierName} governedOptions={pendingGovernedOptions} duplicateCandidates={pendingDuplicateCandidates} /> : null}
         {pendingLinkContexts.map((context) => <PendingCatalogueLinkCard key={context.pendingProductId} purchaseOrderId={draft.id} context={context} />)}
 
           {draft.reasoning ? (

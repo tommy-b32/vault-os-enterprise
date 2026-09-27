@@ -189,14 +189,16 @@ export type FixedPackApprovalQualification = {
     provenance_fingerprint: string;
   }>;
 };
-export function classifyPurchaseOrderApprovalSources(sources: string[]): "legacy_pi" | "fixed_pack" | "pending_catalogue" {
+export function classifyPurchaseOrderApprovalSources(sources: string[]): "legacy_pi" | "fixed_pack" | "pending_catalogue" | "mixed" {
   const legacy = new Set(["purchase_intelligence_required", "purchase_intelligence_bring_forward"]);
   const fixed = new Set(["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"]);
   const pending = new Set(["pending_catalogue_purchase"]);
   if (!sources.length || sources.some((source) => !legacy.has(source) && !fixed.has(source) && !pending.has(source))) throw new Error("PO_SOURCE_MIX_INVALID");
-  const family = legacy.has(sources[0]) ? legacy : fixed.has(sources[0]) ? fixed : pending;
-  if (sources.some((source) => !family.has(source))) throw new Error("PO_SOURCE_MIX_INVALID");
-  return family === legacy ? "legacy_pi" : family === fixed ? "fixed_pack" : "pending_catalogue";
+  if (sources.every((source) => legacy.has(source))) return "legacy_pi";
+  if (sources.every((source) => fixed.has(source))) return "fixed_pack";
+  if (sources.every((source) => pending.has(source))) return "pending_catalogue";
+  if (sources.every((source) => fixed.has(source) || pending.has(source))) return "mixed";
+  throw new Error("PO_SOURCE_MIX_INVALID");
 }
 
 export type FixedPackAllocationConservationLine = {
@@ -709,7 +711,7 @@ function approvalMoney(value: number): number {
 async function getCurrentApprovalQualification(
   purchaseOrderId: string,
 ): Promise<{
-  sourceFamily: "legacy_pi" | "fixed_pack" | "pending_catalogue";
+  sourceFamily: "legacy_pi" | "fixed_pack" | "pending_catalogue" | "mixed";
   canonicalQualification: CanonicalApprovalQualification | FixedPackApprovalQualification | Record<string, never>;
 }> {
   const order = await supabaseAdmin
@@ -748,11 +750,12 @@ async function getCurrentApprovalQualification(
     return { sourceFamily, canonicalQualification: {} };
   }
 
-  if (sourceFamily === "fixed_pack") {
+  if (sourceFamily === "fixed_pack" || sourceFamily === "mixed") {
     const fixedPackLines = await supabaseAdmin
       .from("vault_purchase_order_lines")
       .select("id, supplier_id, style_id, recommended_packs, recommended_units, units_per_pack, pack_cost_gbp, line_cost_gbp, source_recommendation_type, source_snapshot")
-      .eq("purchase_order_id", purchaseOrderId);
+      .eq("purchase_order_id", purchaseOrderId)
+      .in("source_recommendation_type", ["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"]);
 
     if (fixedPackLines.error) throw fixedPackLines.error;
 
@@ -803,12 +806,14 @@ async function getCurrentApprovalQualification(
       fixedPackCatalogue.products,
       orderData.supplier_id,
     );
-    validateFixedPackBasketCommercialPolicy(
-      orderData,
-      fixedPackLines.data ?? [],
-      fixedPackSupplier.data ?? null,
-      fixedPackRule.data ?? null,
-    );
+    if (sourceFamily === "fixed_pack") {
+      validateFixedPackBasketCommercialPolicy(
+        orderData,
+        fixedPackLines.data ?? [],
+        fixedPackSupplier.data ?? null,
+        fixedPackRule.data ?? null,
+      );
+    }
     const [fixedPackProvenance, fixedPackEvents] = await Promise.all([
       supabaseAdmin.from("vault_fixed_pack_draft_idempotency").select("fingerprint, style_id, purchase_order_id, purchase_order_line_id").eq("purchase_order_id", purchaseOrderId),
       supabaseAdmin.from("vault_purchase_order_events").select("purchase_order_line_id, event_type, event_snapshot").eq("purchase_order_id", purchaseOrderId),
@@ -825,7 +830,7 @@ async function getCurrentApprovalQualification(
     );
     return {
       sourceFamily,
-      canonicalQualification: {
+      canonicalQualification: sourceFamily === "mixed" ? {} : {
         source_family: "fixed_pack",
         purchase_order_id: purchaseOrderId,
         supplier_id: orderData.supplier_id,
@@ -1188,6 +1193,34 @@ async function getSupplierNames(
       ],
     ),
   );
+}
+
+type BlankSupplierPurchaseOrderRpcRow = {
+  purchase_order_id: string;
+  idempotent: boolean;
+};
+
+function isBlankSupplierPurchaseOrderRpcRow(value: unknown): value is BlankSupplierPurchaseOrderRpcRow {
+  return isRecord(value)
+    && typeof value.purchase_order_id === "string"
+    && typeof value.idempotent === "boolean";
+}
+
+export async function createBlankSupplierPurchaseOrder(input: {
+  supplierId: string;
+  operatorId: string;
+  idempotencyKey: string;
+}): Promise<{ purchaseOrderId: string; idempotent: boolean }> {
+  const response = await supabaseAdmin.rpc("create_blank_supplier_purchase_order", {
+    target_supplier_id: input.supplierId,
+    target_operator_id: input.operatorId,
+    target_idempotency_key: input.idempotencyKey,
+  }).maybeSingle();
+  if (response.error) throw new Error(response.error.message);
+  if (!isBlankSupplierPurchaseOrderRpcRow(response.data)) {
+    throw new Error("Blank purchase-order creation did not return canonical evidence.");
+  }
+  return { purchaseOrderId: response.data.purchase_order_id, idempotent: response.data.idempotent };
 }
 
 export async function createPurchaseOrderDraft(
@@ -1628,6 +1661,11 @@ export async function approvePurchaseOrderDraft(input: {
       target_purchase_order_id: input.purchaseOrderId,
       target_operator_id: input.operatorId,
     })
+    : sourceFamily === "mixed"
+      ? await supabaseAdmin.rpc("approve_mixed_supplier_purchase_order", {
+        target_purchase_order_id: input.purchaseOrderId,
+        target_operator_id: input.operatorId,
+      })
     : sourceFamily === "fixed_pack"
       ? await supabaseAdmin.rpc("approve_fixed_pack_vault_purchase_order", rpcInput)
       : await supabaseAdmin.rpc("approve_vault_purchase_order", rpcInput);

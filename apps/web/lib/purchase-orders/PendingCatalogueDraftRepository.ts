@@ -49,6 +49,15 @@ export type PendingCatalogueDraftResult =
 
 type Dependencies = { client: typeof supabaseAdmin };
 const productionDependencies: Dependencies = { client: supabaseAdmin };
+const mixedDraftSourceTypes = new Set([
+  "fixed_pack_purchase_recommendation",
+  "manual_fixed_pack_purchase",
+  "pending_catalogue_purchase",
+]);
+
+function isMixedDraftSourceType(value: unknown): value is string {
+  return typeof value === "string" && mixedDraftSourceTypes.has(value);
+}
 
 class PendingCatalogueError extends Error {
   constructor(readonly code: Exclude<PendingCatalogueDraftResult, { success: true }> ["code"], message: string) {
@@ -139,8 +148,8 @@ export async function addPendingCatalogueProductToDraftFrom(
     if (!po || po.created_by_operator_id !== operatorId) return fail("po_not_found", "The draft purchase order was not found.");
     const purchaseOrder = po;
     if (purchaseOrder.status !== "draft") return fail("po_not_draft", "The purchase order is no longer a draft.");
-    if ((purchaseOrder.vault_purchase_order_lines ?? []).some((line) => line.source_recommendation_type !== "pending_catalogue_purchase")) {
-      fail("po_not_pending_compatible", "New catalogue products require an empty or pending-catalogue-only draft.");
+    if ((purchaseOrder.vault_purchase_order_lines ?? []).some((line) => !isMixedDraftSourceType(line.source_recommendation_type))) {
+      fail("po_not_pending_compatible", "New catalogue products require a governed fixed-pack, manual fixed-pack, or pending-catalogue draft.");
     }
     const { data: supplier, error: supplierError } = await dependencies.client
       .from("vault_suppliers")

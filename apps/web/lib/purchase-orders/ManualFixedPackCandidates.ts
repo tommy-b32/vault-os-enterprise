@@ -7,7 +7,7 @@ export type ManualFixedPackCandidate = Readonly<{ parentProductId: string; style
 export type ManualFixedPackCandidatesResult = Readonly<{ status: "compatible"; purchaseOrderId: string; supplierId: string; supplierName: string; supplierMinimumOrderPacks: number | null; currentBasketPacks: number; remainingPacksToMinimum: number | null; candidates: readonly ManualFixedPackCandidate[] }> | Readonly<{ status: "incompatible"; reason: "po_not_found" | "po_not_draft" | "po_not_fixed_pack_compatible" | "currency_not_gbp" | "supplier_inactive" }>;
 type Dependencies = { client: typeof supabaseAdmin; loadCatalogue: typeof getCatalogueData; loadComposition: typeof loadSupplierStylePackCompositionIntelligence };
 const production: Dependencies = { client: supabaseAdmin, loadCatalogue: getCatalogueData, loadComposition: loadSupplierStylePackCompositionIntelligence };
-const fixedSources = new Set(["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"]);
+const fixedSources = new Set(["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase", "pending_catalogue_purchase"]);
 
 export async function loadManualFixedPackCandidatesFrom(purchaseOrderId: string, dependencies: Dependencies): Promise<ManualFixedPackCandidatesResult> {
   try {

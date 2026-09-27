@@ -37,7 +37,7 @@ export async function buildManualFixedPackPayloadFrom(operatorId: string, input:
   if (po.created_by_operator_id !== operatorId) fail("po_not_found", "The draft purchase order was not found.");
   if (po.status !== "draft") fail("po_not_draft", "The purchase order is no longer a draft.");
   if (po.currency !== "GBP") fail("currency_not_gbp", "The purchase order currency must be GBP.");
-  if ((po.vault_purchase_order_lines ?? []).some((line) => !["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"].includes(line.source_recommendation_type))) fail("po_not_fixed_pack_compatible", "This draft is not compatible with fixed-pack additions.");
+  if ((po.vault_purchase_order_lines ?? []).some((line) => !["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase", "pending_catalogue_purchase"].includes(line.source_recommendation_type))) fail("po_not_fixed_pack_compatible", "This draft is not compatible with fixed-pack additions.");
   if ((po.vault_purchase_order_lines ?? []).some((line) => line.style_id === input.styleId)) fail("style_already_in_draft", "This style is already in the draft.");
   const product = catalogue.products.filter((item) => item.style_id === input.styleId && item.parent_product_id === input.parentProductId && item.supplier_id === po.supplier_id);
   if (product.length !== 1) fail("style_not_found", "The selected supplier style is unavailable.");
