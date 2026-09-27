@@ -36,6 +36,12 @@ test("approved purchase order transitions atomically to ordered with operator ev
   assert.match(repository, /rpc\("mark_vault_purchase_order_ordered"/);
   assert.match(repository, /target_purchase_order_id: input\.purchaseOrderId/);
   assert.match(repository, /target_operator_id: input\.operatorId/);
+  assert.match(repository, /type GovernedPurchaseOrderOrderedRpcRow = \{/);
+  assert.match(repository, /purchase_order_id: string/);
+  assert.match(repository, /ordered_by_operator_id: string/);
+  assert.match(repository, /ordered_at: string/);
+  assert.match(repository, /transitioned: boolean/);
+  assert.match(repository, /isGovernedPurchaseOrderOrderedRpcRow\(transition\.data\)/);
 });
 
 test("draft cannot be ordered and an ordered retry is idempotent", () => {

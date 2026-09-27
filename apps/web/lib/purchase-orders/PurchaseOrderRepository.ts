@@ -68,6 +68,27 @@ export type PurchaseOrderOrderedResult = {
   transitioned: boolean;
 };
 
+type GovernedPurchaseOrderOrderedRpcRow = {
+  purchase_order_id: string;
+  status: string;
+  ordered_by_operator_id: string;
+  ordered_at: string;
+  transitioned: boolean;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isGovernedPurchaseOrderOrderedRpcRow(value: unknown): value is GovernedPurchaseOrderOrderedRpcRow {
+  return isRecord(value)
+    && typeof value.purchase_order_id === "string"
+    && value.status === "ordered"
+    && typeof value.ordered_by_operator_id === "string"
+    && typeof value.ordered_at === "string"
+    && typeof value.transitioned === "boolean";
+}
+
 export type PurchaseOrderShippedResult = {
   purchaseOrderId: string;
   status: "shipped" | "received";
@@ -1638,7 +1659,9 @@ export async function markPurchaseOrderOrdered(input: {
     .maybeSingle();
 
   if (transition.error) throw transition.error;
-  if (!transition.data) throw new Error("Purchase-order ordering did not return governed evidence.");
+  if (!isGovernedPurchaseOrderOrderedRpcRow(transition.data)) {
+    throw new Error("Purchase-order ordering did not return governed evidence.");
+  }
   return {
     purchaseOrderId: transition.data.purchase_order_id,
     status: "ordered",
