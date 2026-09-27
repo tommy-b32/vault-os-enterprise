@@ -1,69 +1,21 @@
 "use client";
-
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-
 import { addPendingCatalogueProductToDraftAction } from "@/app/purchase-orders/actions";
+import type { PendingCatalogueDuplicateCandidate, PendingCatalogueGovernedOption } from "@/lib/purchase-orders/PendingCatalogueDraftRepository";
 
-type SizeRow = { id: string; supplierSizeLabel: string; normalizedSize: string; orderedUnits: number };
-const newRow = (): SizeRow => ({ id: crypto.randomUUID(), supplierSizeLabel: "", normalizedSize: "", orderedUnits: 0 });
+type SizeRow={id:string;supplierSizeLabel:string;normalizedSize:string;unitsPerPack:number};
+const newRow=():SizeRow=>({id:crypto.randomUUID(),supplierSizeLabel:"",normalizedSize:"",unitsPerPack:0});
+const money=(value:number,currency="GBP")=>new Intl.NumberFormat("en-GB",{style:"currency",currency,maximumFractionDigits:2}).format(value);
 
-export function PendingCatalogueAddPanel({ purchaseOrderId, supplierName }: { purchaseOrderId: string; supplierName: string }) {
-  const router = useRouter();
-  const idempotencyKey = useRef<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [workingTitle, setWorkingTitle] = useState("");
-  const [supplierReference, setSupplierReference] = useState("");
-  const [brand, setBrand] = useState("");
-  const [productCategory, setProductCategory] = useState("");
-  const [colourModel, setColourModel] = useState("");
-  const [modelDesign, setModelDesign] = useState("");
-  const [notes, setNotes] = useState("");
-  const [orderedUnits, setOrderedUnits] = useState(0);
-  const [unitCostGbp, setUnitCostGbp] = useState(0);
-  const [sizes, setSizes] = useState<SizeRow[]>([newRow()]);
-  const allocatedUnits = useMemo(() => sizes.reduce((sum, size) => sum + (Number.isSafeInteger(size.orderedUnits) ? size.orderedUnits : 0), 0), [sizes]);
-  const sizesValid = sizes.length > 0 && sizes.every((size) => size.supplierSizeLabel.trim() && size.normalizedSize.trim() && Number.isSafeInteger(size.orderedUnits) && size.orderedUnits > 0)
-    && new Set(sizes.map((size) => size.normalizedSize.trim())).size === sizes.length;
-  const ready = workingTitle.trim() && modelDesign.trim() && Number.isSafeInteger(orderedUnits) && orderedUnits > 0
-    && Number.isFinite(unitCostGbp) && unitCostGbp >= 0 && sizesValid && allocatedUnits === orderedUnits;
-  const updateSize = (id: string, patch: Partial<SizeRow>) => setSizes((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row));
-  async function submit() {
-    if (!ready || pending) return;
-    idempotencyKey.current ??= crypto.randomUUID();
-    setPending(true); setNotice(null);
-    const result = await addPendingCatalogueProductToDraftAction({ purchaseOrderId, workingTitle, supplierReference, brand, productCategory, colourModel, modelDesign, notes, orderedUnits, unitCostGbp, sizes: sizes.map(({ supplierSizeLabel, normalizedSize, orderedUnits: units }) => ({ supplierSizeLabel, normalizedSize, orderedUnits: units })), idempotencyKey: idempotencyKey.current });
-    setPending(false);
-    if (!result.success) { setNotice(result.message); return; }
-    setNotice(`Added ${workingTitle.trim()} as a pending catalogue product.`);
-    idempotencyKey.current = null; setOpen(false); router.refresh();
-  }
-  return <section aria-live="polite" className="purchase-order-supplier-draft">
-    <p className="vault-eyebrow">ADD PRODUCT</p>
-    <p>Need a product that is not yet in Shopify? Add it as pending catalogue evidence for {supplierName}.</p>
-    {!open ? <button className="vault-primary-button" type="button" onClick={() => { setNotice(null); setOpen(true); }}>New Product</button> : <div>
-      <h3>New pending catalogue product</h3>
-      <label>Working product title<input value={workingTitle} disabled={pending} onChange={(event) => setWorkingTitle(event.target.value)} /></label>
-      <label>Supplier reference<input value={supplierReference} disabled={pending} onChange={(event) => setSupplierReference(event.target.value)} /></label>
-      <label>Brand<input value={brand} disabled={pending} onChange={(event) => setBrand(event.target.value)} /></label>
-      <label>Category<input value={productCategory} disabled={pending} onChange={(event) => setProductCategory(event.target.value)} /></label>
-      <label>Colour / model<input value={colourModel} disabled={pending} onChange={(event) => setColourModel(event.target.value)} /></label>
-      <label>Model / design<input value={modelDesign} disabled={pending} onChange={(event) => setModelDesign(event.target.value)} /></label>
-      <label>Notes<textarea value={notes} disabled={pending} onChange={(event) => setNotes(event.target.value)} rows={2} /></label>
-      <label>Total ordered units<input value={orderedUnits || ""} disabled={pending} min="1" step="1" type="number" onChange={(event) => setOrderedUnits(Number(event.target.value))} /></label>
-      <label>Unit cost (GBP)<input value={unitCostGbp || ""} disabled={pending} min="0" step="0.01" type="number" onChange={(event) => setUnitCostGbp(Number(event.target.value))} /></label>
-      <div className="purchase-order-preparation-lines"><strong>Exact size allocations</strong>{sizes.map((size) => <div key={size.id}>
-        <label>Supplier size<input value={size.supplierSizeLabel} disabled={pending} onChange={(event) => updateSize(size.id, { supplierSizeLabel: event.target.value })} /></label>
-        <label>Normalized size<input value={size.normalizedSize} disabled={pending} onChange={(event) => updateSize(size.id, { normalizedSize: event.target.value })} /></label>
-        <label>Qty<input value={size.orderedUnits || ""} disabled={pending} min="1" step="1" type="number" onChange={(event) => updateSize(size.id, { orderedUnits: Number(event.target.value) })} /></label>
-        {sizes.length > 1 ? <button disabled={pending} type="button" onClick={() => setSizes((rows) => rows.filter((row) => row.id !== size.id))}>Remove size</button> : null}
-      </div>)}<button disabled={pending} type="button" onClick={() => setSizes((rows) => [...rows, newRow()])}>Add size</button></div>
-      <p>Total ordered: {orderedUnits || 0} · Allocated: {allocatedUnits} · Remaining: {(orderedUnits || 0) - allocatedUnits}</p>
-      <button className="vault-primary-button" disabled={pending || !ready} type="button" onClick={submit}>{pending ? "Adding…" : "Add New Product"}</button>
-      <button className="vault-secondary-button" disabled={pending} type="button" onClick={() => setOpen(false)}>Cancel</button>
-    </div>}
-    {notice ? <p role="alert">{notice}</p> : null}
-  </section>;
+export function PendingCatalogueAddPanel({purchaseOrderId,supplierName,governedOptions,duplicateCandidates}:{purchaseOrderId:string;supplierName:string;governedOptions:readonly PendingCatalogueGovernedOption[];duplicateCandidates:readonly PendingCatalogueDuplicateCandidate[]}){
+ const router=useRouter(),key=useRef<string|null>(null); const [open,setOpen]=useState(false),[pending,setPending]=useState(false),[notice,setNotice]=useState<string|null>(null),[title,setTitle]=useState(""),[design,setDesign]=useState(""),[reference,setReference]=useState(""),[notes,setNotes]=useState(""),[optionKey,setOptionKey]=useState(""),[packs,setPacks]=useState(1),[sizes,setSizes]=useState<SizeRow[]>([newRow()]),[continueAsNew,setContinueAsNew]=useState(false);
+ const selected=governedOptions.find(x=>`${x.costTypeId}:${x.packProfileId}`===optionKey)??null;
+ const composition=useMemo(()=>sizes.reduce((n,x)=>n+(Number.isSafeInteger(x.unitsPerPack)?x.unitsPerPack:0),0),[sizes]);
+ const duplicates=useMemo(()=>{const n=(x:string|null|undefined)=>x?.trim().toLocaleLowerCase()??"";const exactReference=reference.trim()&&duplicateCandidates.filter(x=>n(x.supplierReference)===n(reference));return exactReference.length?exactReference:duplicateCandidates.filter(x=>n(x.workingTitle)===n(title)&&n(x.colourModel)===n(design))},[duplicateCandidates,reference,title,design]);
+ const sizesValid=sizes.length>0&&sizes.every(x=>x.supplierSizeLabel.trim()&&x.normalizedSize.trim()&&Number.isSafeInteger(x.unitsPerPack)&&x.unitsPerPack>0)&&new Set(sizes.map(x=>x.normalizedSize.trim())).size===sizes.length;
+ const ready=Boolean(title.trim()&&design.trim()&&selected&&Number.isSafeInteger(packs)&&packs>0&&sizesValid&&composition===selected.unitsPerPack&&(!duplicates.length||continueAsNew));
+ const change=(id:string,patch:Partial<SizeRow>)=>setSizes(rows=>rows.map(row=>row.id===id?{...row,...patch}:row));
+ async function submit(){if(!ready||pending||!selected)return;key.current??=crypto.randomUUID();setPending(true);setNotice(null);const result=await addPendingCatalogueProductToDraftAction({purchaseOrderId,workingTitle:title,supplierReference:reference,brand:"",productCategory:selected.costTypeName,colourModel:design,modelDesign:design,notes,orderedUnits:packs*selected.unitsPerPack,unitCostGbp:0,costTypeId:selected.costTypeId,packProfileId:selected.packProfileId,packCount:packs,sizes:sizes.map(x=>({supplierSizeLabel:x.supplierSizeLabel,normalizedSize:x.normalizedSize,unitsPerPack:x.unitsPerPack,orderedUnits:packs*x.unitsPerPack})),idempotencyKey:key.current});setPending(false);if(!result.success){setNotice(result.message);return}setNotice(`Added ${title.trim()} as a governed pending supplier product.`);key.current=null;setOpen(false);router.refresh()}
+ return <section aria-live="polite" className="purchase-order-supplier-draft"><p className="vault-eyebrow">ADD NEW SUPPLIER PRODUCT</p><p>Create purchasing identity for {supplierName}; Shopify linkage follows later.</p>{!open?<button className="vault-primary-button" type="button" disabled={!governedOptions.length} onClick={()=>{setNotice(null);setOpen(true)}}>Add new supplier product</button>:<div><h3>New supplier product</h3><p>Supplier: <strong>{supplierName}</strong></p>{!governedOptions.length?<p role="alert">No active governed supplier product profile is available for this supplier.</p>:<><label>Working product name<input value={title} disabled={pending} onChange={e=>{setTitle(e.target.value);setContinueAsNew(false)}}/></label><label>Model / design / colour<input value={design} disabled={pending} onChange={e=>{setDesign(e.target.value);setContinueAsNew(false)}}/></label><label>Supplier reference / SKU (optional)<input value={reference} disabled={pending} onChange={e=>{setReference(e.target.value);setContinueAsNew(false)}}/></label>{duplicates.length?<div className="purchase-order-source-warning"><strong>Possible existing supplier identity</strong>{duplicates.map(x=><p key={x.id}>{x.workingTitle} · {x.supplierReference??"No reference"} · {x.status}</p>)}<label><input type="checkbox" checked={continueAsNew} disabled={pending} onChange={e=>setContinueAsNew(e.target.checked)}/> Continue as a new supplier product</label></div>:null}<label>Governed product type and pack profile<select value={optionKey} disabled={pending} onChange={e=>{setOptionKey(e.target.value);key.current=null}}><option value="">Select governed profile</option>{governedOptions.map(x=><option key={`${x.costTypeId}:${x.packProfileId}`} value={`${x.costTypeId}:${x.packProfileId}`}>{x.costTypeName} · {x.packProfileName} · {x.unitsPerPack} units</option>)}</select></label><label>Pack count<input value={packs||""} disabled={pending} min="1" step="1" type="number" onChange={e=>setPacks(Number(e.target.value))}/></label>{selected?<div className="purchase-order-source-warning"><strong>Governed commercial preview</strong><p>{selected.costTypeName} · {selected.packProfileName}</p><p>Merchandise {money(selected.packCost,selected.supplierCurrency)} · Shipping {money(selected.shippingCostPerPack,selected.supplierCurrency)} · Import {money(selected.importCostPerPack,selected.supplierCurrency)} · FX {selected.exchangeRateToGbp}</p><p>{money(selected.landedCostPerPackGbp)} per pack · {packs*selected.unitsPerPack} units · {money(selected.landedCostPerPackGbp*packs)} estimated line cost</p></div>:null}<div className="purchase-order-preparation-lines"><strong>Exact supplier size composition per pack</strong>{sizes.map(x=><div key={x.id}><label>Supplier size<input value={x.supplierSizeLabel} disabled={pending} onChange={e=>change(x.id,{supplierSizeLabel:e.target.value})}/></label><label>Normalized size<input value={x.normalizedSize} disabled={pending} onChange={e=>change(x.id,{normalizedSize:e.target.value})}/></label><label>Units / pack<input value={x.unitsPerPack||""} disabled={pending} min="1" step="1" type="number" onChange={e=>change(x.id,{unitsPerPack:Number(e.target.value)})}/></label>{sizes.length>1?<button disabled={pending} type="button" onClick={()=>setSizes(rows=>rows.filter(row=>row.id!==x.id))}>Remove size</button>:null}</div>)}<button disabled={pending} type="button" onClick={()=>setSizes(rows=>[...rows,newRow()])}>Add size</button></div><p>Composition: {composition} / {selected?.unitsPerPack??"?"} units per pack.</p><label>Notes (optional)<textarea value={notes} disabled={pending} onChange={e=>setNotes(e.target.value)} rows={2}/></label><button className="vault-primary-button" disabled={pending||!ready} type="button" onClick={submit}>{pending?"Creating…":"Create & Add to PO"}</button></>}<button className="vault-secondary-button" disabled={pending} type="button" onClick={()=>setOpen(false)}>Cancel</button></div>}{notice?<p role="alert">{notice}</p>:null}</section>
 }

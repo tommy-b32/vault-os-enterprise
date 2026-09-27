@@ -6,6 +6,7 @@ export type PendingCatalogueSizeInput = {
   supplierSizeLabel: string;
   normalizedSize: string;
   orderedUnits: number;
+  unitsPerPack?: number;
 };
 
 export type AddPendingCatalogueProductInput = {
@@ -19,9 +20,28 @@ export type AddPendingCatalogueProductInput = {
   notes: string;
   orderedUnits: number;
   unitCostGbp: number;
+  costTypeId?: string;
+  packProfileId?: string;
+  packCount?: number;
   sizes: PendingCatalogueSizeInput[];
   idempotencyKey: string;
 };
+
+export type PendingCatalogueGovernedOption = {
+  costTypeId: string;
+  costTypeName: string;
+  packProfileId: string;
+  packProfileName: string;
+  unitsPerPack: number;
+  supplierCurrency: string;
+  exchangeRateToGbp: number;
+  packCost: number;
+  shippingCostPerPack: number;
+  importCostPerPack: number;
+  landedCostPerPackGbp: number;
+};
+
+export type PendingCatalogueDuplicateCandidate = { id: string; workingTitle: string; supplierReference: string | null; colourModel: string | null; status: string };
 
 export type PendingCatalogueDraftResult =
   | { success: true; purchaseOrderId: string; purchaseOrderLineId: string; pendingCatalogueProductId: string; idempotent: boolean }
@@ -48,6 +68,42 @@ function validMoney(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
+export async function loadPendingCatalogueGovernedOptions(
+  supplierId: string,
+  client: typeof supabaseAdmin = supabaseAdmin,
+): Promise<PendingCatalogueGovernedOption[]> {
+  const [profiles, types, packs] = await Promise.all([
+    client.from("vault_supplier_product_type_cost_profiles").select("id,cost_type_id,supplier_currency,exchange_rate_to_gbp,pack_cost,shipping_cost_per_pack,import_cost_per_pack,units_per_pack").eq("supplier_id", supplierId).eq("active", true),
+    client.from("vault_cost_types").select("id,display_name").eq("active", true),
+    client.from("vault_pack_profiles").select("id,display_name,units_per_pack").eq("active", true).not("units_per_pack", "is", null),
+  ]);
+  if (profiles.error || types.error || packs.error) throw profiles.error ?? types.error ?? packs.error;
+  const names = new Map((types.data ?? []).map((row: any) => [row.id, row.display_name]));
+  const packsByUnits = new Map<number, any[]>();
+  for (const pack of packs.data ?? []) {
+    const group = packsByUnits.get(pack.units_per_pack) ?? [];
+    group.push(pack); packsByUnits.set(pack.units_per_pack, group);
+  }
+  return (profiles.data ?? []).flatMap((profile: any) => {
+    const matchingPacks = packsByUnits.get(profile.units_per_pack) ?? [];
+    const costTypeName = names.get(profile.cost_type_id);
+    if (!matchingPacks.length || !costTypeName || !Number.isInteger(profile.units_per_pack) || profile.units_per_pack <= 0) return [];
+    const landed = Number(profile.pack_cost) + Number(profile.shipping_cost_per_pack) + Number(profile.import_cost_per_pack);
+    return matchingPacks.map((pack) => ({ costTypeId: profile.cost_type_id, costTypeName, packProfileId: pack.id, packProfileName: pack.display_name, unitsPerPack: profile.units_per_pack, supplierCurrency: profile.supplier_currency, exchangeRateToGbp: Number(profile.exchange_rate_to_gbp), packCost: Number(profile.pack_cost), shippingCostPerPack: Number(profile.shipping_cost_per_pack), importCostPerPack: Number(profile.import_cost_per_pack), landedCostPerPackGbp: Math.round(landed * Number(profile.exchange_rate_to_gbp) * 100) / 100 }));
+  }).sort((left, right) => left.costTypeName.localeCompare(right.costTypeName) || left.packProfileName.localeCompare(right.packProfileName));
+}
+
+export async function loadPendingCatalogueDuplicateCandidates(
+  supplierId: string,
+  client: typeof supabaseAdmin = supabaseAdmin,
+): Promise<PendingCatalogueDuplicateCandidate[]> {
+  const { data, error } = await client.from("vault_pending_catalogue_products")
+    .select("id,working_title,supplier_reference,colour_model,status")
+    .eq("supplier_id", supplierId).in("status", ["pending", "linked"]).order("created_at", { ascending: false }).range(0, 99);
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({ id: row.id, workingTitle: row.working_title, supplierReference: row.supplier_reference, colourModel: row.colour_model, status: row.status }));
+}
+
 export async function addPendingCatalogueProductToDraftFrom(
   operatorId: string,
   input: AddPendingCatalogueProductInput,
@@ -58,19 +114,19 @@ export async function addPendingCatalogueProductToDraftFrom(
     const workingTitle = clean(input.workingTitle);
     const modelDesign = clean(input.modelDesign);
     const idempotencyKey = clean(input.idempotencyKey);
-    if (!purchaseOrderId || !workingTitle || !modelDesign || !idempotencyKey || idempotencyKey.length > 200
-      || !Number.isSafeInteger(input.orderedUnits) || input.orderedUnits <= 0 || !validMoney(input.unitCostGbp)
-      || !Array.isArray(input.sizes) || input.sizes.length === 0) {
-      fail("request_invalid", "Enter a product, model/design, positive ordered quantity, and unit cost.");
-    }
+    const governed = Boolean(clean(input.costTypeId) || clean(input.packProfileId) || input.packCount !== undefined);
+    if (!purchaseOrderId || !workingTitle || !modelDesign || !idempotencyKey || idempotencyKey.length > 200 || !Array.isArray(input.sizes) || input.sizes.length === 0) fail("request_invalid", "Enter a product, model/design, and exact size composition.");
+    if (governed && (!clean(input.costTypeId) || !clean(input.packProfileId) || !Number.isSafeInteger(input.packCount) || input.packCount! <= 0)) fail("request_invalid", "Select a governed product type, pack profile, and positive pack count.");
+    if (!governed && (!Number.isSafeInteger(input.orderedUnits) || input.orderedUnits <= 0 || !validMoney(input.unitCostGbp))) fail("request_invalid", "Enter a positive ordered quantity and unit cost.");
     const sizes = input.sizes.map((size) => ({
       supplierSizeLabel: clean(size?.supplierSizeLabel),
       normalizedSize: clean(size?.normalizedSize),
       orderedUnits: size?.orderedUnits,
+      unitsPerPack: size?.unitsPerPack,
     }));
-    if (sizes.some((size) => !size.supplierSizeLabel || !size.normalizedSize || !Number.isSafeInteger(size.orderedUnits) || size.orderedUnits <= 0)
+    if (sizes.some((size) => !size.supplierSizeLabel || !size.normalizedSize || !Number.isSafeInteger(governed ? size.unitsPerPack : size.orderedUnits) || (governed ? size.unitsPerPack! : size.orderedUnits) <= 0)
       || new Set(sizes.map((size) => size.normalizedSize)).size !== sizes.length
-      || sizes.reduce((total, size) => total + size.orderedUnits, 0) !== input.orderedUnits) {
+      || (!governed && sizes.reduce((total, size) => total + size.orderedUnits, 0) !== input.orderedUnits)) {
       fail("request_invalid", "Each size needs a unique normalized size and positive quantity matching the ordered total.");
     }
 
@@ -106,13 +162,7 @@ export async function addPendingCatalogueProductToDraftFrom(
       colour_model: clean(input.colourModel) || null,
       model_design: modelDesign,
       notes: clean(input.notes) || null,
-      ordered_units: input.orderedUnits,
-      unit_cost_gbp: input.unitCostGbp,
-      sizes: sizes.map((size) => ({
-        supplier_size_label: size.supplierSizeLabel,
-        normalized_size: size.normalizedSize,
-        ordered_units: size.orderedUnits,
-      })),
+      ...(governed ? { cost_type_id: clean(input.costTypeId), pack_profile_id: clean(input.packProfileId), pack_count: input.packCount, sizes: sizes.map((size) => ({ supplier_size_label: size.supplierSizeLabel, normalized_size: size.normalizedSize, units_per_pack: size.unitsPerPack })) } : { ordered_units: input.orderedUnits, unit_cost_gbp: input.unitCostGbp, sizes: sizes.map((size) => ({ supplier_size_label: size.supplierSizeLabel, normalized_size: size.normalizedSize, ordered_units: size.orderedUnits })) }),
     };
     const { data, error } = await dependencies.client.rpc("create_pending_catalogue_purchase_line", { authoritative_payload: payload });
     if (error) {

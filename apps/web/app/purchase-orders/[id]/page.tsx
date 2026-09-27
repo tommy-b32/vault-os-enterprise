@@ -16,6 +16,7 @@ import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { loadManualFixedPackCandidates } from "@/lib/purchase-orders/ManualFixedPackCandidates";
 import { loadPendingCatalogueLinkContexts } from "@/lib/purchase-orders/PendingCatalogueLinkRepository";
+import { loadPendingCatalogueDuplicateCandidates, loadPendingCatalogueGovernedOptions } from "@/lib/purchase-orders/PendingCatalogueDraftRepository";
 
 export const dynamic = "force-dynamic";
 
@@ -177,6 +178,7 @@ export default async function PurchaseOrderDetailPage({
       []) as SavedPurchaseOrderLine[];
   const manualCandidates = await loadManualFixedPackCandidates(draft.id);
   const pendingLinkContexts = await loadPendingCatalogueLinkContexts(draft.id);
+  const [pendingGovernedOptions, pendingDuplicateCandidates] = await Promise.all([loadPendingCatalogueGovernedOptions(draft.supplier_id), loadPendingCatalogueDuplicateCandidates(draft.supplier_id)]);
   const pendingProductsReadyToPost = new Set(pendingLinkContexts.filter((context) => context.status === "linked" && context.links.length === context.sizes.length && context.sizes.every((size) => size.physicalReceived === size.orderedUnits)).map((context) => context.pendingProductId));
 
   const totalUnits =
@@ -536,7 +538,7 @@ export default async function PurchaseOrderDetailPage({
 
           {manualCandidates.status === "compatible" ? <ManualFixedPackAddPanel purchaseOrderId={manualCandidates.purchaseOrderId} supplierName={manualCandidates.supplierName} supplierMinimumOrderPacks={manualCandidates.supplierMinimumOrderPacks} currentBasketPacks={manualCandidates.currentBasketPacks} remainingPacksToMinimum={manualCandidates.remainingPacksToMinimum} candidates={manualCandidates.candidates} /> : null}
 
-        {draft.status === "draft" && lines.every((line) => line.source_recommendation_type === "pending_catalogue_purchase") ? <PendingCatalogueAddPanel purchaseOrderId={draft.id} supplierName={supplierName} /> : null}
+        {draft.status === "draft" && lines.every((line) => line.source_recommendation_type === "pending_catalogue_purchase") ? <PendingCatalogueAddPanel purchaseOrderId={draft.id} supplierName={supplierName} governedOptions={pendingGovernedOptions} duplicateCandidates={pendingDuplicateCandidates} /> : null}
         {pendingLinkContexts.map((context) => <PendingCatalogueLinkCard key={context.pendingProductId} purchaseOrderId={draft.id} context={context} />)}
 
           {draft.reasoning ? (
