@@ -1,4 +1,5 @@
 import VaultAppShell from "@/components/layout/VaultAppShell";
+import Link from "next/link";
 import MissionControlStyles from "@/components/brain/MissionControlStyles";
 import VaultIcon, {
   type VaultIconName,
@@ -1124,6 +1125,7 @@ export default async function InventoryPage() {
                       Dropship, service, do-not-restock and discontinued
                       items are excluded from alerts and health scoring.
                     </p>
+                    <p><Link href="/purchase-intelligence">View variant-aware Stock &amp; Reorder Intelligence →</Link></p>
                   </div>
 
                   <span className="inventory-risk-count">

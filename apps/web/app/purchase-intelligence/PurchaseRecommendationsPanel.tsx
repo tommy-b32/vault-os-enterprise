@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useRef, useState } from "react";
 import { addFixedPackRecommendationToDraftAction } from "@/app/purchase-orders/actions";
 import type { FixedPackPurchaseRecommendationServiceResult, FixedPackPurchaseRecommendationTransport } from "@/lib/fixed-pack-purchase-recommendations";
+import { stage3CurrentDaysCover, stage3PackFit, stage3PrimaryReason, stage3StockState } from "@/lib/stock-reorder-presentation";
 
 type PresentedFixedPackRecommendation = FixedPackPurchaseRecommendationTransport & { productName: string | null; supplierName: string | null; draftMatch: { purchaseOrderId: string } | null };
 type PresentedFixedPackRecommendationResult = Exclude<FixedPackPurchaseRecommendationServiceResult, { kind: "recommendation" }> | { kind: "recommendation"; recommendation: PresentedFixedPackRecommendation };
@@ -29,9 +30,14 @@ const SAFE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   operation_failed: "We couldn’t add this recommendation to a draft PO. Please try again.",
 };
 
-function ReasonList({ reasons }: { reasons: readonly string[] }) {
+function ReasonList({ reasons, zeroDemandDominant = false }: { reasons: readonly string[]; zeroDemandDominant?: boolean }) {
   if (reasons.length === 0) return <>—</>;
-  return <div>{reasons.map((reason) => <div key={reason}><strong>{REASON_EXPLANATIONS[reason] ?? reason}</strong><small>{reason}</small></div>)}</div>;
+  const primary = stage3PrimaryReason(reasons, zeroDemandDominant);
+  return <div>{primary ? <div><strong>{primary}</strong><small>ZERO_DEMAND</small></div> : null}{reasons.filter((reason) => !(primary && reason === "ALL_SIZES_ABOVE_TARGET")).map((reason) => <div key={reason}><strong>{REASON_EXPLANATIONS[reason] ?? reason}</strong><small>{reason}</small></div>)}{primary && reasons.includes("ALL_SIZES_ABOVE_TARGET") ? <small>Additional governed evidence: ALL_SIZES_ABOVE_TARGET</small> : null}</div>;
+}
+
+function days(value: number | null): string {
+  return value === null ? "No recent velocity" : `${value.toFixed(1)}d`;
 }
 
 function AddToDraftButton({ styleId, parentProductId, draftMatch }: { styleId: string; parentProductId: string; draftMatch: { purchaseOrderId: string } | null }) {
@@ -61,6 +67,18 @@ function AddToDraftButton({ styleId, parentProductId, draftMatch }: { styleId: s
   return <div aria-live="polite"><button className="vault-primary-button" type="button" disabled={pending} onClick={addToDraft}>{pending ? "Adding…" : "Add to Draft PO"}</button>{failure ? <p role="alert">{failure}</p> : null}</div>;
 }
 
+function Stage3ActionableRows({ recommendations }: { recommendations: PresentedFixedPackRecommendation[] }) {
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  if (!recommendations.length) return <p>No governed fixed-pack purchases are currently recommended.</p>;
+  return <div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Product</th><th>Colour / design</th><th>Supplier policy</th><th>State</th><th>Pack fit</th><th>Packs</th><th>Units</th><th>Evidence</th></tr></thead><tbody>{recommendations.map((recommendation) => {
+    const open = expanded.has(recommendation.recommendationId);
+    const toggle = () => setExpanded((current) => { const next = new Set(current); if (next.has(recommendation.recommendationId)) next.delete(recommendation.recommendationId); else next.add(recommendation.recommendationId); return next; });
+    const days = (value: number | null) => value === null ? "No recent velocity" : `${value.toFixed(1)}d`;
+    const zeroDemandDominant = recommendation.sizes.length > 0 && recommendation.sizes.every((size) => size.reasonCodes.includes("ZERO_DEMAND"));
+    return <Fragment key={recommendation.recommendationId}><tr><td><strong>{recommendation.productName ?? "Identity unavailable"}</strong></td><td>{recommendation.modelDesign}<small>Resolved colour/design</small></td><td>{recommendation.supplierName ?? "Identity unavailable"}<small>{recommendation.governedLeadTimeDays}d lead · {recommendation.stage3TotalTargetDays}d total target</small></td><td><strong>{stage3StockState(recommendation)}</strong></td><td><strong>{stage3PackFit(recommendation) ?? "Evidence unavailable"}</strong></td><td>{recommendation.recommendedPackCount}</td><td>{recommendation.recommendedTotalUnits}</td><td><button className="vault-secondary-button" type="button" aria-expanded={open} onClick={toggle}>View size evidence</button></td></tr>{open ? <tr><td colSpan={8}><div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Size</th><th>Net stock</th><th>Incoming</th><th>Sold 30d</th><th>Current cover</th><th>Drives pack</th><th>Projected cover</th><th>Shortage</th><th>Excess</th><th>Evidence</th></tr></thead><tbody>{recommendation.sizes.map((size) => <tr key={size.normalizedSize}><td>{size.normalizedSize}</td><td>{size.netAvailableStock}</td><td>{size.incomingStock}</td><td>{size.sales30DayUnits ?? "-"}</td><td>{days(stage3CurrentDaysCover(size))}</td><td>{size.drivesPackNeed ? "Yes" : "No"}</td><td>{days(size.projectedDaysCover)}</td><td>{size.remainingShortage}</td><td>{size.projectedExcess}</td><td><ReasonList reasons={size.reasonCodes} /></td></tr>)}</tbody></table></div><ReasonList reasons={[...recommendation.warnings, ...recommendation.reasonCodes]} zeroDemandDominant={zeroDemandDominant} /></td></tr> : null}</Fragment>;
+  })}</tbody></table></div>;
+}
+
 export default function PurchaseRecommendationsPanel({ results }: Props) {
   const [expandedEvidence, setExpandedEvidence] = useState<ReadonlySet<string>>(new Set());
   const recommendations = results.filter((result) => result.kind === "recommendation");
@@ -78,6 +96,7 @@ export default function PurchaseRecommendationsPanel({ results }: Props) {
   return <section className="purchase-intelligence-diagnostics" aria-labelledby="fixed-pack-recommendations">
     <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">FIXED-PACK RECOMMENDATIONS</p><h2 id="fixed-pack-recommendations">Purchase Recommendations</h2><p>Read-only recommendations from the fixed-pack service.</p></div><span>Advisory only</span></div>
     <div className="purchase-intelligence-metrics">{metrics.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}</div>
+    <section className="purchase-intelligence-supplier"><div className="purchase-intelligence-supplier-heading"><div><p className="vault-eyebrow">STOCK & REORDER INTELLIGENCE</p><h2>Model/design/size-first recommendation context</h2><p>45-day total target; supplier lead time and governed pack selection remain authoritative.</p></div><span>Presentation only</span></div><Stage3ActionableRows recommendations={recommendations.filter((result) => result.recommendation.trusted).map((result) => result.recommendation)} /></section>
     <section className="purchase-intelligence-supplier"><div className="purchase-intelligence-supplier-heading"><div><p className="vault-eyebrow">BUY NOW</p><h2>{buyNow.length} actionable recommendations</h2></div><span>Whole packs only</span></div>
       {buyNow.length === 0 ? <p>No fixed-pack purchases are currently recommended.</p> : <div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Product</th><th>Model / Design</th><th>Supplier</th><th>Packs</th><th>Units</th><th>Pack composition</th><th>Reason codes</th><th>Evidence</th><th>Draft PO</th></tr></thead><tbody>{buyNow.map(({ recommendation }) => {
         const expanded = expandedEvidence.has(recommendation.recommendationId);
