@@ -340,8 +340,12 @@ export async function upsertShopifyOrder(
 
   const syncedAt = new Date().toISOString();
   const financialMode = options.demandEvidenceMode === "legacy" ? "historical" : "prospective";
-  // Fail C2 capture before existing order/B7F persistence if source evidence is incomplete.
+  // Financial evidence is the admission record for this exact Shopify source
+  // version. Persist it before the canonical order can advance; otherwise a
+  // failed later capture write would make the new version authoritative without
+  // the fail-closed Stage 1 evidence it requires.
   const financialEvidence = buildFinancialEvidence(order, syncedAt, financialMode);
+  await persistFinancialEvidence(supabase, financialEvidence);
   const { data: savedOrder, error: orderError } = await supabase
     .from("vault_shopify_orders")
     .upsert(
@@ -428,7 +432,6 @@ export async function upsertShopifyOrder(
     }
   }
   await upsertShopifyDemandEvidence(supabase, order, options.demandEvidenceMode ?? "prospective", syncedAt);
-  await persistFinancialEvidence(supabase, financialEvidence);
 
   return {
     orderId: savedOrder.id,

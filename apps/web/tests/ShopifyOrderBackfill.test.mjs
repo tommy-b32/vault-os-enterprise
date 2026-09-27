@@ -90,14 +90,14 @@ test("invalid and incomplete ranges are rejected", () => {
   ]) assert.throws(() => parseOrderSyncRequest(input));
 });
 
-function loadOrders(graphql, scopes = ["read_orders", "read_all_orders"]) {
+function loadOrders(graphql, scopes = ["read_orders", "read_all_orders"], financialEvidence = {}) {
   return readFile(ordersUrl, "utf8").then((source) => {
     const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
     const exports = {};
     new Function("require", "exports", outputText)((specifier) => {
       if (specifier.includes("financial-evidence")) return {
         buildFinancialEvidence: (_order, _observedAt, mode) => ({ capture_mode: mode, applications: [], allocations: [], refunds: [], refund_lines: [], refund_transactions: [] }),
-        persistFinancialEvidence: async () => {},
+        persistFinancialEvidence: financialEvidence.persist ?? (async () => {}),
       };
       return { shopifyGraphQL: (query, ...args) => query.includes("VaultHistoricalAccess")
         ? Promise.resolve({ currentAppInstallation: { accessScopes: scopes.map((handle) => ({ handle })) } })
@@ -106,6 +106,24 @@ function loadOrders(graphql, scopes = ["read_orders", "read_all_orders"]) {
     return exports;
   });
 }
+
+test("financial capture failure cannot advance the canonical Shopify source version", async () => {
+  let canonicalUpserts = 0;
+  const orders = await loadOrders(
+    () => { throw new Error("Unexpected request"); },
+    ["read_orders", "read_all_orders"],
+    { persist: async () => { throw new Error("financial capture failed"); } },
+  );
+  const client = { from(table) {
+    if (table === "vault_shopify_orders") {
+      canonicalUpserts += 1;
+      throw new Error("canonical upsert must not be reached");
+    }
+    throw new Error(`Unexpected table: ${table}`);
+  } };
+  await assert.rejects(orders.upsertShopifyOrder(client, fixture()), /financial capture failed/);
+  assert.equal(canonicalUpserts, 0);
+});
 
 const money = (amount) => ({ shopMoney: { amount: String(amount), currencyCode: "GBP" } });
 const fixture = () => ({
