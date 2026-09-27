@@ -26,33 +26,31 @@ const orderedMigration = await readFile(
   new URL("../../../supabase/migrations/20260821000000_purchase_order_ordered_transition.sql", import.meta.url),
   "utf8",
 );
+const leadTimeMigration = await readFile(
+  new URL("../../../supabase/migrations/20261050000000_governed_purchase_order_lead_time_evidence.sql", import.meta.url),
+  "utf8",
+);
 
 test("approved purchase order transitions atomically to ordered with operator evidence", () => {
   assert.match(actions, /requireAuthenticatedOperator\(\)/);
-  assert.match(repository, /status: "ordered"/);
-  assert.match(repository, /ordered_by_operator_id: input\.operatorId/);
-  assert.match(repository, /ordered_at: orderedAt/);
-  assert.match(repository, /\.eq\("id", input\.purchaseOrderId\)/);
-  assert.match(repository, /\.eq\("status", "approved"\)/);
+  assert.match(repository, /rpc\("mark_vault_purchase_order_ordered"/);
+  assert.match(repository, /target_purchase_order_id: input\.purchaseOrderId/);
+  assert.match(repository, /target_operator_id: input\.operatorId/);
 });
 
 test("draft cannot be ordered and an ordered retry is idempotent", () => {
-  assert.match(repository, /current\.data\.status === "ordered"/);
-  assert.match(repository, /transitioned: false/);
-  assert.match(repository, /cannot be marked ordered from status/);
+  assert.match(leadTimeMigration, /if purchase_order\.status = 'ordered'/);
+  assert.match(leadTimeMigration, /return query select purchase_order\.id, purchase_order\.status, purchase_order\.ordered_by_operator_id, purchase_order\.ordered_at, false/);
+  assert.match(leadTimeMigration, /Purchase order cannot be marked ordered from status/);
 });
 
-test("ordered transition changes only status and ordering audit fields", () => {
-  const body = repository.match(/export async function markPurchaseOrderOrdered[\s\S]*?\.update\(\{([\s\S]*?)\}\)/)?.[1] ?? "";
-  assert.match(body, /status: "ordered"/);
-  assert.match(body, /ordered_by_operator_id/);
-  assert.match(body, /ordered_at/);
-  assert.doesNotMatch(body, /line|source_snapshot|supplier|total|paid_amount|actual_total|currency/i);
-  const orderedFunction = repository.slice(
-    repository.indexOf("export async function markPurchaseOrderOrdered"),
-    repository.indexOf("export async function prepareApprovedPurchaseOrder"),
-  );
-  assert.doesNotMatch(orderedFunction, /vault_purchase_order_lines|vault_cash_transactions|\.insert\(|\.delete\(|\.upsert\(/);
+test("ordered transition is guarded by immutable supplier lead-time evidence", () => {
+  assert.match(leadTimeMigration, /create table public\.vault_purchase_order_expected_lead_time_evidence/);
+  assert.match(leadTimeMigration, /source_field = 'vault_suppliers\.default_lead_time_days'/);
+  assert.match(leadTimeMigration, /purchase_order_ordered_requires_lead_time_evidence/);
+  assert.match(leadTimeMigration, /insert into public\.vault_purchase_order_expected_lead_time_evidence/);
+  assert.match(leadTimeMigration, /update public\.vault_purchase_orders[\s\S]*status = 'ordered'/);
+  assert.match(leadTimeMigration, /before update or delete on public\.vault_purchase_order_expected_lead_time_evidence/);
 });
 
 test("wallet includes ordered unpaid commitment without creating cash or payment", () => {

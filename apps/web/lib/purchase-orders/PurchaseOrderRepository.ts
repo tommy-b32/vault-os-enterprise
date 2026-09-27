@@ -1629,57 +1629,23 @@ export async function approvePurchaseOrderDraft(input: {
 export async function markPurchaseOrderOrdered(input: {
   purchaseOrderId: string;
   operatorId: string;
-  orderedAt?: string;
 }): Promise<PurchaseOrderOrderedResult> {
-  const orderedAt = input.orderedAt ?? new Date().toISOString();
   const transition = await supabaseAdmin
-    .from("vault_purchase_orders")
-    .update({
-      status: "ordered",
-      ordered_by_operator_id: input.operatorId,
-      ordered_at: orderedAt,
+    .rpc("mark_vault_purchase_order_ordered", {
+      target_purchase_order_id: input.purchaseOrderId,
+      target_operator_id: input.operatorId,
     })
-    .eq("id", input.purchaseOrderId)
-    .eq("status", "approved")
-    .select("id, status, ordered_by_operator_id, ordered_at")
     .maybeSingle();
 
   if (transition.error) throw transition.error;
-  if (transition.data) {
-    return {
-      purchaseOrderId: transition.data.id,
-      status: "ordered",
-      orderedByOperatorId: transition.data.ordered_by_operator_id,
-      orderedAt: transition.data.ordered_at,
-      transitioned: true,
-    };
-  }
-
-  const current = await supabaseAdmin
-    .from("vault_purchase_orders")
-    .select("id, status, ordered_by_operator_id, ordered_at")
-    .eq("id", input.purchaseOrderId)
-    .maybeSingle();
-
-  if (current.error) throw current.error;
-  if (!current.data) throw new Error("Purchase order was not found.");
-  if (
-    current.data.status === "ordered" &&
-    current.data.ordered_by_operator_id &&
-    current.data.ordered_at
-  ) {
-    return {
-      purchaseOrderId: current.data.id,
-      status: "ordered",
-      orderedByOperatorId: current.data.ordered_by_operator_id,
-      orderedAt: current.data.ordered_at,
-      transitioned: false,
-    };
-  }
-
-  throw new Error(
-    `Purchase order cannot be marked ordered from status '${current.data.status}'.`,
-  );
+  if (!transition.data) throw new Error("Purchase-order ordering did not return governed evidence.");
+  return {
+    purchaseOrderId: transition.data.purchase_order_id,
+    status: "ordered",
+    orderedByOperatorId: transition.data.ordered_by_operator_id,
+    orderedAt: transition.data.ordered_at,
+    transitioned: transition.data.transitioned,
+  };
 }
 
 export async function markPurchaseOrderShipped(input: {
