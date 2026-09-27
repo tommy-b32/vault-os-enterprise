@@ -100,8 +100,12 @@ export async function buildAuthoritativeFixedPackDraftPayloadFrom(operatorId: st
 }
 
 export async function addFixedPackRecommendationToDraftFrom(operatorId: string, input: AddFixedPackRecommendationInput, dependencies: FixedPackDraftDependencies): Promise<FixedPackDraftResult> {
+  return addFixedPackRecommendationToDraftUsingRecommendationsFrom(operatorId, input, null, dependencies);
+}
+
+export async function addFixedPackRecommendationToDraftUsingRecommendationsFrom(operatorId: string, input: AddFixedPackRecommendationInput, recommendations: Awaited<ReturnType<typeof loadFixedPackPurchaseRecommendations>> | null, dependencies: FixedPackDraftDependencies): Promise<FixedPackDraftResult> {
   try {
-    const payload = await buildAuthoritativeFixedPackDraftPayloadFrom(operatorId, input, dependencies);
+    const payload = await buildAuthoritativeFixedPackDraftPayloadFrom(operatorId, input, recommendations === null ? dependencies : { ...dependencies, loadRecommendations: async () => recommendations });
     const { data, error } = await dependencies.client.rpc("add_fixed_pack_recommendation_to_draft", { authoritative_payload: payload });
     if (error) {
       const message = error.message;

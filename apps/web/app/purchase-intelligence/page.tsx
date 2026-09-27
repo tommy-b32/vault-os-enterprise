@@ -13,7 +13,10 @@ import { InventorySyncRepository } from "@/lib/inventory/InventorySyncRepository
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { loadFixedPackPurchaseRecommendations } from "@/lib/fixed-pack-purchase-recommendations";
 import { loadCurrentFixedPackDraftMatches } from "@/lib/purchase-orders/FixedPackDraftRepository";
+import { buildStockPurchasingPlan, type StockPurchasingPlanCandidate } from "@/lib/stock-purchasing-plan";
+import { stage3CurrentDaysCover, stage3PackFit, stage3StockState } from "@/lib/stock-reorder-presentation";
 import PurchaseRecommendationsPanel from "./PurchaseRecommendationsPanel";
+import StockPurchasingPlanPanel from "./StockPurchasingPlanPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -41,14 +44,15 @@ export default async function PurchaseIntelligencePage() {
   const operator = await requireAuthenticatedOperator();
   const fixedPackResults = await loadFixedPackPurchaseRecommendations().catch(() => null);
   const draftMatches = fixedPackResults === null ? new Map() : await loadCurrentFixedPackDraftMatches(operator.id, fixedPackResults).catch(() => new Map());
-  const [catalogue, freshness, walletResult, suppliersResult, rulesResult] = await Promise.all([
+  const [catalogue, freshness, walletResult, suppliersResult, rulesResult, budgetResult] = await Promise.all([
     getCatalogueData(),
     InventorySyncRepository.getFreshness(),
     supabaseAdmin.from("vault_purchasing_wallet").select("ledger_balance_gbp, protected_reserve_gbp, committed_orders_gbp, calculated_purchasing_power_gbp, available_purchasing_power_gbp, manual_spending_limit_gbp, reserve_override_allowed, wallet_last_updated, wallet_freshness_threshold_minutes, purchasing_power_state").single(),
     supabaseAdmin.from("vault_suppliers").select("id, supplier_name, is_active, minimum_order_value, currency_code"),
     supabaseAdmin.from("vault_supplier_purchasing_rules").select("supplier_id, minimum_order_packs"),
+    supabaseAdmin.from("vault_stock_purchasing_budget").select("budget_gbp").eq("id", true).maybeSingle(),
   ]);
-  const sourceError = walletResult.error ?? suppliersResult.error ?? rulesResult.error;
+  const sourceError = walletResult.error ?? suppliersResult.error ?? rulesResult.error ?? budgetResult.error;
   if (sourceError) throw new Error(`Unable to load purchase intelligence: ${sourceError.message}`);
   const rules = new Map((rulesResult.data ?? []).map((rule) => [rule.supplier_id, rule.minimum_order_packs]));
   const suppliers: PurchaseIntelligenceSupplier[] = (suppliersResult.data ?? []).map((supplier) => ({
@@ -78,6 +82,17 @@ export default async function PurchaseIntelligencePage() {
       },
     };
   });
+  const planCandidates: StockPurchasingPlanCandidate[] = presentedFixedPackResults?.flatMap((result) => {
+    if (result.kind !== "recommendation") return [];
+    const recommendation = result.recommendation;
+    const product = (productsByFixedPackIdentity.get(fixedPackProductKey(recommendation.styleId, recommendation.parentProductId, recommendation.supplierId)) ?? []);
+    const canonical = product.length === 1 ? product[0] : null;
+    const landedCost = canonical?.commercial_cost?.landed_cost_per_pack_gbp;
+    const currentCovers = recommendation.sizes.map(stage3CurrentDaysCover).filter((value): value is number => value !== null);
+    const packFit = stage3PackFit(recommendation);
+    return [{ recommendationId: recommendation.recommendationId, supplierId: recommendation.supplierId, supplierName: recommendation.supplierName, styleId: recommendation.styleId, parentProductId: recommendation.parentProductId, productName: recommendation.productName, modelDesign: recommendation.modelDesign, trusted: recommendation.trusted, recommendedPackCount: recommendation.recommendedPackCount, recommendedTotalUnits: recommendation.recommendedTotalUnits, landedCostPerPackGbp: typeof landedCost === "number" && Number.isFinite(landedCost) ? landedCost : null, stockState: stage3StockState(recommendation), packFit: packFit === "DO NOT REORDER" ? null : packFit, currentCoverDays: currentCovers.length ? Math.min(...currentCovers) : null, demandPressure: recommendation.totalIdealNeedUnits ?? 0, leadTimeDays: recommendation.governedLeadTimeDays, totalShortageRemainingUnits: recommendation.totalShortageRemainingUnits ?? 0, totalProjectedExcessUnits: recommendation.totalProjectedExcessUnits ?? 0, reasonCodes: recommendation.reasonCodes }];
+  }) ?? [];
+  const planning = buildStockPurchasingPlan(planCandidates, budgetResult.data?.budget_gbp ?? null, (walletResult.data as PurchasingWalletData).available_purchasing_power_gbp);
   const evaluation = PurchaseIntelligenceEngine.evaluate({
     products: catalogue.products,
     suppliers,
@@ -98,6 +113,7 @@ export default async function PurchaseIntelligencePage() {
           <span>{recommendations.length > 0 ? "Demand recommendations" : "No demand recommendations"}</span>
         </header>
         {presentedFixedPackResults === null ? <section className="purchase-intelligence-notice"><strong>Fixed-pack recommendations unavailable</strong><span>Purchase Intelligence remains available while the fixed-pack recommendation service is unavailable.</span></section> : <PurchaseRecommendationsPanel results={presentedFixedPackResults} />}
+        <StockPurchasingPlanPanel plan={planning} />
         <section className="purchase-intelligence-notice"><strong>Read-only intelligence</strong><span>No purchase orders are created and no purchases are approved from this page.</span></section>
         <section className="purchase-intelligence-diagnostics">
           <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">SUPPLIER SUMMARY</p><h2>Basket intelligence</h2></div><span>Advisory only</span></div>
