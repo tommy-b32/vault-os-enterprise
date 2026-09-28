@@ -74,6 +74,26 @@ input {
   font: inherit;
 }
 
+/* Native select popups do not consistently inherit the closed control's surface. */
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  color: var(--vault-text);
+  background-color: var(--vault-panel);
+}
+
+select option:checked {
+  color: #15120a;
+  background-color: var(--vault-gold);
+}
+
+select option:disabled {
+  color: var(--vault-muted);
+}
+
 button {
   color: inherit;
 }
@@ -3579,11 +3599,6 @@ input:focus-visible {
     0 0 0 3px rgba(217, 173, 74, 0.08);
 }
 
-.catalogue-form-grid option {
-  color: white;
-  background: #101211;
-}
-
 .catalogue-wide-field {
   grid-column: 1 / -1;
 }
@@ -4091,11 +4106,6 @@ input:focus-visible {
   border-color: var(--vault-gold);
   box-shadow:
     0 0 0 3px rgba(217, 173, 74, 0.08);
-}
-
-.product-editor-grid option {
-  color: white;
-  background: #101211;
 }
 
 .product-editor-wide {
@@ -10957,11 +10967,6 @@ grid-template-columns:1fr;
   box-shadow: 0 0 0 3px rgba(217, 173, 74, 0.08);
 }
 
-.supplier-product-creation-grid option {
-  color: white;
-  background: #101211;
-}
-
 .supplier-product-creation-wide { grid-column: 1 / -1; }
 
 .supplier-product-creation-summary {
@@ -11323,11 +11328,6 @@ grid-template-columns:1fr;
 .supplier-guided-details-grid select:focus {
   border-color: var(--vault-gold);
   box-shadow: 0 0 0 3px rgba(217, 173, 74, 0.08);
-}
-
-.supplier-guided-details-grid option {
-  color: white;
-  background: #101211;
 }
 
 .supplier-guided-wide-field {
