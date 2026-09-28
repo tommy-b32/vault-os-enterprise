@@ -92,14 +92,13 @@ begin
   perform pg_advisory_xact_lock(hashtextextended(v_po::text, 0));
   perform pg_advisory_xact_lock(hashtextextended(v_operator::text || ':' || v_key, 0));
 
-  if not exists (
-    select 1
-    from public.vault_purchase_orders po
-    where po.id = v_po
-      and po.status = 'draft'
-      and po.created_by_operator_id = v_operator
-    for update
-  ) then
+  perform 1
+  from public.vault_purchase_orders po
+  where po.id = v_po
+    and po.status = 'draft'
+    and po.created_by_operator_id = v_operator
+  for update;
+  if not found then
     raise exception 'PENDING_CATALOGUE_QUANTITY_PO_INVALID';
   end if;
 
