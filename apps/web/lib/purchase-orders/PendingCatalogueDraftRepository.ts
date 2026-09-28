@@ -81,20 +81,22 @@ export async function loadPendingCatalogueGovernedOptions(
   supplierId: string,
   client: typeof supabaseAdmin = supabaseAdmin,
 ): Promise<PendingCatalogueGovernedOption[]> {
-  const [profiles, types, packs] = await Promise.all([
+  const [profiles, types, packs, compatibilities] = await Promise.all([
     client.from("vault_supplier_product_type_cost_profiles").select("id,cost_type_id,supplier_currency,exchange_rate_to_gbp,pack_cost,shipping_cost_per_pack,import_cost_per_pack,units_per_pack").eq("supplier_id", supplierId).eq("active", true),
     client.from("vault_cost_types").select("id,display_name").eq("active", true),
     client.from("vault_pack_profiles").select("id,display_name,units_per_pack").eq("active", true).not("units_per_pack", "is", null),
+    client.from("vault_cost_type_pack_profile_compatibilities").select("cost_type_id,pack_profile_id").eq("active", true),
   ]);
-  if (profiles.error || types.error || packs.error) throw profiles.error ?? types.error ?? packs.error;
+  if (profiles.error || types.error || packs.error || compatibilities.error) throw profiles.error ?? types.error ?? packs.error ?? compatibilities.error;
   const names = new Map((types.data ?? []).map((row: any) => [row.id, row.display_name]));
+  const compatiblePairs = new Set((compatibilities.data ?? []).map((row: any) => `${row.cost_type_id}:${row.pack_profile_id}`));
   const packsByUnits = new Map<number, any[]>();
   for (const pack of packs.data ?? []) {
     const group = packsByUnits.get(pack.units_per_pack) ?? [];
     group.push(pack); packsByUnits.set(pack.units_per_pack, group);
   }
   return (profiles.data ?? []).flatMap((profile: any) => {
-    const matchingPacks = packsByUnits.get(profile.units_per_pack) ?? [];
+    const matchingPacks = (packsByUnits.get(profile.units_per_pack) ?? []).filter((pack) => compatiblePairs.has(`${profile.cost_type_id}:${pack.id}`));
     const costTypeName = names.get(profile.cost_type_id);
     if (!matchingPacks.length || !costTypeName || !Number.isInteger(profile.units_per_pack) || profile.units_per_pack <= 0) return [];
     const landed = Number(profile.pack_cost) + Number(profile.shipping_cost_per_pack) + Number(profile.import_cost_per_pack);
