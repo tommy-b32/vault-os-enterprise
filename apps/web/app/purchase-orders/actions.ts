@@ -21,7 +21,7 @@ import {
 } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { addFixedPackRecommendationToDraft, type AddFixedPackRecommendationInput, type FixedPackDraftResult } from "@/lib/purchase-orders/FixedPackDraftRepository";
 import { addManualFixedPackToDraft, type AddManualFixedPackInput, type ManualFixedPackDraftResult } from "@/lib/purchase-orders/ManualFixedPackDraftRepository";
-import { addPendingCatalogueProductToDraft, type AddPendingCatalogueProductInput, type PendingCatalogueDraftResult } from "@/lib/purchase-orders/PendingCatalogueDraftRepository";
+import { addPendingCatalogueProductToDraft, updatePendingCataloguePackQuantity, type AddPendingCatalogueProductInput, type PendingCatalogueDraftResult, type UpdatePendingCataloguePackQuantityInput, type UpdatePendingCataloguePackQuantityResult } from "@/lib/purchase-orders/PendingCatalogueDraftRepository";
 import { linkPendingCatalogueProduct } from "@/lib/purchase-orders/PendingCatalogueLinkRepository";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -89,6 +89,27 @@ export async function addPendingCatalogueProductToDraftAction(input: AddPendingC
   } catch (error) {
     console.error("Unable to add pending catalogue product to draft", error);
     return { success: false, code: "operation_failed", message: "The new catalogue product could not be added to this draft." };
+  }
+}
+
+export async function updatePendingCataloguePackQuantityAction(input: UpdatePendingCataloguePackQuantityInput): Promise<UpdatePendingCataloguePackQuantityResult> {
+  try {
+    const purchaseOrderId = typeof input?.purchaseOrderId === "string" ? input.purchaseOrderId.trim() : "";
+    const purchaseOrderLineId = typeof input?.purchaseOrderLineId === "string" ? input.purchaseOrderLineId.trim() : "";
+    const idempotencyKey = typeof input?.idempotencyKey === "string" ? input.idempotencyKey.trim() : "";
+    if (!UUID_PATTERN.test(purchaseOrderId) || !UUID_PATTERN.test(purchaseOrderLineId) || !idempotencyKey || idempotencyKey.length > 200 || !Number.isSafeInteger(input?.packCount) || input.packCount <= 0) {
+      return { success: false, code: "request_invalid", message: "Enter a positive whole pack quantity." };
+    }
+    const operator = await requireAuthenticatedOperator();
+    const result = await updatePendingCataloguePackQuantity(operator.id, { purchaseOrderId, purchaseOrderLineId, packCount: input.packCount, idempotencyKey });
+    if (result.success) {
+      revalidatePath("/purchase-orders");
+      revalidatePath(`/purchase-orders/${result.purchaseOrderId}`);
+    }
+    return result;
+  } catch (error) {
+    console.error("Unable to update pending catalogue pack quantity", error);
+    return { success: false, code: "operation_failed", message: "The pack quantity could not be updated safely." };
   }
 }
 
