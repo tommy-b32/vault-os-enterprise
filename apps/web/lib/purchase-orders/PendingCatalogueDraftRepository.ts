@@ -195,6 +195,14 @@ export async function addPendingCatalogueProductToDraftFrom(
     };
     const rpcName = commercialState === "merchandise_only_landed_cost_pending" ? "create_pending_catalogue_merchandise_only_purchase_line" : "create_pending_catalogue_purchase_line";
     const { data, error } = await dependencies.client.rpc(rpcName, { authoritative_payload: payload });
+    if (error && commercialState === "merchandise_only_landed_cost_pending") {
+  console.error("MERCHANDISE_ONLY_PENDING_CATALOGUE_RPC_ERROR", {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
+}
     if (error) {
       const code = error.message === "PENDING_CATALOGUE_IDEMPOTENCY_CONFLICT" ? "idempotency_conflict" : "operation_failed";
       fail(code, code === "idempotency_conflict" ? "This request conflicts with the current draft. Refresh and try again." : "The new catalogue product could not be added to this draft.");
