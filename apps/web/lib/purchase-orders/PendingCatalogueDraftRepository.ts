@@ -223,3 +223,63 @@ export async function addPendingCatalogueProductToDraftFrom(
 export function addPendingCatalogueProductToDraft(operatorId: string, input: AddPendingCatalogueProductInput) {
   return addPendingCatalogueProductToDraftFrom(operatorId, input, productionDependencies);
 }
+
+
+export type UpdatePendingCataloguePackQuantityInput = {
+  purchaseOrderId: string;
+  purchaseOrderLineId: string;
+  packCount: number;
+  idempotencyKey: string;
+};
+
+export type UpdatePendingCataloguePackQuantityResult =
+  | { success: true; purchaseOrderId: string; purchaseOrderLineId: string; packCount: number; orderedUnits: number; idempotent: boolean }
+  | { success: false; code: "request_invalid" | "cost_evidence_already_recorded" | "idempotency_conflict" | "operation_failed"; message: string };
+
+export async function updatePendingCataloguePackQuantity(
+  operatorId: string,
+  input: UpdatePendingCataloguePackQuantityInput,
+): Promise<UpdatePendingCataloguePackQuantityResult> {
+  const purchaseOrderId = clean(input.purchaseOrderId);
+  const purchaseOrderLineId = clean(input.purchaseOrderLineId);
+  const idempotencyKey = clean(input.idempotencyKey);
+  if (!purchaseOrderId || !purchaseOrderLineId || !idempotencyKey || idempotencyKey.length > 200 || !Number.isSafeInteger(input.packCount) || input.packCount <= 0) {
+    return { success: false, code: "request_invalid", message: "Enter a positive whole pack quantity." };
+  }
+  try {
+    const { data, error } = await supabaseAdmin.rpc("update_pending_catalogue_purchase_line_pack_count", {
+      authoritative_payload: {
+        operator_id: operatorId,
+        purchase_order_id: purchaseOrderId,
+        purchase_order_line_id: purchaseOrderLineId,
+        pack_count: input.packCount,
+        idempotency_key: idempotencyKey,
+      },
+    });
+    if (error) {
+      if (error.message.includes("PENDING_CATALOGUE_QUANTITY_COST_EVIDENCE_ALREADY_RECORDED")) {
+        return { success: false, code: "cost_evidence_already_recorded", message: "Pack quantity must be corrected before freight or FX evidence is recorded." };
+      }
+      if (error.message.includes("PENDING_CATALOGUE_QUANTITY_IDEMPOTENCY_CONFLICT")) {
+        return { success: false, code: "idempotency_conflict", message: "This quantity edit conflicts with an earlier request. Refresh and try again." };
+      }
+      console.error("PENDING_CATALOGUE_PACK_QUANTITY_RPC_ERROR", { code: error.code, message: error.message, details: error.details, hint: error.hint });
+      return { success: false, code: "operation_failed", message: "The pack quantity could not be updated safely." };
+    }
+    const row = data?.[0] as { purchase_order_id?: string; purchase_order_line_id?: string; pack_count?: number; ordered_units?: number; idempotent?: boolean } | undefined;
+    if (!row?.purchase_order_id || !row.purchase_order_line_id || !Number.isInteger(row.pack_count) || !Number.isInteger(row.ordered_units)) {
+      return { success: false, code: "operation_failed", message: "The quantity update did not return durable draft evidence." };
+    }
+    return {
+      success: true,
+      purchaseOrderId: row.purchase_order_id,
+      purchaseOrderLineId: row.purchase_order_line_id,
+      packCount: row.pack_count!,
+      orderedUnits: row.ordered_units!,
+      idempotent: row.idempotent === true,
+    };
+  } catch (error) {
+    console.error("Unable to update pending catalogue pack quantity", error);
+    return { success: false, code: "operation_failed", message: "The pack quantity could not be updated safely." };
+  }
+}
