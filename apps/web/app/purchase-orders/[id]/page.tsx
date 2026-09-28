@@ -13,6 +13,7 @@ import { PendingCatalogueAddPanel } from "@/components/purchase-orders/PendingCa
 import { PendingCatalogueLinkCard } from "@/components/purchase-orders/PendingCatalogueLinkCard";
 import { PurchaseOrderProductImage } from "@/components/purchase-orders/PurchaseOrderProductImage";
 import { PurchaseOrderCostEvidence } from "@/components/purchase-orders/PurchaseOrderCostEvidence";
+import { PendingCataloguePackQuantityEditor } from "@/components/purchase-orders/PendingCataloguePackQuantityEditor";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder, getPurchaseOrderEvidenceState } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { loadManualFixedPackCandidates } from "@/lib/purchase-orders/ManualFixedPackCandidates";
@@ -470,6 +471,13 @@ export default async function PurchaseOrderDetailPage({
                     <strong>
                       {line.recommended_packs}
                     </strong>
+                    {draft.status === "draft" && line.source_recommendation_type === "pending_catalogue_purchase" ? (
+                      <PendingCataloguePackQuantityEditor
+                        purchaseOrderId={draft.id}
+                        purchaseOrderLineId={line.id}
+                        currentPackCount={line.recommended_packs}
+                      />
+                    ) : null}
                   </div>
 
                   <div>
