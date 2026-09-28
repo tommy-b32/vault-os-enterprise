@@ -1455,6 +1455,152 @@ async function getCanonicalPurchaseOrderImages(lines: Array<{ id: string; produc
   return result;
 }
 
+export type PurchaseOrderEvidenceState = {
+  freight: {
+    state: "available" | "missing" | "conflicting";
+    currentEvidenceCount: number;
+    evidence: {
+      evidenceId: string;
+      purchaseOrderId: string;
+      supplierId: string;
+      currency: string;
+      freightAmount: number;
+      shipmentWeight: number | null;
+      weightUnit: string | null;
+      shipmentReference: string;
+      sourceNote: string;
+      capturedAt: string;
+      supersedesEvidenceId: string | null;
+    } | null;
+  };
+  fxCommitment: {
+    state: "available" | "missing" | "conflicting";
+    currentEvidenceCount: number;
+    evidence: {
+      evidenceId: string;
+      purchaseOrderId: string;
+      supplierId: string;
+      sourceCurrency: string;
+      supplierLiabilityAmount: number;
+      fxRateToGbp: number;
+      gbpCommitmentAmount: number;
+      evidenceClassification: string;
+      liabilityEvidenceMode: string;
+      sourceEvidenceSnapshot: Record<string, unknown>;
+      sourceNote: string;
+      capturedAt: string;
+      supersedesEvidenceId: string | null;
+    } | null;
+  };
+  landedCostCompleteness: "complete_landed_cost" | "landed_cost_pending";
+};
+
+export async function getPurchaseOrderEvidenceState(
+  purchaseOrderId: string,
+): Promise<PurchaseOrderEvidenceState> {
+  const [freightResult, fxCommitmentResult, completenessResult] = await Promise.all([
+    supabaseAdmin
+      .from("vault_purchase_order_freight_evidence")
+      .select("id, purchase_order_id, supplier_id, currency, freight_amount, shipment_weight, weight_unit, shipment_reference, source_note, captured_at, supersedes_evidence_id")
+      .eq("purchase_order_id", purchaseOrderId),
+    supabaseAdmin
+      .from("vault_purchase_order_current_fx_commitment")
+      .select("purchase_order_id, current_evidence_count, commitment_evidence_state, fx_commitment_evidence_id, source_currency, supplier_liability_amount, fx_rate_to_gbp, gbp_commitment_amount")
+      .eq("purchase_order_id", purchaseOrderId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("vault_purchase_order_landed_cost_completeness")
+      .select("purchase_order_id, landed_cost_completeness")
+      .eq("purchase_order_id", purchaseOrderId)
+      .maybeSingle(),
+  ]);
+  if (freightResult.error) throw freightResult.error;
+  if (fxCommitmentResult.error) throw fxCommitmentResult.error;
+  if (completenessResult.error) throw completenessResult.error;
+  if (!fxCommitmentResult.data || !completenessResult.data) {
+    throw new Error("Purchase-order evidence state was not found.");
+  }
+
+  const freightRows = freightResult.data ?? [];
+  const currentFreight = freightRows.filter(
+    (evidence) => !freightRows.some((correction) => correction.supersedes_evidence_id === evidence.id),
+  );
+  const freightState = currentFreight.length === 1
+    ? "available"
+    : currentFreight.length === 0
+      ? "missing"
+      : "conflicting";
+  const freightEvidence = freightState === "available" ? currentFreight[0] : null;
+
+  const rawFxState = fxCommitmentResult.data.commitment_evidence_state;
+  if (rawFxState !== "available" && rawFxState !== "missing" && rawFxState !== "conflicting") {
+    throw new Error("Purchase-order FX commitment state is invalid.");
+  }
+  const rawCompleteness = completenessResult.data.landed_cost_completeness;
+  if (rawCompleteness !== "complete_landed_cost" && rawCompleteness !== "landed_cost_pending") {
+    throw new Error("Purchase-order landed-cost completeness is invalid.");
+  }
+
+  let fxEvidence: PurchaseOrderEvidenceState["fxCommitment"]["evidence"] = null;
+  if (rawFxState === "available") {
+    const evidenceId = fxCommitmentResult.data.fx_commitment_evidence_id;
+    if (!evidenceId) throw new Error("Available FX commitment evidence is incomplete.");
+    const { data, error } = await supabaseAdmin
+      .from("vault_purchase_order_fx_commitment_evidence")
+      .select("id, purchase_order_id, supplier_id, source_currency, supplier_liability_amount, fx_rate_to_gbp, gbp_commitment_amount, evidence_classification, liability_evidence_mode, source_evidence_snapshot, source_note, captured_at, supersedes_evidence_id")
+      .eq("id", evidenceId)
+      .eq("purchase_order_id", purchaseOrderId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data || !isRecord(data.source_evidence_snapshot)) {
+      throw new Error("Current FX commitment evidence is incomplete.");
+    }
+    fxEvidence = {
+      evidenceId: data.id,
+      purchaseOrderId: data.purchase_order_id,
+      supplierId: data.supplier_id,
+      sourceCurrency: data.source_currency,
+      supplierLiabilityAmount: Number(data.supplier_liability_amount),
+      fxRateToGbp: Number(data.fx_rate_to_gbp),
+      gbpCommitmentAmount: Number(data.gbp_commitment_amount),
+      evidenceClassification: data.evidence_classification,
+      liabilityEvidenceMode: data.liability_evidence_mode,
+      sourceEvidenceSnapshot: data.source_evidence_snapshot,
+      sourceNote: data.source_note,
+      capturedAt: data.captured_at,
+      supersedesEvidenceId: data.supersedes_evidence_id,
+    };
+  }
+
+  return {
+    freight: {
+      state: freightState,
+      currentEvidenceCount: currentFreight.length,
+      evidence: freightEvidence
+        ? {
+            evidenceId: freightEvidence.id,
+            purchaseOrderId: freightEvidence.purchase_order_id,
+            supplierId: freightEvidence.supplier_id,
+            currency: freightEvidence.currency,
+            freightAmount: Number(freightEvidence.freight_amount),
+            shipmentWeight: freightEvidence.shipment_weight === null ? null : Number(freightEvidence.shipment_weight),
+            weightUnit: freightEvidence.weight_unit,
+            shipmentReference: freightEvidence.shipment_reference,
+            sourceNote: freightEvidence.source_note,
+            capturedAt: freightEvidence.captured_at,
+            supersedesEvidenceId: freightEvidence.supersedes_evidence_id,
+          }
+        : null,
+    },
+    fxCommitment: {
+      state: rawFxState,
+      currentEvidenceCount: Number(fxCommitmentResult.data.current_evidence_count),
+      evidence: fxEvidence,
+    },
+    landedCostCompleteness: rawCompleteness,
+  };
+}
+
 export async function getPurchaseOrder(
   id: string,
 ) {
@@ -1796,6 +1942,114 @@ export async function recordPurchaseOrderPayment(input: {
     outstandingAmountGbp: Number(result.outstanding_amount_gbp),
     paymentDate: result.payment_date,
     transitioned: result.transitioned,
+  };
+}
+
+export async function recordPurchaseOrderFreightEvidence(input: {
+  purchaseOrderId: string;
+  supplierId: string;
+  operatorId: string;
+  currency: string;
+  freightAmount: number;
+  shipmentWeight: number;
+  weightUnit: "kg";
+  shipmentReference: string;
+  sourceNote: string;
+  idempotencyKey: string;
+  supersedesEvidenceId?: string;
+}): Promise<{ freightEvidenceId: string; idempotent: boolean }> {
+  const currency = input.currency.trim().toUpperCase();
+  if (!input.purchaseOrderId.trim() || !input.supplierId.trim() || !input.operatorId.trim() || !input.shipmentReference.trim() || !input.sourceNote.trim() || !input.idempotencyKey.trim() || !/^[A-Z]{3}$/.test(currency) || !Number.isFinite(input.freightAmount) || input.freightAmount <= 0 || !Number.isFinite(input.shipmentWeight) || input.shipmentWeight <= 0 || input.weightUnit !== "kg") {
+    throw new Error("Freight evidence requires PO, supplier, operator, currency, amount, weight, reference, provenance, and idempotency.");
+  }
+  const { data, error } = await supabaseAdmin.rpc("record_purchase_order_freight_evidence", {
+    authoritative_payload: {
+      purchase_order_id: input.purchaseOrderId.trim(), supplier_id: input.supplierId.trim(), operator_id: input.operatorId.trim(), currency,
+      freight_amount: input.freightAmount, shipment_weight: input.shipmentWeight, weight_unit: input.weightUnit,
+      shipment_reference: input.shipmentReference.trim(), source_note: input.sourceNote.trim(), idempotency_key: input.idempotencyKey.trim(),
+      ...(input.supersedesEvidenceId?.trim() ? { supersedes_evidence_id: input.supersedesEvidenceId.trim() } : {}),
+    },
+  });
+  if (error) throw new Error(error.message);
+  const result = data?.[0];
+  if (!result?.freight_evidence_id) throw new Error("Freight evidence did not return durable evidence.");
+  return { freightEvidenceId: result.freight_evidence_id, idempotent: result.idempotent === true };
+}
+
+export async function recordPurchaseOrderFxCommitmentEvidence(input: {
+  purchaseOrderId: string;
+  supplierId: string;
+  operatorId: string;
+  sourceCurrency: string;
+  supplierLiabilityAmount: number;
+  fxRateToGbp: number;
+  liabilityEvidenceMode:
+    | "reconciled_immutable_po_evidence"
+    | "operator_supplied_supplier_liability_evidence";
+  sourceEvidenceSnapshot: Record<string, unknown>;
+  sourceNote: string;
+  idempotencyKey: string;
+  supersedesEvidenceId?: string;
+}): Promise<{ fxCommitmentEvidenceId: string; idempotent: boolean }> {
+  const sourceCurrency = input.sourceCurrency.trim().toUpperCase();
+  const hasSourceEvidence =
+    input.sourceEvidenceSnapshot !== null &&
+    typeof input.sourceEvidenceSnapshot === "object" &&
+    !Array.isArray(input.sourceEvidenceSnapshot) &&
+    Object.keys(input.sourceEvidenceSnapshot).length > 0;
+  if (
+    !input.purchaseOrderId.trim() ||
+    !input.supplierId.trim() ||
+    !input.operatorId.trim() ||
+    !input.sourceNote.trim() ||
+    !input.idempotencyKey.trim() ||
+    !/^[A-Z]{3}$/.test(sourceCurrency) ||
+    !Number.isFinite(input.supplierLiabilityAmount) ||
+    input.supplierLiabilityAmount <= 0 ||
+    !Number.isFinite(input.fxRateToGbp) ||
+    input.fxRateToGbp <= 0 ||
+    ![
+      "reconciled_immutable_po_evidence",
+      "operator_supplied_supplier_liability_evidence",
+    ].includes(input.liabilityEvidenceMode) ||
+    !hasSourceEvidence
+  ) {
+    throw new Error(
+      "FX commitment evidence requires PO, supplier, operator, currency, liability, FX rate, evidence mode, provenance, and idempotency.",
+    );
+  }
+
+  const gbpCommitmentAmount =
+    Math.round((input.supplierLiabilityAmount * input.fxRateToGbp + Number.EPSILON) * 100) / 100;
+  const { data, error } = await supabaseAdmin.rpc(
+    "record_purchase_order_fx_commitment_evidence",
+    {
+      authoritative_payload: {
+        purchase_order_id: input.purchaseOrderId.trim(),
+        supplier_id: input.supplierId.trim(),
+        operator_id: input.operatorId.trim(),
+        source_currency: sourceCurrency,
+        supplier_liability_amount: input.supplierLiabilityAmount,
+        fx_rate_to_gbp: input.fxRateToGbp,
+        gbp_commitment_amount: gbpCommitmentAmount,
+        liability_evidence_mode: input.liabilityEvidenceMode,
+        source_evidence_snapshot: input.sourceEvidenceSnapshot,
+        source_note: input.sourceNote.trim(),
+        idempotency_key: input.idempotencyKey.trim(),
+        ...(input.supersedesEvidenceId?.trim()
+          ? { supersedes_evidence_id: input.supersedesEvidenceId.trim() }
+          : {}),
+      },
+    },
+  );
+  if (error) throw new Error(error.message);
+  const result = data?.[0];
+  if (!result?.fx_commitment_evidence_id) {
+    throw new Error("FX commitment evidence did not return durable evidence.");
+  }
+  return {
+    fxCommitmentEvidenceId: result.fx_commitment_evidence_id,
+    idempotent: result.idempotent === true,
   };
 }
 

@@ -14,7 +14,10 @@ test("governed payload sends identity and composition but never browser commerci
   assert.match(repository,/pack_profile_id: clean\(input.packProfileId\)/);
   assert.match(repository,/units_per_pack: size.unitsPerPack/);
   assert.match(repository,/governed \? \{ cost_type_id/);
-  assert.match(panel,/unitCostGbp:0/);
+  assert.doesNotMatch(panel,/unitCostGbp|merchandisePackCost:/);
+  assert.match(panel,/commercialState==="merchandise_only_landed_cost_pending"/);
+  assert.match(panel,/Freight: Pending/);
+  assert.match(panel,/Landed GBP cost: Pending/);
   assert.match(panel,/Governed commercial preview/);
   assert.match(panel,/Create & Add to PO/);
 });

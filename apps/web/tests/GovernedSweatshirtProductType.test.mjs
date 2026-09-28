@@ -5,6 +5,7 @@ import test from "node:test";
 import ts from "typescript";
 
 const migration = await readFile(new URL("../../../supabase/migrations/20261053000000_governed_sweatshirt_product_type.sql", import.meta.url), "utf8");
+const tracksuitMigration = await readFile(new URL("../../../supabase/migrations/20261054000000_governed_tracksuit_product_type.sql", import.meta.url), "utf8");
 const repository = await readFile(new URL("../lib/purchase-orders/PendingCatalogueDraftRepository.ts", import.meta.url), "utf8");
 const pendingMigration = await readFile(new URL("../../../supabase/migrations/20261051000000_governed_pending_catalogue_purchasing_intake.sql", import.meta.url), "utf8");
 const require = createRequire(import.meta.url);
@@ -34,6 +35,14 @@ test("Sweatshirt has an explicit governed five-piece identity and Exclusive merc
   assert.match(migration, /'USD', 80\.00, 'merchandise_only', 'unknown'/);
   assert.match(migration, /Owner-supplied Exclusive Sweatshirt merchandise cost: USD 80\.00 per five-unit pack; shipping evidence is not yet supplied\./);
   assert.doesNotMatch(migration, /insert into public\.vault_supplier_product_type_cost_profiles/i);
+});
+
+test("Tracksuit has the same explicit five-piece governance with independent merchandise-only evidence", () => {
+  assert.match(tracksuitMigration, /\('tracksuit', 'Tracksuit'\)/);
+  assert.match(tracksuitMigration, /\('tracksuit_5_piece', 'Tracksuit', 5\)/);
+  assert.match(tracksuitMigration, /\('tracksuit', 'tracksuit_5_piece'\)/);
+  assert.match(tracksuitMigration, /'USD', 175\.00, 'merchandise_only', 'unknown'/);
+  assert.match(tracksuitMigration, /shipping is unknown and product-unallocated/);
 });
 
 test("pending intake permits only explicit active type-pack compatibility and retains commercial fail-closed behavior", () => {

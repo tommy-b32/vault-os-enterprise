@@ -13,6 +13,8 @@ import {
   markPurchaseOrderShipped,
   prepareApprovedPurchaseOrder,
   postReceivedInventory,
+  recordPurchaseOrderFreightEvidence,
+  recordPurchaseOrderFxCommitmentEvidence,
   recordPurchaseOrderPayment,
   recordPurchaseOrderReceipt,
   type CreatePurchaseOrderDraftInput,
@@ -71,9 +73,9 @@ export async function addPendingCatalogueProductToDraftAction(input: AddPendingC
   try {
     const purchaseOrderId = typeof input?.purchaseOrderId === "string" ? input.purchaseOrderId.trim() : "";
     const idempotencyKey = typeof input?.idempotencyKey === "string" ? input.idempotencyKey.trim() : "";
+    const governed = Boolean(input?.costTypeId?.trim() || input?.packProfileId?.trim() || input?.packCount !== undefined);
     if (!UUID_PATTERN.test(purchaseOrderId) || !idempotencyKey || idempotencyKey.length > 200
-      || !Number.isSafeInteger(input?.orderedUnits) || input.orderedUnits <= 0
-      || typeof input?.unitCostGbp !== "number" || !Number.isFinite(input.unitCostGbp) || input.unitCostGbp < 0
+      || (!governed && (!Number.isSafeInteger(input?.orderedUnits) || input.orderedUnits! <= 0 || typeof input?.unitCostGbp !== "number" || !Number.isFinite(input.unitCostGbp) || input.unitCostGbp < 0))
       || !Array.isArray(input?.sizes)) {
       return { success: false, code: "request_invalid", message: "The new product request is invalid." };
     }
@@ -316,6 +318,134 @@ export type RecordPurchaseOrderPaymentState = {
   status: "idle" | "success" | "error";
   message: string;
 };
+
+export type RecordPurchaseOrderEvidenceState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export async function recordPurchaseOrderFreightEvidenceAction(
+  _previousState: RecordPurchaseOrderEvidenceState,
+  formData: FormData,
+): Promise<RecordPurchaseOrderEvidenceState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    const supplierId = formData.get("supplier_id");
+    const currency = formData.get("currency");
+    const freightAmount = Number(formData.get("freight_amount"));
+    const shipmentWeight = Number(formData.get("shipment_weight"));
+    const weightUnit = formData.get("weight_unit");
+    const shipmentReference = formData.get("shipment_reference");
+    const sourceNote = formData.get("source_note");
+    const idempotencyKey = formData.get("idempotency_key");
+    const supersedesEvidenceId = formData.get("supersedes_evidence_id");
+
+    if (
+      typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId) ||
+      typeof supplierId !== "string" || !UUID_PATTERN.test(supplierId) ||
+      typeof currency !== "string" || !currency.trim() ||
+      !Number.isFinite(freightAmount) || freightAmount <= 0 ||
+      !Number.isFinite(shipmentWeight) || shipmentWeight <= 0 ||
+      typeof weightUnit !== "string" || weightUnit.trim() !== "kg" ||
+      typeof shipmentReference !== "string" || !shipmentReference.trim() ||
+      typeof sourceNote !== "string" || !sourceNote.trim() ||
+      typeof idempotencyKey !== "string" || !idempotencyKey.trim() ||
+      (typeof supersedesEvidenceId === "string" && supersedesEvidenceId.trim() && !UUID_PATTERN.test(supersedesEvidenceId))
+    ) {
+      return { status: "error", message: "Enter valid freight evidence, including PO, supplier, amount, weight, provenance, and operation identity." };
+    }
+
+    const result = await recordPurchaseOrderFreightEvidence({
+      purchaseOrderId,
+      supplierId,
+      operatorId: operator.id,
+      currency,
+      freightAmount,
+      shipmentWeight,
+      weightUnit: "kg",
+      shipmentReference,
+      sourceNote,
+      idempotencyKey,
+      ...(typeof supersedesEvidenceId === "string" && supersedesEvidenceId.trim()
+        ? { supersedesEvidenceId }
+        : {}),
+    });
+    revalidatePath("/purchase-orders");
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return { status: "success", message: result.idempotent ? "This freight evidence was already recorded." : "Freight evidence recorded." };
+  } catch (error) {
+    console.error("Unable to record purchase-order freight evidence", error);
+    return { status: "error", message: error instanceof Error ? error.message : "Freight evidence could not be recorded." };
+  }
+}
+
+export async function recordPurchaseOrderFxCommitmentEvidenceAction(
+  _previousState: RecordPurchaseOrderEvidenceState,
+  formData: FormData,
+): Promise<RecordPurchaseOrderEvidenceState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    const supplierId = formData.get("supplier_id");
+    const sourceCurrency = formData.get("source_currency");
+    const supplierLiabilityAmount = Number(formData.get("supplier_liability_amount"));
+    const fxRateToGbp = Number(formData.get("fx_rate_to_gbp"));
+    const liabilityEvidenceMode = formData.get("liability_evidence_mode");
+    const sourceEvidenceSnapshotRaw = formData.get("source_evidence_snapshot");
+    const sourceNote = formData.get("source_note");
+    const idempotencyKey = formData.get("idempotency_key");
+    const supersedesEvidenceId = formData.get("supersedes_evidence_id");
+    let sourceEvidenceSnapshot: Record<string, unknown> | null = null;
+    if (typeof sourceEvidenceSnapshotRaw === "string") {
+      try {
+        const parsed = JSON.parse(sourceEvidenceSnapshotRaw);
+        if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
+          sourceEvidenceSnapshot = parsed as Record<string, unknown>;
+        }
+      } catch {
+        sourceEvidenceSnapshot = null;
+      }
+    }
+
+    if (
+      typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId) ||
+      typeof supplierId !== "string" || !UUID_PATTERN.test(supplierId) ||
+      typeof sourceCurrency !== "string" || !sourceCurrency.trim() ||
+      !Number.isFinite(supplierLiabilityAmount) || supplierLiabilityAmount <= 0 ||
+      !Number.isFinite(fxRateToGbp) || fxRateToGbp <= 0 ||
+      (liabilityEvidenceMode !== "reconciled_immutable_po_evidence" && liabilityEvidenceMode !== "operator_supplied_supplier_liability_evidence") ||
+      !sourceEvidenceSnapshot ||
+      typeof sourceNote !== "string" || !sourceNote.trim() ||
+      typeof idempotencyKey !== "string" || !idempotencyKey.trim() ||
+      (typeof supersedesEvidenceId === "string" && supersedesEvidenceId.trim() && !UUID_PATTERN.test(supersedesEvidenceId))
+    ) {
+      return { status: "error", message: "Enter valid FX commitment evidence, including an explicit positive FX rate, provenance, and operation identity." };
+    }
+
+    const result = await recordPurchaseOrderFxCommitmentEvidence({
+      purchaseOrderId,
+      supplierId,
+      operatorId: operator.id,
+      sourceCurrency,
+      supplierLiabilityAmount,
+      fxRateToGbp,
+      liabilityEvidenceMode,
+      sourceEvidenceSnapshot,
+      sourceNote,
+      idempotencyKey,
+      ...(typeof supersedesEvidenceId === "string" && supersedesEvidenceId.trim()
+        ? { supersedesEvidenceId }
+        : {}),
+    });
+    revalidatePath("/purchase-orders");
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return { status: "success", message: result.idempotent ? "This FX commitment evidence was already recorded." : "FX commitment evidence recorded." };
+  } catch (error) {
+    console.error("Unable to record purchase-order FX commitment evidence", error);
+    return { status: "error", message: error instanceof Error ? error.message : "FX commitment evidence could not be recorded." };
+  }
+}
 
 export async function recordPaymentAgainstPurchaseOrder(
   _previousState: RecordPurchaseOrderPaymentState,

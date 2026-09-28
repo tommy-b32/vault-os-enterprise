@@ -1,0 +1,5 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+const source=await readFile(new URL("../lib/purchase-orders/PurchaseOrderRepository.ts",import.meta.url),"utf8");
+test("freight repository maps governed USD freight evidence without PO or product cost writes",()=>{assert.match(source,/recordPurchaseOrderFreightEvidence/);assert.match(source,/record_purchase_order_freight_evidence/);for(const field of ["purchase_order_id","supplier_id","operator_id","currency","freight_amount","shipment_weight","weight_unit","shipment_reference","source_note","idempotency_key"])assert.match(source,new RegExp(field));assert.match(source,/freightAmount: number/);assert.match(source,/shipmentWeight: number/);assert.match(source,/weightUnit: "kg"/);assert.doesNotMatch(source.slice(source.indexOf("recordPurchaseOrderFreightEvidence"),source.indexOf("export async function recordPurchaseOrderReceipt")),/estimated_total_gbp|actual_total_gbp|line_cost_gbp|pack_cost_gbp|allocation/);});

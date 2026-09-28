@@ -12,8 +12,9 @@ import { ManualFixedPackAddPanel } from "@/components/purchase-orders/ManualFixe
 import { PendingCatalogueAddPanel } from "@/components/purchase-orders/PendingCatalogueAddPanel";
 import { PendingCatalogueLinkCard } from "@/components/purchase-orders/PendingCatalogueLinkCard";
 import { PurchaseOrderProductImage } from "@/components/purchase-orders/PurchaseOrderProductImage";
+import { PurchaseOrderCostEvidence } from "@/components/purchase-orders/PurchaseOrderCostEvidence";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
-import { getPurchaseOrder } from "@/lib/purchase-orders/PurchaseOrderRepository";
+import { getPurchaseOrder, getPurchaseOrderEvidenceState } from "@/lib/purchase-orders/PurchaseOrderRepository";
 import { loadManualFixedPackCandidates } from "@/lib/purchase-orders/ManualFixedPackCandidates";
 import { loadPendingCatalogueLinkContexts } from "@/lib/purchase-orders/PendingCatalogueLinkRepository";
 import { loadPendingCatalogueDuplicateCandidates, loadPendingCatalogueGovernedOptions } from "@/lib/purchase-orders/PendingCatalogueDraftRepository";
@@ -177,9 +178,13 @@ export default async function PurchaseOrderDetailPage({
     (draft.vault_purchase_order_lines ??
       []) as SavedPurchaseOrderLine[];
   const mixedIntakeCompatible = lines.every((line) => ["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase", "pending_catalogue_purchase"].includes(line.source_recommendation_type));
-  const manualCandidates = await loadManualFixedPackCandidates(draft.id);
-  const pendingLinkContexts = await loadPendingCatalogueLinkContexts(draft.id);
-  const [pendingGovernedOptions, pendingDuplicateCandidates] = await Promise.all([loadPendingCatalogueGovernedOptions(draft.supplier_id), loadPendingCatalogueDuplicateCandidates(draft.supplier_id)]);
+  const [manualCandidates, pendingLinkContexts, pendingGovernedOptions, pendingDuplicateCandidates, evidenceState] = await Promise.all([
+    loadManualFixedPackCandidates(draft.id),
+    loadPendingCatalogueLinkContexts(draft.id),
+    loadPendingCatalogueGovernedOptions(draft.supplier_id),
+    loadPendingCatalogueDuplicateCandidates(draft.supplier_id),
+    getPurchaseOrderEvidenceState(draft.id),
+  ]);
   const pendingProductsReadyToPost = new Set(pendingLinkContexts.filter((context) => context.status === "linked" && context.links.length === context.sizes.length && context.sizes.every((size) => size.physicalReceived === size.orderedUnits)).map((context) => context.pendingProductId));
 
   const totalUnits =
@@ -548,6 +553,13 @@ export default async function PurchaseOrderDetailPage({
             </p>
           ) : null}
         </section>
+
+        <PurchaseOrderCostEvidence
+          canRecord={draft.status === "draft"}
+          evidence={evidenceState}
+          purchaseOrderId={draft.id}
+          supplierId={draft.supplier_id}
+        />
 
         {["draft", "approved", "ordered", "cancelled"].includes(draft.status) ? (
           <PurchaseOrderCancellation

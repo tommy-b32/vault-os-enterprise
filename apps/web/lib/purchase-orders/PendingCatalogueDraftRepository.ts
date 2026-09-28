@@ -18,8 +18,8 @@ export type AddPendingCatalogueProductInput = {
   colourModel: string;
   modelDesign: string;
   notes: string;
-  orderedUnits: number;
-  unitCostGbp: number;
+  orderedUnits?: number;
+  unitCostGbp?: number;
   costTypeId?: string;
   packProfileId?: string;
   packCount?: number;
@@ -34,18 +34,19 @@ export type PendingCatalogueGovernedOption = {
   packProfileName: string;
   unitsPerPack: number;
   supplierCurrency: string;
-  exchangeRateToGbp: number;
-  packCost: number;
-  shippingCostPerPack: number;
-  importCostPerPack: number;
-  landedCostPerPackGbp: number;
+  commercialState: "complete_landed_cost" | "merchandise_only_landed_cost_pending";
+  merchandisePackCost: number;
+  exchangeRateToGbp: number | null;
+  shippingCostPerPack: number | null;
+  importCostPerPack: number | null;
+  landedCostPerPackGbp: number | null;
 };
 
 export type PendingCatalogueDuplicateCandidate = { id: string; workingTitle: string; supplierReference: string | null; colourModel: string | null; status: string };
 
 export type PendingCatalogueDraftResult =
   | { success: true; purchaseOrderId: string; purchaseOrderLineId: string; pendingCatalogueProductId: string; idempotent: boolean }
-  | { success: false; code: "request_invalid" | "po_not_found" | "po_not_draft" | "supplier_mismatch" | "po_not_pending_compatible" | "idempotency_conflict" | "operation_failed"; message: string };
+  | { success: false; code: "request_invalid" | "po_not_found" | "po_not_draft" | "supplier_mismatch" | "po_not_pending_compatible" | "commercial_evidence_unavailable" | "idempotency_conflict" | "operation_failed"; message: string };
 
 type Dependencies = { client: typeof supabaseAdmin };
 const productionDependencies: Dependencies = { client: supabaseAdmin };
@@ -81,13 +82,14 @@ export async function loadPendingCatalogueGovernedOptions(
   supplierId: string,
   client: typeof supabaseAdmin = supabaseAdmin,
 ): Promise<PendingCatalogueGovernedOption[]> {
-  const [profiles, types, packs, compatibilities] = await Promise.all([
+  const [profiles, merchandiseEvidence, types, packs, compatibilities] = await Promise.all([
     client.from("vault_supplier_product_type_cost_profiles").select("id,cost_type_id,supplier_currency,exchange_rate_to_gbp,pack_cost,shipping_cost_per_pack,import_cost_per_pack,units_per_pack").eq("supplier_id", supplierId).eq("active", true),
+    client.from("vault_supplier_product_type_merchandise_cost_evidence").select("id,cost_type_id,pack_profile_id,supplier_currency,merchandise_pack_cost,cost_scope,shipping_evidence_status").eq("supplier_id", supplierId),
     client.from("vault_cost_types").select("id,display_name").eq("active", true),
     client.from("vault_pack_profiles").select("id,display_name,units_per_pack").eq("active", true).not("units_per_pack", "is", null),
     client.from("vault_cost_type_pack_profile_compatibilities").select("cost_type_id,pack_profile_id").eq("active", true),
   ]);
-  if (profiles.error || types.error || packs.error || compatibilities.error) throw profiles.error ?? types.error ?? packs.error ?? compatibilities.error;
+  if (profiles.error || merchandiseEvidence.error || types.error || packs.error || compatibilities.error) throw profiles.error ?? merchandiseEvidence.error ?? types.error ?? packs.error ?? compatibilities.error;
   const names = new Map((types.data ?? []).map((row: any) => [row.id, row.display_name]));
   const compatiblePairs = new Set((compatibilities.data ?? []).map((row: any) => `${row.cost_type_id}:${row.pack_profile_id}`));
   const packsByUnits = new Map<number, any[]>();
@@ -95,13 +97,28 @@ export async function loadPendingCatalogueGovernedOptions(
     const group = packsByUnits.get(pack.units_per_pack) ?? [];
     group.push(pack); packsByUnits.set(pack.units_per_pack, group);
   }
-  return (profiles.data ?? []).flatMap((profile: any) => {
+  const complete = (profiles.data ?? []).flatMap((profile: any) => {
     const matchingPacks = (packsByUnits.get(profile.units_per_pack) ?? []).filter((pack) => compatiblePairs.has(`${profile.cost_type_id}:${pack.id}`));
     const costTypeName = names.get(profile.cost_type_id);
     if (!matchingPacks.length || !costTypeName || !Number.isInteger(profile.units_per_pack) || profile.units_per_pack <= 0) return [];
     const landed = Number(profile.pack_cost) + Number(profile.shipping_cost_per_pack) + Number(profile.import_cost_per_pack);
-    return matchingPacks.map((pack) => ({ costTypeId: profile.cost_type_id, costTypeName, packProfileId: pack.id, packProfileName: pack.display_name, unitsPerPack: profile.units_per_pack, supplierCurrency: profile.supplier_currency, exchangeRateToGbp: Number(profile.exchange_rate_to_gbp), packCost: Number(profile.pack_cost), shippingCostPerPack: Number(profile.shipping_cost_per_pack), importCostPerPack: Number(profile.import_cost_per_pack), landedCostPerPackGbp: Math.round(landed * Number(profile.exchange_rate_to_gbp) * 100) / 100 }));
-  }).sort((left, right) => left.costTypeName.localeCompare(right.costTypeName) || left.packProfileName.localeCompare(right.packProfileName));
+    return matchingPacks.map((pack) => ({ costTypeId: profile.cost_type_id, costTypeName, packProfileId: pack.id, packProfileName: pack.display_name, unitsPerPack: profile.units_per_pack, supplierCurrency: profile.supplier_currency, commercialState: "complete_landed_cost" as const, merchandisePackCost: Number(profile.pack_cost), exchangeRateToGbp: Number(profile.exchange_rate_to_gbp), shippingCostPerPack: Number(profile.shipping_cost_per_pack), importCostPerPack: Number(profile.import_cost_per_pack), landedCostPerPackGbp: Math.round(landed * Number(profile.exchange_rate_to_gbp) * 100) / 100 }));
+  });
+  const completePairs = new Set(complete.map((option) => `${option.costTypeId}:${option.packProfileId}`));
+  const merchandiseOnly = (merchandiseEvidence.data ?? []).flatMap((evidence: any) => {
+    const pair = `${evidence.cost_type_id}:${evidence.pack_profile_id}`;
+    const pack = (packs.data ?? []).find((candidate: any) => candidate.id === evidence.pack_profile_id);
+    const costTypeName = names.get(evidence.cost_type_id);
+    if (completePairs.has(pair) || !costTypeName || !pack || !compatiblePairs.has(pair) || evidence.cost_scope !== "merchandise_only" || evidence.shipping_evidence_status !== "unknown" || !Number.isInteger(pack.units_per_pack) || pack.units_per_pack <= 0 || !Number.isFinite(Number(evidence.merchandise_pack_cost)) || Number(evidence.merchandise_pack_cost) <= 0) return [];
+    return [{ costTypeId: evidence.cost_type_id, costTypeName, packProfileId: pack.id, packProfileName: pack.display_name, unitsPerPack: pack.units_per_pack, supplierCurrency: evidence.supplier_currency, commercialState: "merchandise_only_landed_cost_pending" as const, merchandisePackCost: Number(evidence.merchandise_pack_cost), exchangeRateToGbp: null, shippingCostPerPack: null, importCostPerPack: null, landedCostPerPackGbp: null }];
+  });
+  return [...complete, ...merchandiseOnly].sort((left, right) => left.costTypeName.localeCompare(right.costTypeName) || left.packProfileName.localeCompare(right.packProfileName));
+}
+
+async function resolveGovernedCommercialState(client: typeof supabaseAdmin, supplierId: string, costTypeId: string, packProfileId: string): Promise<"complete_landed_cost" | "merchandise_only_landed_cost_pending"> {
+  const option = (await loadPendingCatalogueGovernedOptions(supplierId, client)).find((candidate) => candidate.costTypeId === costTypeId && candidate.packProfileId === packProfileId);
+  if (!option) return fail("commercial_evidence_unavailable", "No governed commercial evidence is available for this product type and pack profile.");
+  return option.commercialState;
 }
 
 export async function loadPendingCatalogueDuplicateCandidates(
@@ -128,7 +145,7 @@ export async function addPendingCatalogueProductToDraftFrom(
     const governed = Boolean(clean(input.costTypeId) || clean(input.packProfileId) || input.packCount !== undefined);
     if (!purchaseOrderId || !workingTitle || !modelDesign || !idempotencyKey || idempotencyKey.length > 200 || !Array.isArray(input.sizes) || input.sizes.length === 0) fail("request_invalid", "Enter a product, model/design, and exact size composition.");
     if (governed && (!clean(input.costTypeId) || !clean(input.packProfileId) || !Number.isSafeInteger(input.packCount) || input.packCount! <= 0)) fail("request_invalid", "Select a governed product type, pack profile, and positive pack count.");
-    if (!governed && (!Number.isSafeInteger(input.orderedUnits) || input.orderedUnits <= 0 || !validMoney(input.unitCostGbp))) fail("request_invalid", "Enter a positive ordered quantity and unit cost.");
+    if (!governed && (!Number.isSafeInteger(input.orderedUnits) || input.orderedUnits! <= 0 || !validMoney(input.unitCostGbp))) fail("request_invalid", "Enter a positive ordered quantity and unit cost.");
     const sizes = input.sizes.map((size) => ({
       supplierSizeLabel: clean(size?.supplierSizeLabel),
       normalizedSize: clean(size?.normalizedSize),
@@ -161,6 +178,7 @@ export async function addPendingCatalogueProductToDraftFrom(
     if (supplierError) throw supplierError;
     if (!supplier?.is_active || supplier.id !== purchaseOrder.supplier_id) return fail("supplier_mismatch", "The draft supplier is unavailable.");
 
+    const commercialState = governed ? await resolveGovernedCommercialState(dependencies.client, purchaseOrder.supplier_id, clean(input.costTypeId), clean(input.packProfileId)) : "complete_landed_cost";
     const payload = {
       operator_id: operatorId,
       purchase_order_id: purchaseOrder.id,
@@ -175,7 +193,8 @@ export async function addPendingCatalogueProductToDraftFrom(
       notes: clean(input.notes) || null,
       ...(governed ? { cost_type_id: clean(input.costTypeId), pack_profile_id: clean(input.packProfileId), pack_count: input.packCount, sizes: sizes.map((size) => ({ supplier_size_label: size.supplierSizeLabel, normalized_size: size.normalizedSize, units_per_pack: size.unitsPerPack })) } : { ordered_units: input.orderedUnits, unit_cost_gbp: input.unitCostGbp, sizes: sizes.map((size) => ({ supplier_size_label: size.supplierSizeLabel, normalized_size: size.normalizedSize, ordered_units: size.orderedUnits })) }),
     };
-    const { data, error } = await dependencies.client.rpc("create_pending_catalogue_purchase_line", { authoritative_payload: payload });
+    const rpcName = commercialState === "merchandise_only_landed_cost_pending" ? "create_pending_catalogue_merchandise_only_purchase_line" : "create_pending_catalogue_purchase_line";
+    const { data, error } = await dependencies.client.rpc(rpcName, { authoritative_payload: payload });
     if (error) {
       const code = error.message === "PENDING_CATALOGUE_IDEMPOTENCY_CONFLICT" ? "idempotency_conflict" : "operation_failed";
       fail(code, code === "idempotency_conflict" ? "This request conflicts with the current draft. Refresh and try again." : "The new catalogue product could not be added to this draft.");
