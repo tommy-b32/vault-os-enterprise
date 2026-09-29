@@ -23,8 +23,7 @@ test("freight action resolves the trusted operator, maps governed freight eviden
     "supplier_id",
     "currency",
     "freight_amount",
-    "shipment_weight",
-    "weight_unit",
+    "supplier_chargeable_weight_kg",
     "shipment_reference",
     "source_note",
     "idempotency_key",
@@ -33,8 +32,8 @@ test("freight action resolves the trusted operator, maps governed freight eviden
   }
   assert.match(freightAction, /operatorId: operator\.id/);
   assert.match(freightAction, /freightAmount/);
-  assert.match(freightAction, /shipmentWeight/);
-  assert.match(freightAction, /weightUnit: "kg"/);
+  assert.match(freightAction, /supplierChargeableWeightKg/);
+  assert.doesNotMatch(freightAction, /shipmentWeight|weightUnit/);
   assert.match(freightAction, /revalidatePath\(\`\/purchase-orders\/\$\{purchaseOrderId\}\`\)/);
   assert.doesNotMatch(freightAction, /estimated_total_gbp|actual_total_gbp|line_cost_gbp|pack_cost_gbp|allocation/);
 });

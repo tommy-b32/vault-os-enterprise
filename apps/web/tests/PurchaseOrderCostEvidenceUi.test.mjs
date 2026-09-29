@@ -19,7 +19,11 @@ test("purchase-cost evidence UI renders governed states and submits only establi
   assert.match(component, /FX commitment not recorded/);
   assert.match(component, /FX commitment evidence requires review/);
   assert.match(component, /freight\.freightAmount/);
-  assert.match(component, /freight\.shipmentWeight/);
+  assert.match(component, /Supplier chargeable weight/);
+  assert.match(component, /Actual measured shipment weight/);
+  assert.match(component, /Legacy \/ unclassified/);
+  assert.match(component, /freight\.supplierChargeableWeightKg/);
+  assert.doesNotMatch(component, /Shipment weight \(kg\)/);
   assert.match(component, /fx\.supplierLiabilityAmount/);
   assert.match(component, /fx\.fxRateToGbp/);
   assert.match(component, /fx\.gbpCommitmentAmount/);

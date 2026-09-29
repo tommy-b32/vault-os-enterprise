@@ -1465,8 +1465,10 @@ export type PurchaseOrderEvidenceState = {
       supplierId: string;
       currency: string;
       freightAmount: number;
-      shipmentWeight: number | null;
-      weightUnit: string | null;
+      semanticState: "legacy_weight_semantics_unclassified" | "classified" | "conflicting";
+      supplierChargeableWeightKg: number | null;
+      actualMeasuredShipmentWeightKg: number | null;
+      actualMeasuredShipmentWeightStatus: "unknown" | "recorded" | null;
       shipmentReference: string;
       sourceNote: string;
       capturedAt: string;
@@ -1498,11 +1500,12 @@ export type PurchaseOrderEvidenceState = {
 export async function getPurchaseOrderEvidenceState(
   purchaseOrderId: string,
 ): Promise<PurchaseOrderEvidenceState> {
-  const [freightResult, fxCommitmentResult, completenessResult] = await Promise.all([
+  const [freightResult, freightSemanticsResult, fxCommitmentResult, completenessResult] = await Promise.all([
     supabaseAdmin
       .from("vault_purchase_order_freight_evidence")
-      .select("id, purchase_order_id, supplier_id, currency, freight_amount, shipment_weight, weight_unit, shipment_reference, source_note, captured_at, supersedes_evidence_id")
+      .select("id, purchase_order_id, supplier_id, currency, freight_amount, shipment_reference, source_note, captured_at, supersedes_evidence_id")
       .eq("purchase_order_id", purchaseOrderId),
+    supabaseAdmin.from("vault_purchase_order_freight_weight_semantics").select("freight_evidence_id, semantic_state, supplier_chargeable_weight_kg, actual_measured_shipment_weight_kg, actual_measured_shipment_weight_status"),
     supabaseAdmin
       .from("vault_purchase_order_current_fx_commitment")
       .select("purchase_order_id, current_evidence_count, commitment_evidence_state, fx_commitment_evidence_id, source_currency, supplier_liability_amount, fx_rate_to_gbp, gbp_commitment_amount")
@@ -1515,6 +1518,7 @@ export async function getPurchaseOrderEvidenceState(
       .maybeSingle(),
   ]);
   if (freightResult.error) throw freightResult.error;
+  if (freightSemanticsResult.error) throw freightSemanticsResult.error;
   if (fxCommitmentResult.error) throw fxCommitmentResult.error;
   if (completenessResult.error) throw completenessResult.error;
   if (!fxCommitmentResult.data || !completenessResult.data) {
@@ -1531,6 +1535,7 @@ export async function getPurchaseOrderEvidenceState(
       ? "missing"
       : "conflicting";
   const freightEvidence = freightState === "available" ? currentFreight[0] : null;
+  const semanticsByFreightId = new Map((freightSemanticsResult.data ?? []).map((row) => [row.freight_evidence_id, row]));
 
   const rawFxState = fxCommitmentResult.data.commitment_evidence_state;
   if (rawFxState !== "available" && rawFxState !== "missing" && rawFxState !== "conflicting") {
@@ -1583,8 +1588,10 @@ export async function getPurchaseOrderEvidenceState(
             supplierId: freightEvidence.supplier_id,
             currency: freightEvidence.currency,
             freightAmount: Number(freightEvidence.freight_amount),
-            shipmentWeight: freightEvidence.shipment_weight === null ? null : Number(freightEvidence.shipment_weight),
-            weightUnit: freightEvidence.weight_unit,
+            semanticState: (() => { const state = semanticsByFreightId.get(freightEvidence.id)?.semantic_state; return state === "classified" || state === "conflicting" ? state : "legacy_weight_semantics_unclassified"; })(),
+            supplierChargeableWeightKg: (() => { const value = semanticsByFreightId.get(freightEvidence.id)?.supplier_chargeable_weight_kg; return value === null || value === undefined ? null : Number(value); })(),
+            actualMeasuredShipmentWeightKg: (() => { const value = semanticsByFreightId.get(freightEvidence.id)?.actual_measured_shipment_weight_kg; return value === null || value === undefined ? null : Number(value); })(),
+            actualMeasuredShipmentWeightStatus: (() => { const value = semanticsByFreightId.get(freightEvidence.id)?.actual_measured_shipment_weight_status; return value === "unknown" || value === "recorded" ? value : null; })(),
             shipmentReference: freightEvidence.shipment_reference,
             sourceNote: freightEvidence.source_note,
             capturedAt: freightEvidence.captured_at,
@@ -1951,28 +1958,28 @@ export async function recordPurchaseOrderFreightEvidence(input: {
   operatorId: string;
   currency: string;
   freightAmount: number;
-  shipmentWeight: number;
-  weightUnit: "kg";
+  supplierChargeableWeightKg: number;
   shipmentReference: string;
   sourceNote: string;
   idempotencyKey: string;
   supersedesEvidenceId?: string;
 }): Promise<{ freightEvidenceId: string; idempotent: boolean }> {
   const currency = input.currency.trim().toUpperCase();
-  if (!input.purchaseOrderId.trim() || !input.supplierId.trim() || !input.operatorId.trim() || !input.shipmentReference.trim() || !input.sourceNote.trim() || !input.idempotencyKey.trim() || !/^[A-Z]{3}$/.test(currency) || !Number.isFinite(input.freightAmount) || input.freightAmount <= 0 || !Number.isFinite(input.shipmentWeight) || input.shipmentWeight <= 0 || input.weightUnit !== "kg") {
-    throw new Error("Freight evidence requires PO, supplier, operator, currency, amount, weight, reference, provenance, and idempotency.");
+  if (!input.purchaseOrderId.trim() || !input.supplierId.trim() || !input.operatorId.trim() || !input.shipmentReference.trim() || !input.sourceNote.trim() || !input.idempotencyKey.trim() || !/^[A-Z]{3}$/.test(currency) || !Number.isFinite(input.freightAmount) || input.freightAmount <= 0 || !Number.isFinite(input.supplierChargeableWeightKg) || input.supplierChargeableWeightKg <= 0) {
+    throw new Error("Freight evidence requires PO, supplier, operator, currency, amount, supplier chargeable weight, reference, provenance, and idempotency.");
   }
-  const { data, error } = await supabaseAdmin.rpc("record_purchase_order_freight_evidence", {
+  const { data, error } = await supabaseAdmin.rpc("record_purchase_order_freight_evidence_with_chargeable_weight", {
     authoritative_payload: {
       purchase_order_id: input.purchaseOrderId.trim(), supplier_id: input.supplierId.trim(), operator_id: input.operatorId.trim(), currency,
-      freight_amount: input.freightAmount, shipment_weight: input.shipmentWeight, weight_unit: input.weightUnit,
+      freight_amount: input.freightAmount, supplier_chargeable_weight_kg: input.supplierChargeableWeightKg,
       shipment_reference: input.shipmentReference.trim(), source_note: input.sourceNote.trim(), idempotency_key: input.idempotencyKey.trim(),
+      source_evidence_snapshot: { freight_weight_basis: "supplier_chargeable_weight", actual_measured_shipment_weight_status: "unknown" },
       ...(input.supersedesEvidenceId?.trim() ? { supersedes_evidence_id: input.supersedesEvidenceId.trim() } : {}),
     },
   });
   if (error) throw new Error(error.message);
   const result = data?.[0];
-  if (!result?.freight_evidence_id) throw new Error("Freight evidence did not return durable evidence.");
+  if (!result?.freight_evidence_id || !result?.freight_weight_evidence_id) throw new Error("Freight evidence did not return durable semantic evidence.");
   return { freightEvidenceId: result.freight_evidence_id, idempotent: result.idempotent === true };
 }
 

@@ -355,8 +355,7 @@ export async function recordPurchaseOrderFreightEvidenceAction(
     const supplierId = formData.get("supplier_id");
     const currency = formData.get("currency");
     const freightAmount = Number(formData.get("freight_amount"));
-    const shipmentWeight = Number(formData.get("shipment_weight"));
-    const weightUnit = formData.get("weight_unit");
+    const supplierChargeableWeightKg = Number(formData.get("supplier_chargeable_weight_kg"));
     const shipmentReference = formData.get("shipment_reference");
     const sourceNote = formData.get("source_note");
     const idempotencyKey = formData.get("idempotency_key");
@@ -367,14 +366,13 @@ export async function recordPurchaseOrderFreightEvidenceAction(
       typeof supplierId !== "string" || !UUID_PATTERN.test(supplierId) ||
       typeof currency !== "string" || !currency.trim() ||
       !Number.isFinite(freightAmount) || freightAmount <= 0 ||
-      !Number.isFinite(shipmentWeight) || shipmentWeight <= 0 ||
-      typeof weightUnit !== "string" || weightUnit.trim() !== "kg" ||
+      !Number.isFinite(supplierChargeableWeightKg) || supplierChargeableWeightKg <= 0 ||
       typeof shipmentReference !== "string" || !shipmentReference.trim() ||
       typeof sourceNote !== "string" || !sourceNote.trim() ||
       typeof idempotencyKey !== "string" || !idempotencyKey.trim() ||
       (typeof supersedesEvidenceId === "string" && supersedesEvidenceId.trim() && !UUID_PATTERN.test(supersedesEvidenceId))
     ) {
-      return { status: "error", message: "Enter valid freight evidence, including PO, supplier, amount, weight, provenance, and operation identity." };
+      return { status: "error", message: "Enter valid freight evidence, including PO, supplier, amount, supplier chargeable weight, provenance, and operation identity." };
     }
 
     const result = await recordPurchaseOrderFreightEvidence({
@@ -383,8 +381,7 @@ export async function recordPurchaseOrderFreightEvidenceAction(
       operatorId: operator.id,
       currency,
       freightAmount,
-      shipmentWeight,
-      weightUnit: "kg",
+      supplierChargeableWeightKg,
       shipmentReference,
       sourceNote,
       idempotencyKey,
