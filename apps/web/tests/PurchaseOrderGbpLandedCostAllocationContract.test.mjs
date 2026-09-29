@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+const sql=await readFile(new URL("../../../supabase/migrations/20261064000000_governed_gbp_landed_cost_allocation.sql",import.meta.url),"utf8");
+test("GBP landed allocation is immutable, PO-wide, unseeded, and fee-free",()=>{
+ for(const s of ["vault_purchase_order_gbp_landed_cost_allocation_runs","vault_purchase_order_gbp_landed_cost_allocation_lines","purchase_order_gbp_landed_cost_allocation_runs_immutable","purchase_order_gbp_landed_cost_allocation_lines_immutable","governed_usd_landed_cents_pro_rata_largest_remainder","vault_purchase_order_current_gbp_landed_cost_allocation_runs","security invoker","capture_purchase_order_gbp_landed_cost_allocation"]) assert.match(sql,new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+ assert.doesNotMatch(sql,/233815|307500|0\.760374|2,340\.14|payment|landed_cost_completeness/i);
+});
+test("capture derives sources, validates current evidence, and conserves integer pence",()=>{
+ for(const s of ["jsonb_object_keys(authoritative_payload)","PO_GBP_LANDED_ALLOCATION_IDEMPOTENCY_CONFLICT","PO_GBP_LANDED_ALLOCATION_FX_INVALID","PO_GBP_LANDED_ALLOCATION_FREIGHT_INVALID","PO_GBP_LANDED_ALLOCATION_SUPERSESSION_INVALID","gbp_commitment_amount*100","merchandise_line_total*100","v_target*r.landed","v_num%v_usd_total","remainder_rank","v_rank<=v_residual","for share","hashtextextended('gbp-landed:'||v_po::text,0)","a.pack_count=l.recommended_packs","a.units_per_pack=l.units_per_pack","a.pack_count*a.units_per_pack=l.recommended_units","count(distinct purchase_order_line_id)","count(distinct remainder_rank)","sum(source_merchandise_usd_minor_units)","sum(source_freight_usd_minor_units)","sum(source_landed_usd_minor_units)","sum(allocated_gbp_minor_units)","freight_allocation_run_id","references public.vault_purchase_order_line_merchandise_cost_evidence(id,purchase_order_id,purchase_order_line_id)","references public.vault_purchase_order_freight_allocation_lines(id,allocation_run_id,purchase_order_id,purchase_order_line_id)","v_freight.freight_currency<>'USD'","supplier_standard_series_weight_pro_rata_largest_remainder","v_freight_child_basis<>v_freight.total_allocation_basis_milligrams"]) assert.match(sql,new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+});
