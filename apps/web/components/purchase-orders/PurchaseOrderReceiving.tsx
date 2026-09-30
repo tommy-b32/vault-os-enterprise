@@ -193,17 +193,23 @@ export function PurchaseOrderReceiving({
                 <summary>{line.productName} <span>Receive / View sizes</span></summary>
                 <fieldset disabled={remaining === null || remaining === 0}>
                 <legend>{line.productName}</legend>
-                {line.pendingAllocations?.length ? <div className="purchase-order-receiving-table-head" aria-hidden="true"><span>Size</span><span>Ordered</span><span>Previously received</span><span>Sellable now</span><span>Non-sellable now</span></div> : null}
+                {line.pendingAllocations?.length || line.variants.length ? <div className="purchase-order-receiving-table-head" aria-hidden="true"><span>Size</span><span>Ordered</span><span>Previously received</span><span>Sellable now</span><span>Non-sellable now</span></div> : null}
                 {line.pendingAllocations?.length ? line.pendingAllocations.map((allocation) => {
                   const outstanding = Math.max(0, allocation.orderedUnits - allocation.sellableReceived - allocation.nonSellableReceived);
-                  return <div key={allocation.id}><strong>{allocation.supplierSizeLabel} ({allocation.normalizedSize})</strong><small>Ordered {allocation.orderedUnits} = sellable received {allocation.sellableReceived} + non-sellable received {allocation.nonSellableReceived} + outstanding {outstanding}</small><label>Sellable units received now<input data-pending-outstanding={outstanding} defaultValue="0" max={outstanding} min="0" name={`pending_allocation:${line.id}:${allocation.id}`} required step="1" type="number" /></label><label>Non-sellable units received now<input defaultValue="0" max={outstanding} min="0" name={`pending_non_sellable:${line.id}:${allocation.id}`} required step="1" type="number" /></label></div>;
+                  return <div className="purchase-order-receiving-row" key={allocation.id}><strong>{allocation.supplierSizeLabel || allocation.normalizedSize}</strong><span>{allocation.orderedUnits}</span><span>{allocation.sellableReceived + allocation.nonSellableReceived}</span><label><span className="sr-only">Sellable units received now</span><input aria-label={`${allocation.supplierSizeLabel} sellable units received now`} data-pending-outstanding={outstanding} defaultValue="0" max={outstanding} min="0" name={`pending_allocation:${line.id}:${allocation.id}`} required step="1" type="number" /></label><label><span className="sr-only">Non-sellable units received now</span><input aria-label={`${allocation.supplierSizeLabel} non-sellable units received now`} defaultValue="0" max={outstanding} min="0" name={`pending_non_sellable:${line.id}:${allocation.id}`} required step="1" type="number" /></label></div>;
                 }) : line.variants.length ? line.variants.map((variant) => (
-                  <label key={variant.id}>
+                  <div className="purchase-order-receiving-row" key={variant.id}>
+                    <strong>{variant.size ?? variant.title ?? "Default"}</strong>
+                    <span>{line.orderedQuantity ?? "Unavailable"}</span>
+                    <span>{line.receivedQuantity}</span>
+                    <label>
                     Accepted sellable units — size {variant.size ?? variant.title ?? "Default"}
                     <input defaultValue="0" max={remaining ?? undefined} min="0" name={`allocation:${line.id}:${variant.id}`} required step="1" type="number" />
-                  </label>
+                    </label>
+                    <span>—</span>
+                  </div>
                 )) : <p>Exact active Shopify size variants are unavailable. This line cannot be received safely.</p>}
-                {!line.pendingAllocations?.length ? <label>
+                {!line.pendingAllocations?.length ? <label className="purchase-order-receiving-nonsellable">
                   Damaged, wrong, or otherwise non-sellable units
                   <input defaultValue="0" max={remaining ?? undefined} min="0" name={`non_sellable:${line.id}`} required step="1" type="number" />
                 </label> : null}

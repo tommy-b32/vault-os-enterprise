@@ -13803,7 +13803,7 @@ body :is(input:not([type="button"], [type="checkbox"], [type="color"], [type="fi
 }
 
 .purchase-order-receiving-table-head,
-.purchase-order-receiving-product fieldset > div:not(.purchase-order-receiving-table-head) {
+.purchase-order-receiving-row {
   display: grid;
   grid-template-columns: minmax(78px, 1fr) 72px minmax(116px, 1.2fr) minmax(108px, 1fr) minmax(124px, 1fr);
   gap: 10px;
@@ -13819,27 +13819,31 @@ body :is(input:not([type="button"], [type="checkbox"], [type="color"], [type="fi
   text-transform: uppercase;
 }
 
-.purchase-order-receiving-product fieldset > div:not(.purchase-order-receiving-table-head) {
+.purchase-order-receiving-row {
   padding: 10px;
   border-top: 1px solid var(--vault-border);
 }
 
-.purchase-order-receiving-product fieldset > div > strong {
+.purchase-order-receiving-row > strong {
   color: var(--vault-text);
   font-size: 12px;
 }
 
-.purchase-order-receiving-product fieldset > div > small {
+.purchase-order-receiving-row > small {
   color: var(--vault-muted);
   font-size: 11px;
   line-height: 1.35;
 }
 
-.purchase-order-receiving-product fieldset > div > label {
+.purchase-order-receiving-row > label {
   display: grid;
   gap: 4px;
   color: var(--vault-text-soft);
-  font-size: 10px;
+  font-size: 0;
+}
+
+.purchase-order-receiving-row > label input {
+  font-size: 13px;
 }
 
 .purchase-order-receiving-note,
@@ -13884,7 +13888,7 @@ body :is(input:not([type="button"], [type="checkbox"], [type="color"], [type="fi
   }
 
   .purchase-order-receiving-table-head,
-  .purchase-order-receiving-product fieldset > div:not(.purchase-order-receiving-table-head) {
+  .purchase-order-receiving-row {
     min-width: 590px;
   }
 }
