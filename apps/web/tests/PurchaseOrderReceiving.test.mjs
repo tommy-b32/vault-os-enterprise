@@ -34,6 +34,24 @@ function fixedPackSizeRows(packs) {
   return { allocations, total: allocations.reduce((sum, allocation) => sum + allocation.orderedUnits, 0) };
 }
 
+function sortCanonicalSizes(sizes) {
+  const order = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
+  const canonical = (size) => size === "XXL" ? "2XL" : size === "XXXL" ? "3XL" : size;
+  return [...sizes].sort((left, right) => {
+    const leftRank = order.indexOf(canonical(left));
+    const rightRank = order.indexOf(canonical(right));
+    return (leftRank === -1 ? order.length : leftRank) - (rightRank === -1 ? order.length : rightRank)
+      || left.localeCompare(right);
+  });
+}
+
+test("canonical receiving renders variants in deterministic apparel size order", () => {
+  assert.deepEqual(sortCanonicalSizes(["XL", "2XL", "S", "L", "M"]), ["S", "M", "L", "XL", "2XL"]);
+  assert.deepEqual(sortCanonicalSizes(["XXL", "XS", "XXXL", "S"]), ["XS", "S", "XXL", "XXXL"]);
+  assert.match(component, /APPAREL_SIZE_ORDER = \["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"\]/);
+  assert.match(component, /\[\.\.\.line\.variants\]\.sort\(compareCanonicalReceivingVariants\)/);
+});
+
 test("canonical fixed-pack receiving uses persisted exact size allocations, not the line total per size", () => {
   const twoPack = fixedPackSizeRows(2);
   assert.deepEqual(twoPack.allocations.map((allocation) => allocation.orderedUnits), [2, 2, 2, 2, 2]);

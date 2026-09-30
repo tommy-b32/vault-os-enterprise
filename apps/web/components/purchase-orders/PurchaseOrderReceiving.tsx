@@ -12,6 +12,25 @@ import {
 
 const initialState: RecordPurchaseOrderReceiptState = { status: "idle", message: "" };
 const initialPostingState: PostReceivedInventoryState = { status: "idle", message: "" };
+const APPAREL_SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
+
+function apparelSizeRank(value: string | null): number {
+  const normalized = (value ?? "").trim().toUpperCase().replace(/\s+/g, "");
+  const canonical = normalized === "XXL" ? "2XL" : normalized === "XXXL" ? "3XL" : normalized;
+  const rank = APPAREL_SIZE_ORDER.indexOf(canonical);
+  return rank === -1 ? APPAREL_SIZE_ORDER.length : rank;
+}
+
+function compareCanonicalReceivingVariants(
+  left: ReceivingLine["variants"][number],
+  right: ReceivingLine["variants"][number],
+): number {
+  const leftSize = left.size ?? left.title ?? "Default";
+  const rightSize = right.size ?? right.title ?? "Default";
+  return apparelSizeRank(leftSize) - apparelSizeRank(rightSize)
+    || leftSize.localeCompare(rightSize)
+    || left.id.localeCompare(right.id);
+}
 
 type ReceivingLine = {
   id: string;
@@ -199,7 +218,7 @@ export function PurchaseOrderReceiving({
                 {line.pendingAllocations?.length ? line.pendingAllocations.map((allocation) => {
                   const outstanding = Math.max(0, allocation.orderedUnits - allocation.sellableReceived - allocation.nonSellableReceived);
                   return <div className="purchase-order-receiving-row" key={allocation.id}><strong>{allocation.supplierSizeLabel || allocation.normalizedSize}</strong><span>{allocation.orderedUnits}</span><span>{allocation.sellableReceived + allocation.nonSellableReceived}</span><label><span className="sr-only">Sellable units received now</span><input aria-label={`${allocation.supplierSizeLabel} sellable units received now`} data-pending-outstanding={outstanding} defaultValue="0" max={outstanding} min="0" name={`pending_allocation:${line.id}:${allocation.id}`} required step="1" type="number" /></label><label><span className="sr-only">Non-sellable units received now</span><input aria-label={`${allocation.supplierSizeLabel} non-sellable units received now`} defaultValue="0" max={outstanding} min="0" name={`pending_non_sellable:${line.id}:${allocation.id}`} required step="1" type="number" /></label></div>;
-                }) : line.variants.length ? line.variants.map((variant) => {
+                }) : line.variants.length ? [...line.variants].sort(compareCanonicalReceivingVariants).map((variant) => {
                   const normalizedSize = variant.size ?? variant.title ?? "Default";
                   const savedAllocation = line.canonicalAllocations?.find((allocation) => allocation.normalizedSize === normalizedSize);
                   const previouslyReceived = receipts.flatMap((receipt) => receipt.lines)
