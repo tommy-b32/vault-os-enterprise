@@ -9,6 +9,7 @@ import {
   recordReceiptAgainstPurchaseOrder,
   type RecordPurchaseOrderReceiptState,
 } from "@/app/purchase-orders/actions";
+import { PurchaseOrderProductImage } from "@/components/purchase-orders/PurchaseOrderProductImage";
 
 const initialState: RecordPurchaseOrderReceiptState = { status: "idle", message: "" };
 const initialPostingState: PostReceivedInventoryState = { status: "idle", message: "" };
@@ -35,6 +36,8 @@ function compareCanonicalReceivingVariants(
 type ReceivingLine = {
   id: string;
   productName: string;
+  productImageUrl: string | null;
+  productImageAlt: string;
   orderedQuantity: number | null;
   receivedQuantity: number;
   nonSellableQuantity: number;
@@ -126,6 +129,7 @@ export function PurchaseOrderReceiving({
             .reduce((sum, allocation) => sum + allocation.postedQuantity, 0);
           return (
             <article key={line.id}>
+              <PurchaseOrderProductImage productImageAlt={line.productImageAlt} productImageUrl={line.productImageUrl} />
               <div>
                 <strong>{line.productName}</strong>
                 <span>

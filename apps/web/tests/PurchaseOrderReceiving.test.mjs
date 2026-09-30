@@ -13,6 +13,7 @@ const repository = await readFile(new URL("lib/purchase-orders/PurchaseOrderRepo
 const actions = await readFile(new URL("app/purchase-orders/actions.ts", root), "utf8");
 const page = await readFile(new URL("app/purchase-orders/[id]/page.tsx", root), "utf8");
 const component = await readFile(new URL("components/purchase-orders/PurchaseOrderReceiving.tsx", root), "utf8");
+const productImageComponent = await readFile(new URL("components/purchase-orders/PurchaseOrderProductImage.tsx", root), "utf8");
 const receivingFunction = semanticReceivingMigration.slice(
   semanticReceivingMigration.indexOf("create or replace function public.record_vault_purchase_order_receipt"),
   semanticReceivingMigration.indexOf("revoke all on function public.record_vault_purchase_order_receipt"),
@@ -50,6 +51,13 @@ test("canonical receiving renders variants in deterministic apparel size order",
   assert.deepEqual(sortCanonicalSizes(["XXL", "XS", "XXXL", "S"]), ["XS", "S", "XXL", "XXXL"]);
   assert.match(component, /APPAREL_SIZE_ORDER = \["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"\]/);
   assert.match(component, /\[\.\.\.line\.variants\]\.sort\(compareCanonicalReceivingVariants\)/);
+});
+
+test("receiving summary cards reuse canonical product images and safely fall back when absent", () => {
+  assert.match(page, /productImageUrl: line\.productImageUrl/);
+  assert.match(component, /<PurchaseOrderProductImage productImageAlt=\{line\.productImageAlt\} productImageUrl=\{line\.productImageUrl\} \/>/);
+  assert.match(productImageComponent, /<img src=\{productImageUrl!\} alt=\{productImageAlt\}/);
+  assert.match(productImageComponent, /if \(!available\) return <span className="purchase-order-image-placeholder" aria-label="No product image">NO IMAGE<\/span>/);
 });
 
 test("canonical fixed-pack receiving uses persisted exact size allocations, not the line total per size", () => {

@@ -615,6 +615,8 @@ export default async function PurchaseOrderDetailPage({
             lines={lines.map((line) => ({
               id: line.id,
               productName: line.product_name,
+              productImageUrl: line.productImageUrl,
+              productImageAlt: line.productImageAlt,
               orderedQuantity: line.recommended_units ??
                 (line.units_per_pack === null ? null : line.recommended_packs * line.units_per_pack),
               receivedQuantity: receivedByLine.get(line.id) ?? 0,
