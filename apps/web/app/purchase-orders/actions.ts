@@ -279,6 +279,18 @@ export async function recordReceiptAgainstPurchaseOrder(
       linesById.set(purchaseOrderLineId, line);
     }
     for (const [key, value] of formData.entries()) {
+      if (!key.startsWith("size_allocation:") || typeof value !== "string" || value.trim() === "") continue;
+      const [purchaseOrderLineId, allocationId, extra] = key.slice("size_allocation:".length).split(":");
+      const quantityReceived = Number(value);
+      const nonSellable = Number(formData.get(`size_non_sellable:${purchaseOrderLineId}:${allocationId}`) ?? 0);
+      if (extra !== undefined || !UUID_PATTERN.test(purchaseOrderLineId) || !UUID_PATTERN.test(allocationId) || !Number.isInteger(quantityReceived) || !Number.isInteger(nonSellable) || quantityReceived < 0 || nonSellable < 0) return { status: "error", message: "Each fixed-pack size needs whole, non-negative quantities." };
+      if (quantityReceived + nonSellable === 0) continue;
+      const note = formData.get(`note:${purchaseOrderLineId}`);
+      const line = linesById.get(purchaseOrderLineId) ?? { purchaseOrderLineId, discrepancyNote: typeof note === "string" && note.trim() ? note.trim() : null, nonSellableQuantity: 0, allocations: [] };
+      line.allocations.push({ purchaseOrderLineSizeAllocationId: allocationId, quantityReceived, nonSellableQuantity: nonSellable });
+      linesById.set(purchaseOrderLineId, line);
+    }
+    for (const [key, value] of formData.entries()) {
       if (!key.startsWith("non_sellable:") || typeof value !== "string" || value.trim() === "") continue;
       const purchaseOrderLineId = key.slice("non_sellable:".length);
       const parsed = Number(value);

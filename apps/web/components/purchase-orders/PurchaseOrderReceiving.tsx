@@ -26,6 +26,7 @@ type ReceivingLine = {
     sourceVariantId: string;
     inventoryItemId: string;
   }>;
+  canonicalAllocations?: Array<{ id: string; normalizedSize: string; orderedUnits: number }>;
   pendingAllocations?: Array<{ id: string; supplierSizeLabel: string; normalizedSize: string; orderedUnits: number; sellableReceived: number; nonSellableReceived: number }>;
 };
 
@@ -52,6 +53,7 @@ type ReceiptEvent = {
       variantId: string;
       size: string;
       quantityReceived: number;
+      nonSellableQuantity: number;
       postedQuantity: number;
       postingBlocked: boolean;
       postingBlockReason?: string | null;
@@ -197,19 +199,34 @@ export function PurchaseOrderReceiving({
                 {line.pendingAllocations?.length ? line.pendingAllocations.map((allocation) => {
                   const outstanding = Math.max(0, allocation.orderedUnits - allocation.sellableReceived - allocation.nonSellableReceived);
                   return <div className="purchase-order-receiving-row" key={allocation.id}><strong>{allocation.supplierSizeLabel || allocation.normalizedSize}</strong><span>{allocation.orderedUnits}</span><span>{allocation.sellableReceived + allocation.nonSellableReceived}</span><label><span className="sr-only">Sellable units received now</span><input aria-label={`${allocation.supplierSizeLabel} sellable units received now`} data-pending-outstanding={outstanding} defaultValue="0" max={outstanding} min="0" name={`pending_allocation:${line.id}:${allocation.id}`} required step="1" type="number" /></label><label><span className="sr-only">Non-sellable units received now</span><input aria-label={`${allocation.supplierSizeLabel} non-sellable units received now`} defaultValue="0" max={outstanding} min="0" name={`pending_non_sellable:${line.id}:${allocation.id}`} required step="1" type="number" /></label></div>;
-                }) : line.variants.length ? line.variants.map((variant) => (
+                }) : line.variants.length ? line.variants.map((variant) => {
+                  const normalizedSize = variant.size ?? variant.title ?? "Default";
+                  const savedAllocation = line.canonicalAllocations?.find((allocation) => allocation.normalizedSize === normalizedSize);
+                  const previouslyReceived = receipts.flatMap((receipt) => receipt.lines)
+                    .filter((receiptLine) => receiptLine.purchaseOrderLineId === line.id)
+                    .flatMap((receiptLine) => receiptLine.allocations)
+                    .filter((allocation) => allocation.variantId === variant.id)
+                    .reduce((sum, allocation) => sum + allocation.quantityReceived + allocation.nonSellableQuantity, 0);
+                  const remainingForSize = savedAllocation
+                    ? Math.max(0, savedAllocation.orderedUnits - previouslyReceived)
+                    : 0;
+                  return (
                   <div className="purchase-order-receiving-row" key={variant.id}>
-                    <strong>{variant.size ?? variant.title ?? "Default"}</strong>
-                    <span>{line.orderedQuantity ?? "Unavailable"}</span>
-                    <span>{line.receivedQuantity}</span>
+                    <strong>{normalizedSize}</strong>
+                    <span>{savedAllocation?.orderedUnits ?? "Unavailable"}</span>
+                    <span>{previouslyReceived}</span>
                     <label>
-                    Accepted sellable units — size {variant.size ?? variant.title ?? "Default"}
-                    <input defaultValue="0" max={remaining ?? undefined} min="0" name={`allocation:${line.id}:${variant.id}`} required step="1" type="number" />
+                    Accepted sellable units — size {normalizedSize}
+                    <input data-size-outstanding={remainingForSize} defaultValue="0" max={remainingForSize} min="0" name={`size_allocation:${line.id}:${savedAllocation?.id ?? ""}`} required step="1" type="number" />
                     </label>
-                    <span>—</span>
+                    <label>
+                    Non-sellable units — size {normalizedSize}
+                    <input defaultValue="0" max={remainingForSize} min="0" name={`size_non_sellable:${line.id}:${savedAllocation?.id ?? ""}`} required step="1" type="number" />
+                    </label>
                   </div>
-                )) : <p>Exact active Shopify size variants are unavailable. This line cannot be received safely.</p>}
-                {!line.pendingAllocations?.length ? <label className="purchase-order-receiving-nonsellable">
+                  );
+                }) : <p>Exact active Shopify size variants are unavailable. This line cannot be received safely.</p>}
+                {!line.pendingAllocations?.length && !line.canonicalAllocations?.length ? <label className="purchase-order-receiving-nonsellable">
                   Damaged, wrong, or otherwise non-sellable units
                   <input defaultValue="0" max={remaining ?? undefined} min="0" name={`non_sellable:${line.id}`} required step="1" type="number" />
                 </label> : null}

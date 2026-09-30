@@ -5,6 +5,7 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const baseMigration = await readFile(new URL("../../supabase/migrations/20260823000000_purchase_order_receiving.sql", root), "utf8");
 const allocationMigration = await readFile(new URL("../../supabase/migrations/20260824000000_purchase_order_receipt_variant_allocations.sql", root), "utf8");
+const fixedPackExactReceivingMigration = await readFile(new URL("../../supabase/migrations/20260920000000_fixed_pack_exact_size_receiving.sql", root), "utf8");
 const physicalAccountingMigration = await readFile(new URL("../../supabase/migrations/20260829000000_purchase_order_receiving_physical_accounting.sql", root), "utf8");
 const semanticReceivingMigration = await readFile(new URL("../../supabase/migrations/20260911000000_semantic_purchase_order_receiving.sql", root), "utf8");
 const migration = [baseMigration, allocationMigration, physicalAccountingMigration, semanticReceivingMigration].join("\n");
@@ -27,6 +28,37 @@ function applyReceipt(ordered, previousSellable, previousNonSellable, sellable, 
   const physicallyAccounted = previousPhysical + proposedPhysical;
   return { physicallyAccounted, remaining: ordered - physicallyAccounted };
 }
+
+function fixedPackSizeRows(packs) {
+  const allocations = ["S", "M", "L", "XL", "2XL"].map((normalizedSize) => ({ normalizedSize, orderedUnits: packs }));
+  return { allocations, total: allocations.reduce((sum, allocation) => sum + allocation.orderedUnits, 0) };
+}
+
+test("canonical fixed-pack receiving uses persisted exact size allocations, not the line total per size", () => {
+  const twoPack = fixedPackSizeRows(2);
+  assert.deepEqual(twoPack.allocations.map((allocation) => allocation.orderedUnits), [2, 2, 2, 2, 2]);
+  assert.equal(twoPack.total, 10);
+  assert.notDeepEqual(twoPack.allocations.map((allocation) => allocation.orderedUnits), [10, 10, 10, 10, 10]);
+
+  const onePack = fixedPackSizeRows(1);
+  assert.deepEqual(onePack.allocations.map((allocation) => allocation.orderedUnits), [1, 1, 1, 1, 1]);
+  assert.equal(onePack.total, 5);
+
+  assert.match(page, /canonicalAllocations:[\s\S]*orderedUnits: allocation\.ordered_units/);
+  assert.match(component, /savedAllocation\?\.orderedUnits/);
+  assert.match(component, /max=\{remainingForSize\}/);
+});
+
+test("canonical fixed-pack sellable and non-sellable quantities cannot exceed a saved size allocation", () => {
+  assert.deepEqual(applyReceipt(2, 0, 0, 1, 1), { physicallyAccounted: 2, remaining: 0 });
+  assert.throws(() => applyReceipt(2, 0, 0, 2, 1), /over receipt/);
+  assert.throws(() => applyReceipt(2, 1, 0, 1, 1), /over receipt/);
+  assert.match(component, /name={`size_allocation:\$\{line\.id\}:\$\{savedAllocation\?\.id \?\? ""\}`}/);
+  assert.match(component, /name={`size_non_sellable:\$\{line\.id\}:\$\{savedAllocation\?\.id \?\? ""\}`}/);
+  assert.match(actions, /key\.startsWith\("size_allocation:"\)/);
+  assert.match(actions, /purchaseOrderLineSizeAllocationId: allocationId/);
+  assert.match(fixedPackExactReceivingMigration, /prior_physical\+sellable\+nonsellable>saved\.ordered_units/);
+});
 
 test("partial and final receipts retain cumulative ordered, received and remaining quantities", () => {
   assert.deepEqual(applyReceipt(10, 0, 0, 6, 2), { physicallyAccounted: 8, remaining: 2 });
@@ -107,7 +139,7 @@ test("receiving UI exposes totals, history, line inputs, receipt date and refres
   assert.match(component, /line\.orderedQuantity - physicallyAccounted/);
   assert.match(component, /line\.receivedQuantity \+ line\.nonSellableQuantity >= line\.orderedQuantity/);
   assert.match(component, /Previous receipts/);
-  assert.match(component, /name={`allocation:\$\{line\.id\}:\$\{variant\.id\}`}/);
+  assert.match(component, /name={`size_allocation:\$\{line\.id\}:\$\{savedAllocation\?\.id \?\? ""\}`}/);
   assert.match(component, /name="received_date"/);
   assert.match(component, /router\.refresh\(\)/);
   assert.match(page, /draft\.received_at/);

@@ -632,6 +632,7 @@ export default async function PurchaseOrderDetailPage({
                   sourceVariantId: variant.source_variant_id,
                   inventoryItemId: variant.source_inventory_item_id,
                 })),
+              canonicalAllocations: ["fixed_pack_purchase_recommendation", "manual_fixed_pack_purchase"].includes(line.source_recommendation_type) ? (line.vault_purchase_order_line_size_allocations ?? []).filter((allocation) => allocation.normalized_size && typeof allocation.ordered_units === "number").map((allocation) => ({ id: allocation.id, normalizedSize: allocation.normalized_size!, orderedUnits: allocation.ordered_units! })) : undefined,
               pendingAllocations: line.source_recommendation_type === "pending_catalogue_purchase" ? (line.vault_purchase_order_line_size_allocations ?? []).filter((allocation) => allocation.identity_mode === "pending_catalogue" && allocation.pending_catalogue_product_id && allocation.normalized_size && allocation.supplier_size_label && typeof allocation.ordered_units === "number").map((allocation) => ({ id: allocation.id, supplierSizeLabel: allocation.supplier_size_label!, normalizedSize: allocation.normalized_size!, orderedUnits: allocation.ordered_units!, sellableReceived: receivedBySavedAllocation.get(allocation.id)?.sellable ?? 0, nonSellableReceived: receivedBySavedAllocation.get(allocation.id)?.nonSellable ?? 0 })) : undefined,
             }))}
             locations={(draft.receiving_locations ?? []).map((location: ReceivingLocation) => ({
@@ -657,6 +658,7 @@ export default async function PurchaseOrderDetailPage({
                   variantId: allocation.variant_id ?? "",
                   size: allocation.variant_id ? receivingVariantById.get(allocation.variant_id)?.normalized_size ?? "Unknown size" : (() => { const saved = allocation.purchase_order_line_size_allocation_id ? savedAllocationById.get(allocation.purchase_order_line_size_allocation_id) : null; return saved?.supplier_size_label && saved.normalized_size ? `${saved.supplier_size_label} (${saved.normalized_size})` : "Pending catalogue size"; })(),
                   quantityReceived: allocation.quantity_received,
+                  nonSellableQuantity: allocation.non_sellable_quantity,
                   postedQuantity: postedByAllocation.get(allocation.id) ?? 0,
                   postingBlocked: blockedPostingAllocations.has(allocation.id) || Boolean(allocation.purchase_order_line_size_allocation_id && savedAllocationById.get(allocation.purchase_order_line_size_allocation_id)?.pending_catalogue_product_id && !pendingProductsReadyToPost.has(savedAllocationById.get(allocation.purchase_order_line_size_allocation_id)!.pending_catalogue_product_id!)),
                   postingBlockReason: allocation.purchase_order_line_size_allocation_id && savedAllocationById.get(allocation.purchase_order_line_size_allocation_id)?.pending_catalogue_product_id && !pendingProductsReadyToPost.has(savedAllocationById.get(allocation.purchase_order_line_size_allocation_id)!.pending_catalogue_product_id!) ? "Link every received pending size to a canonical Shopify variant before posting." : null,
