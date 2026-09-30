@@ -591,6 +591,7 @@ export default async function PurchaseOrderDetailPage({
             estimatedTotalGbp={draft.estimated_total_gbp}
             paidAmountGbp={draft.paid_amount_gbp}
             payments={payments}
+            governedPayment={draft.governed_reconciled_payment_state}
             purchaseOrderId={draft.id}
             key={`${draft.id}:${draft.paid_amount_gbp}`}
             status={draft.status}

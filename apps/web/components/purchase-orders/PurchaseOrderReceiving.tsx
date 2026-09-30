@@ -108,7 +108,7 @@ export function PurchaseOrderReceiving({
               <div>
                 <strong>{line.productName}</strong>
                 <span>
-                  Ordered {line.orderedQuantity ?? "Unavailable"} · Physically accounted {physicallyAccounted} · Sellable received {line.receivedQuantity} · Non-sellable {line.nonSellableQuantity} · Already posted to Shopify {posted} · Remaining to post {Math.max(0, line.receivedQuantity - posted)} · Remaining expected {remaining ?? "Unavailable"}
+                  Ordered {line.orderedQuantity ?? "Unavailable"} · Physically accounted {physicallyAccounted} · Sellable received {line.receivedQuantity} · Non-sellable {line.nonSellableQuantity} · Remaining expected {remaining ?? "Unavailable"}
                 </span>
               </div>
             </article>
@@ -187,7 +187,9 @@ export function PurchaseOrderReceiving({
               ? null
               : Math.max(0, line.orderedQuantity - physicallyAccounted);
             return (
-              <fieldset disabled={remaining === null || remaining === 0} key={line.id}>
+              <details className="purchase-order-receiving-product" key={line.id} open>
+                <summary>Receive / View sizes</summary>
+                <fieldset disabled={remaining === null || remaining === 0}>
                 <legend>{line.productName}</legend>
                 {line.pendingAllocations?.length ? line.pendingAllocations.map((allocation) => {
                   const outstanding = Math.max(0, allocation.orderedUnits - allocation.sellableReceived - allocation.nonSellableReceived);
@@ -196,7 +198,6 @@ export function PurchaseOrderReceiving({
                   <label key={variant.id}>
                     Accepted sellable units — size {variant.size ?? variant.title ?? "Default"}
                     <input defaultValue="0" max={remaining ?? undefined} min="0" name={`allocation:${line.id}:${variant.id}`} required step="1" type="number" />
-                    <small>Shopify variant {variant.sourceVariantId} · inventory item {variant.inventoryItemId}</small>
                   </label>
                 )) : <p>Exact active Shopify size variants are unavailable. This line cannot be received safely.</p>}
                 {!line.pendingAllocations?.length ? <label>
@@ -207,7 +208,8 @@ export function PurchaseOrderReceiving({
                   Optional discrepancy or damage note
                   <textarea name={`note:${line.id}`} rows={2} />
                 </label>
-              </fieldset>
+                </fieldset>
+              </details>
             );
           })}
           <p>

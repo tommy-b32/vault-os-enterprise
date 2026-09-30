@@ -48,7 +48,7 @@ export function PurchaseOrderShipping({
       ) : <p>No supplier dispatch evidence recorded.</p>}
 
       {canMarkShipped ? (
-        <form action={action}>
+        <form action={action} className="purchase-order-shipping-card">
           <input name="purchase_order_id" type="hidden" value={purchaseOrderId} />
           <label>
             Actual dispatch date
@@ -69,7 +69,7 @@ export function PurchaseOrderShipping({
             The operator confirms the supplier has genuinely dispatched this purchase order.
           </label>
           <p>This records supplier-provided dispatch evidence only. Vault OS does not contact the supplier or carrier, alter payment, call Shopify, update inventory, or mark stock received.</p>
-          <button disabled={pending} type="submit">
+          <button className="purchase-order-primary-button" disabled={pending} type="submit">
             {pending ? "Recording Dispatch…" : "Mark as Shipped"}
           </button>
           {state.message ? <p role={state.status === "error" ? "alert" : "status"}>{state.message}</p> : null}

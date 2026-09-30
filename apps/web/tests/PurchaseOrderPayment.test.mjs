@@ -65,6 +65,10 @@ test("wallet does not double-count a £200 payment", () => {
 
 test("payment UI exposes totals, history, true date and explicit ledger effect", () => {
   assert.match(component, /Settlement total/);
+  assert.match(component, /Supplier liability/);
+  assert.match(component, /governedPayment/);
+  assert.match(component, /Supplier settlement is fully reconciled/);
+  assert.match(repository, /vault_purchase_order_governed_reconciled_payment_state/);
   assert.match(component, /Already paid/);
   assert.match(component, /Outstanding/);
   assert.match(component, /payments\.map/);

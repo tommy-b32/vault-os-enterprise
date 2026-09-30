@@ -28,6 +28,7 @@ export function PurchaseOrderPayment({
   actualTotalGbp,
   paidAmountGbp,
   payments,
+  governedPayment,
 }: {
   purchaseOrderId: string;
   status: "ordered" | "part_paid" | "paid" | "shipped" | "received";
@@ -35,13 +36,16 @@ export function PurchaseOrderPayment({
   actualTotalGbp: number | null;
   paidAmountGbp: number;
   payments: PaymentRecord[];
+  governedPayment?: { supplier_liability_minor_units: number; supplier_paid_minor_units: number; supplier_balance_minor_units: number; transfer_fee_minor_units: number; cash_debit_minor_units: number } | null;
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(recordPaymentAgainstPurchaseOrder, initialState);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const settlementTotal = actualTotalGbp ?? estimatedTotalGbp;
-  const outstanding = settlementTotal === null ? null : Math.max(0, settlementTotal - paidAmountGbp);
+  const governed = governedPayment ? { liability: governedPayment.supplier_liability_minor_units / 100, paid: governedPayment.supplier_paid_minor_units / 100, outstanding: governedPayment.supplier_balance_minor_units / 100, fee: governedPayment.transfer_fee_minor_units / 100, debit: governedPayment.cash_debit_minor_units / 100 } : null;
+  const settlementTotal = governed?.liability ?? actualTotalGbp ?? estimatedTotalGbp;
+  const displayPaid = governed?.paid ?? paidAmountGbp;
+  const outstanding = governed?.outstanding ?? (settlementTotal === null ? null : Math.max(0, settlementTotal - paidAmountGbp));
 
   useEffect(() => {
     if (state.status === "success") {
@@ -53,12 +57,13 @@ export function PurchaseOrderPayment({
     <section className="purchase-order-supplier-draft">
       <div className="purchase-order-section-heading">
         <div><p className="vault-eyebrow">PAYMENT</p><h2>Supplier payment</h2></div>
-        <span>{status.replace("_", " ").toUpperCase()}</span>
+        <span>{outstanding === 0 ? "PAID" : status.replace("_", " ").toUpperCase()}</span>
       </div>
       <div className="purchase-order-supplier-totals">
-        <div><span>Settlement total</span><strong>{settlementTotal === null ? "Unavailable" : gbp(settlementTotal)}</strong></div>
-        <div><span>Already paid</span><strong>{gbp(paidAmountGbp)}</strong></div>
+        <div><span>{governed ? "Supplier liability" : "Settlement total"}</span><strong>{settlementTotal === null ? "Unavailable" : gbp(settlementTotal)}</strong></div>
+        <div><span>Already paid</span><strong>{gbp(displayPaid)}</strong></div>
         <div><span>Outstanding</span><strong>{outstanding === null ? "Unavailable" : gbp(outstanding)}</strong></div>
+        {governed ? <><div><span>Transfer fee</span><strong>{gbp(governed.fee)}</strong></div><div><span>Cash debit</span><strong>{gbp(governed.debit)}</strong></div></> : null}
       </div>
 
       <div className="purchase-order-preparation-lines">
@@ -98,12 +103,12 @@ export function PurchaseOrderPayment({
           <p>
             Recording payment confirms money was paid to the supplier. It will reduce the business cash ledger and the purchase order outstanding commitment.
           </p>
-          <button disabled={pending || !idempotencyKey || outstanding === null} type="submit">
+          <button className="purchase-order-primary-button" disabled={pending || !idempotencyKey || outstanding === null} type="submit">
             {pending ? "Recording Paymentâ€¦" : "Record Payment"}
           </button>
           {state.message ? <p role={state.status === "error" ? "alert" : "status"}>{state.message}</p> : null}
         </form>
-      ) : null}
+      ) : outstanding === 0 ? <p>Supplier settlement is fully reconciled. Recording another payment is disabled.</p> : null}
     </section>
   );
 }

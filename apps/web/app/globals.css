@@ -13686,3 +13686,42 @@ body :is(input:not([type="button"], [type="checkbox"], [type="color"], [type="fi
   color: var(--vault-text-soft);
   opacity: 0.72;
 }
+
+.purchase-order-primary-button {
+  appearance: none;
+  border: 1px solid var(--vault-gold);
+  border-radius: 7px;
+  background: var(--vault-gold);
+  color: #17140d;
+  cursor: pointer;
+  font-weight: 750;
+  padding: 10px 16px;
+}
+
+.purchase-order-primary-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.purchase-order-primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.purchase-order-shipping-card,
+.purchase-order-receiving-product {
+  border: 1px solid var(--vault-border);
+  border-radius: 8px;
+  background: var(--vault-panel);
+  padding: 14px;
+}
+
+.purchase-order-receiving-product + .purchase-order-receiving-product {
+  margin-top: 12px;
+}
+
+.purchase-order-receiving-product summary {
+  color: var(--vault-gold);
+  cursor: pointer;
+  font-weight: 700;
+  margin-bottom: 12px;
+}

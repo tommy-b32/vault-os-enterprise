@@ -1684,6 +1684,12 @@ export async function getPurchaseOrder(
       (receipt.vault_purchase_order_receipt_lines ?? []).flatMap((line) =>
         (line.vault_purchase_order_receipt_allocations ?? []).map((allocation) => allocation.id)),
   );
+  const governedReconciledPayment = await supabaseAdmin
+    .from("vault_purchase_order_governed_reconciled_payment_state")
+    .select("supplier_liability_minor_units, supplier_paid_minor_units, supplier_balance_minor_units, transfer_fee_minor_units, cash_debit_minor_units")
+    .eq("purchase_order_id", id)
+    .maybeSingle();
+  if (governedReconciledPayment.error) throw governedReconciledPayment.error;
   const inventoryPostings = receiptAllocationIds.length
     ? await supabaseAdmin.from("vault_purchase_order_inventory_posting_lines")
         .select(`receipt_allocation_id, quantity, vault_purchase_order_inventory_postings (
@@ -1771,6 +1777,7 @@ export async function getPurchaseOrder(
     cancelling_operator: cancellingOperator.data,
     receiving_variants: receivingVariants.data ?? [],
     receiving_locations: receivingLocations.data ?? [],
+    governed_reconciled_payment_state: governedReconciledPayment.data,
     inventory_posting_lines: inventoryPostings.data ?? [],
     vault_purchase_order_lines: (data.vault_purchase_order_lines ?? []).map((line: { id: string; product_name: string }) => ({ ...line, ...(lineImages.get(line.id) ?? { productImageUrl: null, productImageAlt: line.product_name }) })),
   };
