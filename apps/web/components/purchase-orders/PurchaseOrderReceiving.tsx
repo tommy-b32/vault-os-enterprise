@@ -165,15 +165,16 @@ export function PurchaseOrderReceiving({
       ) : <p>No receipts recorded.</p>}
 
       {eligible ? (
-        <form action={action} onSubmit={(event) => { const form = new FormData(event.currentTarget); for (const [key, value] of form.entries()) { if (!key.startsWith("pending_allocation:") || typeof value !== "string") continue; const suffix = key.slice("pending_allocation:".length); const outstanding = Number((event.currentTarget.elements.namedItem(key) as HTMLInputElement | null)?.dataset.pendingOutstanding); const physical = Number(value) + Number(form.get(`pending_non_sellable:${suffix}`) ?? 0); if (!Number.isFinite(physical) || physical <= 0 || physical > outstanding) { event.preventDefault(); setPendingInputError("Pending physical receipt cannot exceed the saved outstanding size quantity."); return; } } setPendingInputError(null); }}>
+        <form action={action} className="purchase-order-receipt-form" onSubmit={(event) => { const form = new FormData(event.currentTarget); for (const [key, value] of form.entries()) { if (!key.startsWith("pending_allocation:") || typeof value !== "string") continue; const suffix = key.slice("pending_allocation:".length); const outstanding = Number((event.currentTarget.elements.namedItem(key) as HTMLInputElement | null)?.dataset.pendingOutstanding); const physical = Number(value) + Number(form.get(`pending_non_sellable:${suffix}`) ?? 0); if (!Number.isFinite(physical) || physical <= 0 || physical > outstanding) { event.preventDefault(); setPendingInputError("Pending physical receipt cannot exceed the saved outstanding size quantity."); return; } } setPendingInputError(null); }}>
           <input name="purchase_order_id" type="hidden" value={purchaseOrderId} />
           <input name="idempotency_key" suppressHydrationWarning type="hidden" value={idempotencyKey} />
+          <div className="purchase-order-receipt-header">
           <label>
-            Received date
+            <span>Received date</span>
             <input name="received_date" onChange={(event) => setReceivedDate(event.target.value)} required type="date" value={receivedDate} />
           </label>
           <label>
-            Shopify receiving location
+            <span>Shopify receiving location</span>
             <select name="received_location_id" required defaultValue="">
               <option disabled value="">Select location</option>
               {locations.map((location) => (
@@ -181,6 +182,7 @@ export function PurchaseOrderReceiving({
               ))}
             </select>
           </label>
+          </div>
           {lines.map((line) => {
             const physicallyAccounted = line.receivedQuantity + line.nonSellableQuantity;
             const remaining = line.orderedQuantity === null
@@ -188,9 +190,10 @@ export function PurchaseOrderReceiving({
               : Math.max(0, line.orderedQuantity - physicallyAccounted);
             return (
               <details className="purchase-order-receiving-product" key={line.id} open>
-                <summary>Receive / View sizes</summary>
+                <summary>{line.productName} <span>Receive / View sizes</span></summary>
                 <fieldset disabled={remaining === null || remaining === 0}>
                 <legend>{line.productName}</legend>
+                {line.pendingAllocations?.length ? <div className="purchase-order-receiving-table-head" aria-hidden="true"><span>Size</span><span>Ordered</span><span>Previously received</span><span>Sellable now</span><span>Non-sellable now</span></div> : null}
                 {line.pendingAllocations?.length ? line.pendingAllocations.map((allocation) => {
                   const outstanding = Math.max(0, allocation.orderedUnits - allocation.sellableReceived - allocation.nonSellableReceived);
                   return <div key={allocation.id}><strong>{allocation.supplierSizeLabel} ({allocation.normalizedSize})</strong><small>Ordered {allocation.orderedUnits} = sellable received {allocation.sellableReceived} + non-sellable received {allocation.nonSellableReceived} + outstanding {outstanding}</small><label>Sellable units received now<input data-pending-outstanding={outstanding} defaultValue="0" max={outstanding} min="0" name={`pending_allocation:${line.id}:${allocation.id}`} required step="1" type="number" /></label><label>Non-sellable units received now<input defaultValue="0" max={outstanding} min="0" name={`pending_non_sellable:${line.id}:${allocation.id}`} required step="1" type="number" /></label></div>;
@@ -204,7 +207,7 @@ export function PurchaseOrderReceiving({
                   Damaged, wrong, or otherwise non-sellable units
                   <input defaultValue="0" max={remaining ?? undefined} min="0" name={`non_sellable:${line.id}`} required step="1" type="number" />
                 </label> : null}
-                <label>
+                <label className="purchase-order-receiving-note">
                   Optional discrepancy or damage note
                   <textarea name={`note:${line.id}`} rows={2} />
                 </label>
@@ -215,7 +218,7 @@ export function PurchaseOrderReceiving({
           <p>
             This records physical receipt and exact size allocation evidence only. Count only accepted sellable units; describe short, damaged, or wrong items in the note. Vault OS does not alter Shopify inventory automatically.
           </p>
-          <button disabled={pending || !idempotencyKey || locations.length === 0 || lines.every((line) => line.orderedQuantity === null || line.receivedQuantity + line.nonSellableQuantity >= line.orderedQuantity || (!line.pendingAllocations?.length && line.variants.length === 0))} type="submit">
+          <button className="purchase-order-primary-button" disabled={pending || !idempotencyKey || locations.length === 0 || lines.every((line) => line.orderedQuantity === null || line.receivedQuantity + line.nonSellableQuantity >= line.orderedQuantity || (!line.pendingAllocations?.length && line.variants.length === 0))} type="submit">
             {pending ? "Recording Receipt…" : "Record Receipt"}
           </button>
           {state.message ? <p role={state.status === "error" ? "alert" : "status"}>{state.message}</p> : null}

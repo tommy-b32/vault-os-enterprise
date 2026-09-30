@@ -13725,3 +13725,166 @@ body :is(input:not([type="button"], [type="checkbox"], [type="color"], [type="fi
   font-weight: 700;
   margin-bottom: 12px;
 }
+
+.purchase-order-receiving-product summary span {
+  color: var(--vault-text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.purchase-order-receipt-form,
+.purchase-order-shipping-card {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.purchase-order-receipt-header,
+.purchase-order-shipping-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.purchase-order-shipping-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.purchase-order-receipt-header label,
+.purchase-order-shipping-fields label,
+.purchase-order-receiving-note,
+.purchase-order-receiving-nonsellable {
+  display: grid;
+  gap: 7px;
+  color: var(--vault-text-soft);
+  font-size: 12px;
+}
+
+.purchase-order-receipt-header label > span,
+.purchase-order-shipping-fields label > span,
+.purchase-order-receiving-note > span,
+.purchase-order-receiving-nonsellable > span {
+  color: var(--vault-text-soft);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.purchase-order-receipt-header :is(input, select),
+.purchase-order-shipping-fields input,
+.purchase-order-receiving-product input,
+.purchase-order-receiving-note textarea,
+.purchase-order-receiving-nonsellable input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 39px;
+  padding: 8px 10px;
+  border: 1px solid #555b51;
+  border-radius: 6px;
+}
+
+.purchase-order-receiving-product fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.purchase-order-receiving-product legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.purchase-order-receiving-table-head,
+.purchase-order-receiving-product fieldset > div:not(.purchase-order-receiving-table-head) {
+  display: grid;
+  grid-template-columns: minmax(78px, 1fr) 72px minmax(116px, 1.2fr) minmax(108px, 1fr) minmax(124px, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.purchase-order-receiving-table-head {
+  padding: 0 10px 8px;
+  color: var(--vault-text-soft);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.purchase-order-receiving-product fieldset > div:not(.purchase-order-receiving-table-head) {
+  padding: 10px;
+  border-top: 1px solid var(--vault-border);
+}
+
+.purchase-order-receiving-product fieldset > div > strong {
+  color: var(--vault-text);
+  font-size: 12px;
+}
+
+.purchase-order-receiving-product fieldset > div > small {
+  color: var(--vault-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.purchase-order-receiving-product fieldset > div > label {
+  display: grid;
+  gap: 4px;
+  color: var(--vault-text-soft);
+  font-size: 10px;
+}
+
+.purchase-order-receiving-note,
+.purchase-order-receiving-nonsellable {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--vault-border);
+}
+
+.purchase-order-receiving-note textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.purchase-order-shipping-confirmation {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  border: 1px solid var(--vault-border);
+  border-radius: 7px;
+  color: var(--vault-text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.purchase-order-shipping-confirmation input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--vault-gold);
+}
+
+@media (max-width: 760px) {
+  .purchase-order-receipt-header,
+  .purchase-order-shipping-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-order-receiving-product {
+    overflow-x: auto;
+  }
+
+  .purchase-order-receiving-table-head,
+  .purchase-order-receiving-product fieldset > div:not(.purchase-order-receiving-table-head) {
+    min-width: 590px;
+  }
+}

@@ -50,21 +50,23 @@ export function PurchaseOrderShipping({
       {canMarkShipped ? (
         <form action={action} className="purchase-order-shipping-card">
           <input name="purchase_order_id" type="hidden" value={purchaseOrderId} />
+          <div className="purchase-order-shipping-fields">
           <label>
-            Actual dispatch date
+            <span>Actual dispatch date</span>
             <input max={new Date().toISOString().slice(0, 10)} name="dispatch_date"
               onChange={(event) => setSelectedDispatchDate(event.target.value)} required
               type="date" value={selectedDispatchDate} />
           </label>
           <label>
-            Carrier (optional)
+            <span>Carrier (optional)</span>
             <input maxLength={200} name="carrier" type="text" />
           </label>
           <label>
-            Tracking reference (optional)
+            <span>Tracking reference (optional)</span>
             <input maxLength={200} name="tracking_reference" type="text" />
           </label>
-          <label>
+          </div>
+          <label className="purchase-order-shipping-confirmation">
             <input name="dispatch_confirmed" required type="checkbox" value="yes" />
             The operator confirms the supplier has genuinely dispatched this purchase order.
           </label>
