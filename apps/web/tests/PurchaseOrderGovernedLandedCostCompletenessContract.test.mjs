@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const sql=fs.readFileSync(new URL("../../../supabase/migrations/20261069000000_governed_landed_cost_completeness.sql",import.meta.url),"utf8");
+const ambiguityFix=fs.readFileSync(new URL("../../../supabase/migrations/20261072000000_fix_mixed_po_approval_rpc_ambiguity.sql",import.meta.url),"utf8");
 const view=sql.slice(sql.indexOf("create or replace view public.vault_purchase_order_landed_cost_completeness"),sql.indexOf("commit;"));
 
 test("69000 preserves the completeness view contract and completes only from valid governed GBP evidence",()=>{
@@ -39,4 +40,12 @@ test("69000 does not alter liability, wallet, evidence, or ACLs",()=>{
 test("69000 adds only an independently proven governed structural approval path",()=>{
   for(const item of ["approve_mixed_supplier_purchase_order(uuid,uuid)","governed_liability.liability_evidence_state='available'","governed_liability.liability_source='governed_gbp_landed_cost_allocation'","governed_liability.selected_gbp_minor_units>0","governed_liability.governed_gbp_allocation_run_id is not null","MIXED_PO_GOVERNED_LANDED_COST_INVALID"])assert.match(sql,new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   assert.doesNotMatch(sql,/available_purchasing_power_gbp|wallet_last_updated|paid_amount_gbp|actual_total_gbp/i);
+});
+
+test("72000 qualifies approval lookups that collide with the purchase_order_id return column",()=>{
+  for(const item of ["line.purchase_order_id=po.id","completeness.purchase_order_id=po.id","liability.purchase_order_id=po.id","commitment.purchase_order_id=po.id"])assert.match(ambiguityFix,new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  assert.doesNotMatch(ambiguityFix,/where purchase_order_id=po\.id/);
+  assert.match(ambiguityFix,/create or replace function public\.approve_mixed_supplier_purchase_order/);
+  assert.match(ambiguityFix,/security invoker set search_path=''/);
+  assert.doesNotMatch(ambiguityFix,/grant |revoke |create table|vault_cash_transactions|vault_purchase_order_payments/i);
 });
