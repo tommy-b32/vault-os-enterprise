@@ -1400,7 +1400,7 @@ export async function getPurchaseOrders() {
           source_recommendation_type
         )
       `)
-      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received", "cancelled"])
+      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received", "closed", "cancelled"])
       .order("created_at", {
         ascending: false,
       });
@@ -1668,7 +1668,7 @@ export async function getPurchaseOrder(
         )
       `)
       .eq("id", id)
-      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received", "cancelled"])
+      .in("status", ["draft", "approved", "ordered", "part_paid", "paid", "shipped", "received", "closed", "cancelled"])
       .maybeSingle();
 
   if (error) {
@@ -1899,6 +1899,14 @@ export async function markPurchaseOrderShipped(input: {
     shippedByOperatorId: result.shipped_by_operator_id,
     transitioned: result.transitioned,
   };
+}
+
+export async function closeGovernedPurchaseOrder(input: { purchaseOrderId: string; operatorId: string }): Promise<{ purchaseOrderId: string; status: "closed"; closedAt: string; transitioned: boolean }> {
+  const { data, error } = await supabaseAdmin.rpc("close_governed_purchase_order", { target_purchase_order_id: input.purchaseOrderId, target_operator_id: input.operatorId });
+  if (error) throw new Error(error.message);
+  const result = data?.[0];
+  if (!result || result.status !== "closed" || !result.closed_at) throw new Error("Purchase-order closure did not return governed evidence.");
+  return { purchaseOrderId: result.purchase_order_id, status: "closed", closedAt: result.closed_at, transitioned: result.transitioned === true };
 }
 
 export async function cancelPurchaseOrder(input: {

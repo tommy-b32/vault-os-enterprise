@@ -10,6 +10,7 @@ import {
   createBlankSupplierPurchaseOrder,
   createPurchaseOrderDraft,
   markPurchaseOrderOrdered,
+  closeGovernedPurchaseOrder,
   markPurchaseOrderShipped,
   prepareApprovedPurchaseOrder,
   postReceivedInventory,
@@ -538,6 +539,21 @@ export type MarkPurchaseOrderShippedState = {
   status: "idle" | "success" | "error";
   message: string;
 };
+
+export async function closePurchaseOrder(_previousState: MarkPurchaseOrderShippedState, formData: FormData): Promise<MarkPurchaseOrderShippedState> {
+  try {
+    const operator = await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    if (typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId)) return { status: "error", message: "Invalid purchase order." };
+    if (formData.get("closure_confirmed") !== "yes") return { status: "error", message: "Confirm that this received order is ready to close." };
+    const result = await closeGovernedPurchaseOrder({ purchaseOrderId, operatorId: operator.id });
+    revalidatePath("/purchase-orders"); revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return { status: "success", message: result.transitioned ? "Purchase order closed after governed completion checks." : "Purchase order was already closed." };
+  } catch (error) {
+    console.error("Unable to close purchase order", error);
+    return { status: "error", message: error instanceof Error ? error.message : "Purchase order could not be closed." };
+  }
+}
 
 export async function markPurchaseOrderAsShipped(
   _previousState: MarkPurchaseOrderShippedState,

@@ -13,6 +13,7 @@ import { PendingCatalogueAddPanel } from "@/components/purchase-orders/PendingCa
 import { PendingCatalogueLinkCard } from "@/components/purchase-orders/PendingCatalogueLinkCard";
 import { PurchaseOrderProductImage } from "@/components/purchase-orders/PurchaseOrderProductImage";
 import { PurchaseOrderCostEvidence } from "@/components/purchase-orders/PurchaseOrderCostEvidence";
+import { PurchaseOrderClosure } from "@/components/purchase-orders/PurchaseOrderClosure";
 import { PendingCataloguePackQuantityEditor } from "@/components/purchase-orders/PendingCataloguePackQuantityEditor";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder, getPurchaseOrderEvidenceState } from "@/lib/purchase-orders/PurchaseOrderRepository";
@@ -561,6 +562,8 @@ export default async function PurchaseOrderDetailPage({
             </p>
           ) : null}
         </section>
+
+        {["received", "closed"].includes(draft.status) ? <PurchaseOrderClosure purchaseOrderId={draft.id} status={draft.status as "received" | "closed"} /> : null}
 
         <PurchaseOrderCostEvidence
           canRecord={draft.status === "draft"}
