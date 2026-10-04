@@ -6,6 +6,10 @@ const migration = await readFile(
   new URL("../../../supabase/migrations/20261004000000_governed_decision_memory_capture_schedule.sql", import.meta.url),
   "utf8",
 );
+const replaySecretShim = await readFile(
+  new URL("./fixtures/replay-compat/20261003120000_governed_decision_memory_scheduler_secret_compat.sql", import.meta.url),
+  "utf8",
+);
 
 test("governed memory scheduler is a single 15-minute named pg_cron job", () => {
   assert.equal((migration.match(/'governed-decision-memory-capture'/g) ?? []).length, 2);
@@ -34,4 +38,14 @@ test("scheduler does not alter governed-memory persistence semantics or supply g
   assert.match(migration, /create extension if not exists pg_cron/);
   assert.match(migration, /create extension if not exists pg_net/);
   assert.match(migration, /create extension if not exists supabase_vault/);
+});
+
+test("isolated replay supplies only an inert precondition while cron is disabled", () => {
+  assert.match(replaySecretShim, /current_setting\('cron\.launch_active_jobs', true\) is distinct from 'off'/);
+  assert.match(replaySecretShim, /vault\.decrypted_secrets/);
+  assert.match(replaySecretShim, /name = 'governed_decision_memory_scheduler_secret'/);
+  assert.match(replaySecretShim, /perform vault\.create_secret\(/);
+  assert.match(replaySecretShim, /perform vault\.update_secret\(/);
+  assert.match(replaySecretShim, /replay-only-inert-governed-decision-memory-scheduler-secret/);
+  assert.doesNotMatch(replaySecretShim, /cron\.schedule|net\.http_post/);
 });
