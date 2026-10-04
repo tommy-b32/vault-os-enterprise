@@ -33,14 +33,14 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   } catch (error) {
     return (
       <VaultAppShell
-        searchPlaceholder="Search Store Intelligence..."
-        systemStatusLabel="Store intelligence unavailable"
+        searchPlaceholder="Search Product Performance..."
+        systemStatusLabel="Product performance unavailable"
       >
         <main className="intelligence-page">
           <section className="intelligence-error">
-            <p className="vault-eyebrow">STORE INTELLIGENCE</p>
-            <h1>Store Intelligence unavailable</h1>
-            <p>{error instanceof Error ? error.message : "Unable to calculate store intelligence."}</p>
+            <p className="vault-eyebrow">FINANCE</p>
+            <h1>Product Performance unavailable</h1>
+            <p>{error instanceof Error ? error.message : "Unable to calculate product performance."}</p>
           </section>
           <IntelligenceStyles />
         </main>
@@ -50,16 +50,16 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
 
   return (
     <VaultAppShell
-      searchPlaceholder="Search Store Intelligence..."
-      systemStatusLabel="Store intelligence online"
+      searchPlaceholder="Search Product Performance..."
+      systemStatusLabel="Product performance online"
     >
       <main className="intelligence-page">
         <header className="intelligence-header">
           <div>
-            <p className="vault-eyebrow">STORE INTELLIGENCE</p>
-            <h1>What is happening, why, and what should we do?</h1>
+            <p className="vault-eyebrow">FINANCE</p>
+            <h1>Product Performance</h1>
             <p>
-              Deterministic Shopify intelligence from genuine Vault OS orders. Historical migration data before 4 May 2026 is excluded.
+              Sales performance, profitability, momentum and trading patterns by product and period. Historical migration data before 4 May 2026 is excluded.
             </p>
           </div>
           <div className="intelligence-source-chip">

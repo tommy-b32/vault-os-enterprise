@@ -69,11 +69,11 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
   if (error) {
     return (
       <VaultAppShell
-        searchPlaceholder="Search Commercial Intelligence..."
-        systemStatusLabel="Commercial intelligence unavailable"
+        searchPlaceholder="Search Cash & Purchasing Capacity..."
+        systemStatusLabel="Cash and purchasing capacity unavailable"
       >
         <main className="commercial-error">
-          <h1>Commercial Intelligence unavailable</h1>
+          <h1>Cash & Purchasing Capacity unavailable</h1>
           <p>{error.message}</p>
         </main>
       </VaultAppShell>
@@ -109,21 +109,21 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
 
   return (
     <VaultAppShell
-      searchPlaceholder="Search Commercial Intelligence..."
-      systemStatusLabel="Commercial intelligence online"
+      searchPlaceholder="Search Cash & Purchasing Capacity..."
+      systemStatusLabel="Cash and purchasing capacity online"
     >
       <main className="commercial-page">
         <header className="commercial-page-header">
           <div>
             <p className="vault-eyebrow">
-              COMMERCIAL INTELLIGENCE
+              FINANCE
             </p>
 
-            <h1>Commercial Intelligence</h1>
+            <h1>Cash &amp; Purchasing Capacity</h1>
 
             <p>
-              Cash, purchasing power, commitments and supplier
-              readiness.
+              Cash position, purchasing power, commitments and supplier
+              purchasing capacity.
             </p>
           </div>
         </header>

@@ -8,7 +8,12 @@ import {
 import VaultIcon, {
 } from "@/components/brain/workspace/VaultIcon";
 import { OperatorMenu } from "@/components/auth/OperatorMenu";
-import { isVaultNavigationItemActive, VAULT_NAVIGATION } from "@/lib/navigation";
+import {
+  getVaultSubNavigation,
+  isVaultNavigationItemActive,
+  isVaultSubNavigationItemActive,
+  VAULT_NAVIGATION,
+} from "@/lib/navigation";
 
 type VaultAppShellProps = {
   children: React.ReactNode;
@@ -349,6 +354,36 @@ function VaultAppShellStyles() {
         min-width: 0;
       }
 
+      .vault-app-subnav {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 10px 27px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        background: rgba(12, 14, 13, 0.72);
+      }
+
+      .vault-app-subnav a {
+        flex: 0 0 auto;
+        padding: 7px 10px;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        color: #989e9a;
+        font-size: 11px;
+        text-decoration: none;
+      }
+
+      .vault-app-subnav a:hover {
+        color: #eef0ed;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .vault-app-subnav a.is-active {
+        border-color: rgba(216, 173, 67, 0.32);
+        color: #edc258;
+        background: rgba(216, 173, 67, 0.08);
+      }
+
       @media (max-width: 940px) {
         .vault-app-shell {
           grid-template-columns: 82px minmax(0, 1fr);
@@ -409,6 +444,10 @@ function VaultAppShellStyles() {
           padding: 0 14px;
         }
 
+        .vault-app-subnav {
+          padding: 9px 14px;
+        }
+
         .vault-app-search {
           width: min(100%, 360px);
         }
@@ -436,6 +475,7 @@ export default function VaultAppShell({
   userName = "Tom",
 }: VaultAppShellProps) {
   const pathname = usePathname();
+  const subNavigation = getVaultSubNavigation(pathname);
 
   return (
     <main className="vault-app-shell">
@@ -559,6 +599,27 @@ export default function VaultAppShell({
         </header>
 
         <div className="vault-app-content">
+          {subNavigation.length > 0 ? (
+            <nav aria-label="Section navigation" className="vault-app-subnav">
+              {subNavigation.map((item) => {
+                const isActive = isVaultSubNavigationItemActive(
+                  pathname,
+                  item.href,
+                );
+
+                return (
+                  <Link
+                    aria-current={isActive ? "page" : undefined}
+                    className={isActive ? "is-active" : undefined}
+                    href={item.href}
+                    key={item.href}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          ) : null}
           {children}
         </div>
       </section>

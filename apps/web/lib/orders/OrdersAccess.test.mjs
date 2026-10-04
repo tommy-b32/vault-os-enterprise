@@ -53,15 +53,34 @@ test("failed canonical reads return no fabricated order data", async () => {
   assert.match(repository, /data: null, freshness: "error"/);
 });
 
-test("canonical navigation exposes only implemented primary destinations", () => {
-  const hrefs = VAULT_NAVIGATION.map((item) => item.href);
-  assert.ok(hrefs.includes("/orders"));
-  assert.ok(hrefs.includes("/supplier-catalogue/review"));
-  assert.ok(hrefs.includes("/purchase-intelligence"));
-  assert.ok(hrefs.includes("/financial-intelligence"));
-  assert.ok(!hrefs.includes("/partners"));
-  assert.ok(!hrefs.includes("/analytics"));
-  assert.ok(!hrefs.includes("/settings"));
+test("canonical navigation exposes the approved eight primary areas", () => {
+  assert.deepEqual(
+    VAULT_NAVIGATION.map((item) => item.label),
+    [
+      "Command Centre",
+      "Orders",
+      "Inventory",
+      "Catalogue",
+      "Suppliers",
+      "Purchasing",
+      "Finance",
+      "Vault Brain",
+    ],
+  );
+  assert.equal(VAULT_NAVIGATION.length, 8);
+  const labels = VAULT_NAVIGATION.map((item) => item.label);
+  for (const removedLabel of [
+    "Supplier Catalogue",
+    "Match Review",
+    "Store Intelligence",
+    "Financial Intelligence",
+    "Purchase Orders",
+    "Purchase Intelligence",
+    "Commercial Intelligence",
+    "Advisor",
+  ]) {
+    assert.ok(!labels.includes(removedLabel));
+  }
 });
 
 test("standard shell and Vault Brain consume the shared navigation contract", async () => {
