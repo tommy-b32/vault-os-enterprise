@@ -8,6 +8,7 @@ import {
   remediationInitialTab,
   selectedWorkspaceProduct,
 } from "../lib/catalogue/remediation-workspace.ts";
+import { getVaultSubNavigation } from "../lib/navigation.ts";
 
 const product = (parent, style, name, supplier = "Supplier") => ({ parent_product_id: parent, style_id: style, product_name: name, supplier_company: supplier, inventory_strategy: "stocked", pack_profile: "pack", status: "active" });
 const products = [product("affected-1", "affected-1::Black", "Black Tee"), product("unrelated", "unrelated::Green", "Green Hoodie", "Other supplier"), product("affected-2", "affected-2::Navy", "Navy Polo")];
@@ -41,14 +42,31 @@ test("canonical remediation tab mapping remains business except commercial-cost 
   assert.equal(remediationInitialTab("invalid_or_missing_commercial_cost"), "commercial");
 });
 
-test("server page retains a valid-remediation branch before normal catalogue markup", async () => {
+test("catalogue keeps remediation deep links and makes the product workspace primary", async () => {
   const page = await readFile(new URL("../app/catalogue/page.tsx", import.meta.url), "utf8");
   const workspace = await readFile(new URL("../components/catalogue/CatalogueWorkspace.tsx", import.meta.url), "utf8");
   assert.match(page, /isCatalogueRemediationBlocker\(query\.attention\)/);
   assert.match(page, /if \(attention\)[\s\S]*?return[\s\S]*?catalogue-remediation-page/);
   assert.match(page, /catalogue-remediation-page[\s\S]*?const totalProducts/);
-  assert.match(page, /Product Intelligence/);
-  assert.match(page, /Highest-impact catalogue gaps/);
+  assert.match(page, /Complete product setup/);
+  assert.match(page, /Missing supplier/);
+  assert.match(page, /Missing commercial cost/);
+  assert.match(page, /\/catalogue\?attention=invalid_or_missing_commercial_cost/);
+  assert.match(page, /\/catalogue\?attention=reorder_approval_missing/);
+  assert.match(page, /\/catalogue\?attention=target_stock_days_missing/);
+  assert.match(page, /Open product workspace/);
+  assert.match(page, /resolve supplier and attribute setup gaps/);
+  assert.doesNotMatch(page, /Assign suppliers and complete required attributes/);
+  assert.doesNotMatch(page, /aria-label="Catalogue tools"/);
+  assert.doesNotMatch(page, /href="\/catalogue\/import"/);
+  assert.doesNotMatch(page, /href="\/catalogue\/pack-profiles"/);
+  assert.deepEqual(getVaultSubNavigation("/catalogue"), [
+    { label: "Products", href: "/catalogue" },
+    { label: "Import", href: "/catalogue/import" },
+    { label: "Pack Profiles", href: "/catalogue/pack-profiles" },
+  ]);
+  assert.match(page, /<CatalogueWorkspace[\s\S]*?<details className="catalogue-secondary-details">[\s\S]*?<ProductVisionWorkspace/);
+  assert.doesNotMatch(page, /Catalogue Health|Catalogue Quality|Decision-data coverage|Highest-impact catalogue gaps/);
   assert.match(workspace, /attention && !hasAffectedProducts/);
   assert.match(workspace, /<ProductEditor/);
 });

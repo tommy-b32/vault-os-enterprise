@@ -1995,6 +1995,138 @@ input:focus-visible {
   text-align: center;
 }
 
+/* Catalogue is a product-management workspace; diagnostics stay compact and secondary. */
+.catalogue-remediation-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.catalogue-remediation-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid var(--vault-border);
+  border-radius: 8px;
+  color: var(--vault-text-soft);
+  background: rgba(255, 255, 255, .018);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.catalogue-remediation-links a:hover {
+  border-color: var(--vault-border-gold);
+  color: var(--vault-gold-bright);
+}
+
+.catalogue-readiness-summary {
+  margin-bottom: 26px;
+  padding: 18px;
+  border: 1px solid var(--vault-border);
+  border-radius: 14px;
+  background: var(--vault-panel);
+}
+
+.catalogue-readiness-summary-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.catalogue-readiness-summary-heading h2 {
+  margin: 6px 0 0;
+  color: #f4f1e9;
+  font-size: 22px;
+}
+
+.catalogue-readiness-summary-heading > p {
+  max-width: 580px;
+  margin: 0;
+  color: var(--vault-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.catalogue-readiness-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.catalogue-readiness-summary-metrics article {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--vault-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .018);
+}
+
+.catalogue-readiness-summary-metrics span {
+  display: block;
+  color: var(--vault-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.catalogue-readiness-summary-metrics strong {
+  display: block;
+  margin-top: 8px;
+  color: #f4f1e9;
+  font-size: 25px;
+}
+
+.catalogue-remediation-links {
+  margin-top: 12px;
+}
+
+.catalogue-remediation-links a {
+  min-height: 35px;
+  font-size: 11px;
+}
+
+.catalogue-product-workspace {
+  margin-top: 0;
+}
+
+.catalogue-secondary-details {
+  margin-top: 26px;
+  border: 1px solid var(--vault-border);
+  border-radius: 11px;
+  background: var(--vault-panel);
+}
+
+.catalogue-secondary-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 17px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.catalogue-secondary-details summary::-webkit-details-marker { display: none; }
+.catalogue-secondary-details summary span { display: grid; gap: 4px; }
+.catalogue-secondary-details summary b { color: #f4f1e9; font-size: 13px; }
+.catalogue-secondary-details summary small { color: var(--vault-muted); font-size: 11px; }
+.catalogue-secondary-details summary i { color: var(--vault-gold-bright); font-style: normal; }
+.catalogue-secondary-details[open] summary i { transform: rotate(180deg); }
+.catalogue-secondary-details > div { padding: 0 17px 17px; }
+
+@media (max-width: 900px) {
+  .catalogue-readiness-summary-heading { align-items: flex-start; flex-direction: column; }
+  .catalogue-readiness-summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .catalogue-readiness-summary-metrics { grid-template-columns: 1fr; }
+}
+
 /* ============================================================
    COMMERCIAL ADVISOR DECISION CENTRE
    ============================================================ */
