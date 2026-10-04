@@ -14,6 +14,7 @@ import { PendingCatalogueLinkCard } from "@/components/purchase-orders/PendingCa
 import { PurchaseOrderProductImage } from "@/components/purchase-orders/PurchaseOrderProductImage";
 import { PurchaseOrderCostEvidence } from "@/components/purchase-orders/PurchaseOrderCostEvidence";
 import { PurchaseOrderClosure } from "@/components/purchase-orders/PurchaseOrderClosure";
+import { PurchaseOrderLifecycleStrip, type InventoryPostingEvidence, type PaymentEvidence } from "@/components/purchase-orders/PurchaseOrderLifecycleStrip";
 import { PendingCataloguePackQuantityEditor } from "@/components/purchase-orders/PendingCataloguePackQuantityEditor";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder, getPurchaseOrderEvidenceState } from "@/lib/purchase-orders/PurchaseOrderRepository";
@@ -93,6 +94,8 @@ type SavedReceiptLine = {
     non_sellable_quantity: number;
   }> | null;
 };
+
+type SavedReceipt = { vault_purchase_order_receipt_lines: SavedReceiptLine[] | null };
 
 type ReceivingVariant = {
   id: string;
@@ -232,10 +235,30 @@ export default async function PurchaseOrderDetailPage({
     if (events.some((event) => event.event_type === "shopify_succeeded")) {
       postedByAllocation.set(postingLine.receipt_allocation_id,
         (postedByAllocation.get(postingLine.receipt_allocation_id) ?? 0) + postingLine.quantity);
-    } else if (!events.some((event) => event.event_type === "shopify_failed")) {
+    } else {
       blockedPostingAllocations.add(postingLine.receipt_allocation_id);
     }
   }
+  const governedPayment = draft.governed_reconciled_payment_state;
+  const reconciledPaid = Number(governedPayment?.supplier_paid_minor_units ?? 0);
+  const reconciledBalance = Number(governedPayment?.supplier_balance_minor_units ?? Number.POSITIVE_INFINITY);
+  const lifecyclePayment: PaymentEvidence = Number.isFinite(reconciledBalance) && reconciledBalance <= 0
+    ? "paid"
+    : reconciledPaid > 0 ? "part_paid" : "unpaid";
+  const sellableReceiptAllocations = (receipts as SavedReceipt[]).flatMap((receipt) =>
+    (receipt.vault_purchase_order_receipt_lines ?? []).flatMap((line) =>
+      (line.vault_purchase_order_receipt_allocations ?? []).map((allocation) => ({
+        id: allocation.id,
+        sellableQuantity: Math.max(0, allocation.quantity_received - allocation.non_sellable_quantity),
+      }))),
+  ).filter((allocation) => allocation.sellableQuantity > 0);
+  const sellableReceivedQuantity = sellableReceiptAllocations.reduce((total, allocation) => total + allocation.sellableQuantity, 0);
+  const postedReceivedQuantity = sellableReceiptAllocations.reduce((total, allocation) => total + Math.min(allocation.sellableQuantity, postedByAllocation.get(allocation.id) ?? 0), 0);
+  const lifecycleInventoryPosting: InventoryPostingEvidence = sellableReceivedQuantity === 0
+    ? "not_applicable"
+    : postedReceivedQuantity >= sellableReceivedQuantity ? "posted"
+      : blockedPostingAllocations.size > 0 ? "blocked"
+        : postedReceivedQuantity > 0 ? "partially_posted" : "unposted";
 
   return (
     <VaultAppShell>
@@ -243,7 +266,7 @@ export default async function PurchaseOrderDetailPage({
         <header className="purchase-order-header">
           <div>
             <p className="vault-eyebrow">
-              SAVED PURCHASE ORDER
+              PURCHASING · PURCHASE ORDER
             </p>
 
             <h1>
@@ -251,9 +274,7 @@ export default async function PurchaseOrderDetailPage({
             </h1>
 
             <p>
-              Durable buying-basket snapshot.
-              Changes in live Purchase Intelligence
-              do not alter this saved draft.
+              Operational record for approval, supplier preparation, payment, shipping, receiving, inventory posting, and closure. Changes in live Recommendations do not alter this saved order.
             </p>
           </div>
 
@@ -261,6 +282,16 @@ export default async function PurchaseOrderDetailPage({
             {draft.status.toUpperCase()}
           </span>
         </header>
+
+        <PurchaseOrderLifecycleStrip
+          status={draft.status as "draft" | "approved" | "ordered" | "part_paid" | "paid" | "shipped" | "received" | "closed" | "cancelled"}
+          evidence={{
+            payment: lifecyclePayment,
+            shipped: Boolean(draft.shipped_at) || ["shipped", "received", "closed"].includes(draft.status),
+            fullyReceived: Boolean(draft.received_at) || ["received", "closed"].includes(draft.status),
+            inventoryPosting: lifecycleInventoryPosting,
+          }}
+        />
 
         <section className="purchase-order-context">
           <article>

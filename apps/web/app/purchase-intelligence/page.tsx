@@ -24,6 +24,10 @@ function currency(value: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(value);
 }
 
+function reasonCodeLabel(reason: string): string {
+  return reason.toLowerCase().split("_").map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join(" ");
+}
+
 function fixedPackProductKey(styleId: string, parentProductId: string, supplierId: string) {
   return `${styleId}\u0000${parentProductId}\u0000${supplierId}`;
 }
@@ -99,7 +103,6 @@ export default async function PurchaseIntelligencePage() {
     wallet: walletResult.data as PurchasingWalletData,
     inventoryTrusted: freshness.syncStatus === "current",
   });
-  const recommendations = evaluation.recommendations;
   const diagnostics = PurchaseIntelligenceDiagnostics.build({
     suppliers,
     evaluation,
@@ -109,18 +112,19 @@ export default async function PurchaseIntelligencePage() {
     <VaultAppShell searchPlaceholder="Search purchase intelligence..." systemStatusLabel="Purchase intelligence is read-only">
       <main className="purchase-intelligence-page">
         <header className="purchase-intelligence-header">
-          <div><p className="vault-eyebrow">TRUSTED PURCHASE INTELLIGENCE</p><h1>Purchase Intelligence</h1><p>Deterministic, supplier-grouped recommendations from canonical live business data.</p></div>
-          <span>{recommendations.length > 0 ? "Demand recommendations" : "No demand recommendations"}</span>
+          <div><p className="vault-eyebrow">PURCHASING · RECOMMENDATIONS</p><h1>Recommendations</h1><p>What to buy, from whom, and why — grouped by supplier and constrained by governed cash, minimums, and trust evidence.</p></div>
+          <span>Actionable replenishment first</span>
         </header>
         {presentedFixedPackResults === null ? <section className="purchase-intelligence-notice"><strong>Fixed-pack recommendations unavailable</strong><span>Purchase Intelligence remains available while the fixed-pack recommendation service is unavailable.</span></section> : <PurchaseRecommendationsPanel results={presentedFixedPackResults} />}
         <StockPurchasingPlanPanel plan={planning} />
         <section className="purchase-intelligence-notice"><strong>Read-only intelligence</strong><span>No purchase orders are created and no purchases are approved from this page.</span></section>
-        <section className="purchase-intelligence-diagnostics">
+        <details className="purchase-intelligence-diagnostics">
+          <summary>Supplier basket diagnostics and blockers</summary>
           <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">SUPPLIER SUMMARY</p><h2>Basket intelligence</h2></div><span>Advisory only</span></div>
           <div className="purchase-intelligence-diagnostic-grid">
             {evaluation.baskets.map((basket) => (
               <article className={`purchase-intelligence-diagnostic is-${basket.purchasing_state === "READY_TO_ORDER" ? "trusted" : "blocked"}`} key={basket.supplier.id}>
-                <header><div><span>Supplier</span><h3>{basket.supplier.name}</h3></div><strong>{basket.purchasing_state}</strong></header>
+                <header><div><span>Supplier</span><h3>{basket.supplier.name}</h3></div><div><strong>{basket.purchasing_state === "READY_TO_ORDER" ? "PACK MINIMUM MET" : basket.purchasing_state}</strong>{basket.purchasing_state === "READY_TO_ORDER" ? <small>Advisory basket status — this means the supplier&apos;s governed pack minimum is satisfied; it does not mean the overall purchasing recommendation has been approved.</small> : null}</div></header>
                 <dl>
                   <div><dt>Demand products</dt><dd>{basket.products_recommended}</dd></div>
                   <div><dt>Required packs</dt><dd>{basket.required_packs}</dd></div>
@@ -138,8 +142,9 @@ export default async function PurchaseIntelligencePage() {
               </article>
             ))}
           </div>
-        </section>
-        <section className="purchase-intelligence-diagnostics">
+        </details>
+        <details className="purchase-intelligence-diagnostics">
+          <summary>Supplier trust diagnostics</summary>
           <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">SUPPLIER DIAGNOSTICS</p><h2>Trust evaluation</h2><p>Every evaluated supplier is shown, including suppliers blocked from recommendation.</p></div><span>{diagnostics.length} suppliers evaluated</span></div>
           <div className="purchase-intelligence-diagnostic-grid">
             {diagnostics.map((diagnostic) => (
@@ -154,7 +159,7 @@ export default async function PurchaseIntelligencePage() {
                     <div><dt>Evidence unavailable</dt><dd>{diagnostic.evidenceUnavailable}</dd></div>
                     <div><dt>Excluded by strategy</dt><dd>{diagnostic.excludedByStrategy}</dd></div>
                   </dl>
-                  <div className="purchase-intelligence-rejections"><span>Demand evidence unavailable</span>{diagnostic.demandMissingRequirements.length > 0 ? <ul>{diagnostic.demandMissingRequirements.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
+                  <div className="purchase-intelligence-rejections"><span>Demand evidence unavailable</span>{diagnostic.demandMissingRequirements.length > 0 ? <ul>{diagnostic.demandMissingRequirements.map((reason) => <li key={reason}>{reasonCodeLabel(reason)}</li>)}</ul> : <p>None</p>}</div>
                   {diagnostic.demandItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Products needing replenishment</span>{diagnostic.demandItems.map((demand) => <DemandDecisionDetails demand={demand} key={demand.styleId} />)}</div> : null}
                   {diagnostic.slowDemandWatchItems.length > 0 ? <div className="purchase-intelligence-demand-items"><span>Slow demand — watch</span>{diagnostic.slowDemandWatchItems.map((demand) => <DemandDecisionDetails demand={demand} key={demand.styleId} />)}</div> : null}
                 </section>
@@ -165,32 +170,13 @@ export default async function PurchaseIntelligencePage() {
                     <div><dt>Purchasing blocked</dt><dd>{diagnostic.purchasingBlocked}</dd></div>
                     <div><dt>Purchasing state</dt><dd>{diagnostic.purchasingState.replaceAll("_", " ")}</dd></div>
                   </dl>
-                  <div className="purchase-intelligence-rejections"><span>Purchasing-policy blockers</span>{diagnostic.purchasingBlockers.length > 0 ? <ul>{diagnostic.purchasingBlockers.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul> : <p>None</p>}</div>
+                  <div className="purchase-intelligence-rejections"><span>Purchasing-policy blockers</span>{diagnostic.purchasingBlockers.length > 0 ? <ul>{diagnostic.purchasingBlockers.map((reason) => <li key={reason}>{reasonCodeLabel(reason)}</li>)}</ul> : <p>None</p>}</div>
                 </section>
                 <footer><strong>Final recommendation status: {diagnostic.finalRecommendationStatus}</strong></footer>
               </article>
             ))}
           </div>
-        </section>
-        {recommendations.map((recommendation) => (
-          <section className="purchase-intelligence-supplier" key={recommendation.supplier.id}>
-            <div className="purchase-intelligence-supplier-heading"><div><p className="vault-eyebrow">SUPPLIER RECOMMENDATION</p><h2>{recommendation.supplier.name}</h2></div><span>{recommendation.confidence === "trusted" ? "Purchase-qualified" : "Advisory"}</span></div>
-            <div className="purchase-intelligence-metrics">
-              <article><span>Packs</span><strong>{recommendation.packs}</strong></article>
-              <article><span>Units</span><strong>{recommendation.units}</strong></article>
-              <article><span>Spend</span><strong>{recommendation.spendGbp === null ? "Unavailable" : currency(recommendation.spendGbp)}</strong></article>
-              <article><span>Projected revenue</span><strong>{recommendation.projectedRevenueGbp === null ? "Unavailable" : currency(recommendation.projectedRevenueGbp)}</strong></article>
-              <article><span>Projected profit</span><strong>{recommendation.projectedProfitGbp === null ? "Unavailable" : currency(recommendation.projectedProfitGbp)}</strong></article>
-              <article><span>Purchasing power after</span><strong>{recommendation.purchasingPowerAfterOrderGbp === null ? "Unavailable" : currency(recommendation.purchasingPowerAfterOrderGbp)}</strong></article>
-            </div>
-            <div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Product</th><th>Stock</th><th>Daily sales</th><th>Days left</th><th>Target</th><th>Recommended quantity</th><th>Quantity basis</th><th>Cost</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>
-              {recommendation.recommendedProducts.map((product) => <tr key={product.styleId}><td><strong>{product.productName}</strong><small>{product.styleId}</small></td><td>{product.currentStock}</td><td>{product.averageDailySales}</td><td>{product.daysOfStockRemaining ?? "—"}</td><td>{product.targetDays}</td><td><strong>Recommended: {product.quantityIntelligence.recommended_packs} {product.quantityIntelligence.recommended_packs === 1 ? "pack" : "packs"} / {product.quantityIntelligence.recommended_units} units</strong></td><td><small>Target stock: {product.quantityIntelligence.target_units} units</small><small>Available: {Math.max(0, product.quantityIntelligence.net_available_stock)}</small><small>Deficit: {product.quantityIntelligence.stock_deficit_units} units</small><small>Coverage: {product.quantityIntelligence.coverage_days} days</small></td><td>{product.expectedSupplierCostGbp === null ? "Unavailable" : currency(product.expectedSupplierCostGbp)}</td><td>{product.expectedSellingRevenueGbp === null ? "Unavailable" : currency(product.expectedSellingRevenueGbp)}</td><td>{product.expectedGrossProfitGbp === null ? "Unavailable" : currency(product.expectedGrossProfitGbp)}</td></tr>)}
-            </tbody></table></div>
-            <footer><span>Supplier minimum: {recommendation.supplierMinimumStatus}</span><span>Confidence: {recommendation.confidence.replaceAll("_", " ")}</span></footer>
-            {recommendation.purchasingBlockers.length > 0 ? <div className="purchase-intelligence-rejections"><span>Approval blockers</span><ul>{recommendation.purchasingBlockers.map((reason) => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul></div> : null}
-          </section>
-        ))}
-        {recommendations.length === 0 ? <section className="purchase-intelligence-empty"><h2>No supplier recommendation is trusted</h2><p>Vault OS will display a recommendation only when catalogue, inventory, supplier, commercial, wallet and approval evidence are all complete and trusted.</p></section> : null}
+        </details>
       </main>
     </VaultAppShell>
   );

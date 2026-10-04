@@ -408,6 +408,11 @@ export default async function PurchaseOrdersPage() {
 
   const savedDrafts =
     await savedDraftsPromise;
+  const savedDraftGroups = [
+    { label: "Draft / Preparation", statuses: ["draft", "approved"] },
+    { label: "Active", statuses: ["ordered", "part_paid", "paid", "shipped", "received"] },
+    { label: "History", statuses: ["closed", "cancelled"] },
+  ].map((group) => ({ ...group, orders: savedDrafts.filter((draft) => group.statuses.includes(draft.status)) })).filter((group) => group.orders.length > 0);
 
   return (
     <VaultAppShell>
@@ -415,17 +420,15 @@ export default async function PurchaseOrdersPage() {
         <header className="purchase-order-header">
           <div>
             <p className="vault-eyebrow">
-              PURCHASE ORDERS
+              PURCHASING · PURCHASE ORDERS
             </p>
 
             <h1>
-              Purchase Order Builder
+              Purchase Orders
             </h1>
 
             <p>
-              Build durable supplier drafts from
-              canonical Purchase Intelligence and
-              Supplier Basket recommendations.
+              Create and continue durable supplier orders. Recommendations inform draft creation; this workspace owns committed operational lifecycle.
             </p>
           </div>
 
@@ -478,13 +481,13 @@ export default async function PurchaseOrdersPage() {
           <div className="purchase-order-section-heading">
             <div>
               <p className="vault-eyebrow">
-                SAVED PURCHASE ORDERS
+                ACTIVE, DRAFT &amp; HISTORICAL PURCHASE ORDERS
               </p>
 
               <h2>Saved purchase orders</h2>
 
               <p>
-                Durable draft and approved snapshots of buying baskets.
+                Continue drafts and active supplier orders here. Closed and cancelled orders remain available as history.
               </p>
             </div>
 
@@ -509,8 +512,8 @@ export default async function PurchaseOrdersPage() {
               </p>
             </section>
           ) : (
-            <div className="purchase-order-saved-grid">
-              {savedDrafts.map((draft) => {
+            <div className="purchase-order-saved-groups">
+              {savedDraftGroups.map((group) => <section key={group.label} aria-label={`${group.label} purchase orders`}><p className="vault-eyebrow">{group.label.toUpperCase()}</p><div className="purchase-order-saved-grid">{group.orders.map((draft) => {
                 const supplierName =
                   draft.vault_suppliers?.[0]?.supplier_name ??
                   "Unknown supplier";
@@ -625,7 +628,7 @@ export default async function PurchaseOrdersPage() {
                     </p>
                   </Link>
                 );
-              })}
+              })}</div></section>)}
             </div>
           )}
         </section>
