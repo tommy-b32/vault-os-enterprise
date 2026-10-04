@@ -1,5 +1,4 @@
 import VaultAppShell from "@/components/layout/VaultAppShell";
-import Link from "next/link";
 import MissionControlStyles from "@/components/brain/MissionControlStyles";
 import VaultIcon, {
   type VaultIconName,
@@ -205,52 +204,6 @@ function formatDate(
   }).format(date);
 }
 
-function calculateHealthScore(
-  records: InventoryRecord[],
-): number {
-  const monitoredRecords =
-    records.filter(
-      isMonitoredInventory,
-    );
-
-  if (monitoredRecords.length === 0) {
-    return 100;
-  }
-
-  const weightedHealth =
-    monitoredRecords.reduce(
-      (total, record) => {
-        const status =
-          getInventoryStatus(record);
-
-        switch (status) {
-          case "healthy":
-            return total + 1;
-
-          case "low":
-            return total + 0.5;
-
-          case "out":
-          case "negative":
-            return total;
-
-          case "dropship":
-          case "service":
-          case "do_not_restock":
-          case "discontinued":
-            return total;
-        }
-      },
-      0,
-    );
-
-  return Math.round(
-    (weightedHealth /
-      monitoredRecords.length) *
-      100,
-  );
-}
-
 function InventoryMetric({
   icon,
   label,
@@ -355,6 +308,40 @@ function InventoryPageStyles() {
           0 0 16px rgba(99, 209, 140, 0.32);
       }
 
+      .inventory-sync-status-delayed,
+      .inventory-sync-status-syncing {
+        border-color: rgba(224, 181, 63, 0.3);
+        color: #e6bc4d;
+        background: rgba(126, 92, 8, 0.17);
+      }
+
+      .inventory-sync-status-delayed i,
+      .inventory-sync-status-syncing i {
+        background: #e6bc4d;
+      }
+
+      .inventory-sync-status-unavailable,
+      .inventory-sync-status-failed {
+        border-color: rgba(221, 91, 80, 0.3);
+        color: #ffaaa5;
+        background: rgba(129, 31, 26, 0.18);
+      }
+
+      .inventory-sync-status-unavailable i,
+      .inventory-sync-status-failed i {
+        background: #ffaaa5;
+      }
+
+      .inventory-data-warning {
+        padding: 12px 14px;
+        border: 1px solid rgba(224, 181, 63, 0.3);
+        border-radius: 10px;
+        color: #ddc782;
+        background: rgba(126, 92, 8, 0.13);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
       .inventory-status-strip {
         display: flex;
         flex-wrap: wrap;
@@ -385,6 +372,7 @@ function InventoryPageStyles() {
         display: grid;
         grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 12px;
+        order: 2;
       }
 
       .inventory-metric {
@@ -468,6 +456,7 @@ function InventoryPageStyles() {
 
       .inventory-risk-panel {
         padding: 21px;
+        order: 1;
       }
 
       .inventory-panel-header {
@@ -632,6 +621,47 @@ function InventoryPageStyles() {
 
       .inventory-table-panel {
         padding: 21px;
+        order: 3;
+      }
+
+      .inventory-data-status {
+        border: 1px solid rgba(255, 255, 255, 0.075);
+        border-radius: 12px;
+        background: #101210;
+        order: 4;
+      }
+
+      .inventory-data-status summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .inventory-data-status summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .inventory-data-status summary .vault-eyebrow,
+      .inventory-data-status summary strong {
+        display: block;
+      }
+
+      .inventory-data-status summary strong {
+        margin-top: 5px;
+        color: #eeeeec;
+        font-size: 13px;
+      }
+
+      .inventory-data-status .inventory-sync-panel {
+        margin: 0;
+        border-right: 0;
+        border-bottom: 0;
+        border-left: 0;
+        border-radius: 0 0 12px 12px;
       }
 
       .inventory-table-wrapper {
@@ -909,26 +939,6 @@ export default async function InventoryPage() {
       0,
     );
 
-  const totalCommitted =
-    monitoredInventory.reduce(
-      (total, record) =>
-        total +
-        normaliseNumber(
-          record.committed_stock,
-        ),
-      0,
-    );
-
-  const totalIncoming =
-    monitoredInventory.reduce(
-      (total, record) =>
-        total +
-        normaliseNumber(
-          record.incoming_stock,
-        ),
-      0,
-    );
-
   const negativeStock =
     monitoredInventory.filter(
       (record) =>
@@ -949,9 +959,6 @@ export default async function InventoryPage() {
         getInventoryStatus(record) ===
         "low",
     );
-
-  const healthScore =
-    calculateHealthScore(inventory);
 
   const inventoryRisks =
     monitoredInventory
@@ -983,18 +990,14 @@ export default async function InventoryPage() {
                 Live Operations
               </p>
 
-              <h1>
-                Inventory Intelligence
-              </h1>
+              <h1>Inventory</h1>
 
               <p>
-                Live stock intelligence joined with Catalogue
-                rules, so dropship, service, do-not-restock and
-                discontinued products are handled correctly.
+                Current stock truth, exceptions and product-level availability.
               </p>
             </div>
 
-            <span className="inventory-sync-status">
+            <span className={`inventory-sync-status inventory-sync-status-${inventoryFreshness.syncStatus}`}>
               <i />
               {inventoryFreshness.syncStatus === "syncing"
                 ? "Inventory synchronising"
@@ -1006,29 +1009,14 @@ export default async function InventoryPage() {
             </span>
           </header>
 
-          <section className="inventory-status-strip">
-            <span>
-              <i />
-              Supabase connected
-            </span>
-
-            <span>
-              <i />
-              {monitoredInventory.length} stocked products monitored
-            </span>
-
-            <span>
-              <i />
-              Last sync: {formatDate(latestSync)}
-            </span>
-
-            <span>
-              <i />
-              Inventory intelligence online
-            </span>
-          </section>
-
-          <InventorySyncPanel freshness={inventoryFreshness} />
+          {inventoryFreshness.syncStatus !== "current" ? (
+            <section className="inventory-data-warning" role="alert">
+              <strong>Stock data needs attention.</strong>{" "}
+              {inventoryFreshness.syncStatus === "delayed"
+                ? `Last sync: ${formatDate(latestSync)}.`
+                : "The latest inventory sync is unavailable."} Open Data status below for sync details.
+            </section>
+          ) : null}
 
           {inventory.length === 0 ? (
             <article className="vault-panel inventory-empty">
@@ -1049,24 +1037,10 @@ export default async function InventoryPage() {
             <>
               <section className="inventory-metrics">
                 <InventoryMetric
-                  icon="brain"
-                  label="Health Score"
-                  value={`${healthScore}%`}
-                  supportingText={`${excludedFromRisk.length} products excluded by catalogue rules`}
-                  tone={
-                    healthScore >= 80
-                      ? "positive"
-                      : healthScore >= 55
-                        ? "warning"
-                        : "critical"
-                  }
-                />
-
-                <InventoryMetric
                   icon="catalogue"
-                  label="Products"
-                  value={totalProducts}
-                  supportingText={`${monitoredInventory.length} actively monitored`}
+                  label="Monitored products"
+                  value={monitoredInventory.length}
+                  supportingText={`${excludedFromRisk.length} excluded by product strategy`}
                 />
 
                 <InventoryMetric
@@ -1097,15 +1071,11 @@ export default async function InventoryPage() {
                 />
 
                 <InventoryMetric
-                  icon="trend"
-                  label="Incoming"
-                  value={totalIncoming}
-                  supportingText={`${totalCommitted} units committed`}
-                  tone={
-                    totalIncoming > 0
-                      ? "positive"
-                      : "default"
-                  }
+                  icon="shield"
+                  label="Data freshness"
+                  value={inventoryFreshness.syncStatus === "current" ? "Current" : inventoryFreshness.syncStatus}
+                  supportingText={`Last sync: ${formatDate(latestSync)}`}
+                  tone={inventoryFreshness.syncStatus === "current" ? "positive" : "warning"}
                 />
               </section>
 
@@ -1113,23 +1083,21 @@ export default async function InventoryPage() {
                 <div className="inventory-panel-header">
                   <div>
                     <span className="vault-eyebrow">
-                      Inventory Risk Radar
+                      Critical exceptions
                     </span>
 
                     <h2>
-                      Products requiring attention
+                      Stock needing attention
                     </h2>
 
                     <p>
-                      Only actively stocked products are assessed.
-                      Dropship, service, do-not-restock and discontinued
-                      items are excluded from alerts and health scoring.
+                      Negative, out-of-stock and low-stock products. Product strategies
+                      that are not actively stocked remain visible in the stock workspace.
                     </p>
-                    <p><Link href="/purchase-intelligence">View variant-aware Stock &amp; Reorder Intelligence →</Link></p>
                   </div>
 
                   <span className="inventory-risk-count">
-                    {inventoryRisks.length} surfaced risks
+                    {inventoryRisks.length} shown
                   </span>
                 </div>
 
@@ -1234,11 +1202,11 @@ export default async function InventoryPage() {
                 <div className="inventory-panel-header">
                   <div>
                     <span className="vault-eyebrow">
-                      Live Inventory
+                      Stock workspace
                     </span>
 
                     <h2>
-                      Complete stock position
+                      Current stock position
                     </h2>
 
                     <p>
@@ -1332,6 +1300,20 @@ export default async function InventoryPage() {
                   </table>
                 </div>
               </section>
+
+              <details className="inventory-data-status">
+                <summary>
+                  <span>
+                    <span className="vault-eyebrow">Data status</span>
+                    <strong>Shopify sync and reconciliation details</strong>
+                  </span>
+                  <span className="inventory-sync-status">
+                    <i />
+                    {inventoryFreshness.syncStatus}
+                  </span>
+                </summary>
+                <InventorySyncPanel freshness={inventoryFreshness} />
+              </details>
             </>
           )}
       </div>
