@@ -466,6 +466,9 @@ export default async function AdvisorPage() {
         <main className="catalogue-error">
           <h1>Commercial Advisor unavailable</h1>
           <p>{result.error}</p>
+          <Link className="advisor-vault-brain-link" href="/missions">
+            Back to Vault Brain →
+          </Link>
         </main>
       </VaultAppShell>
     );
@@ -511,12 +514,15 @@ export default async function AdvisorPage() {
       <main className="advisor-decision-page">
         <header className="advisor-decision-header">
           <div>
-            <p className="vault-eyebrow">COMMERCIAL ADVISOR</p>
-            <h1>Commercial Advisor</h1>
+            <p className="vault-eyebrow">VAULT BRAIN / COMMERCIAL DETAIL</p>
+            <h1>Advisor</h1>
             <p>
-              Prioritised actions to improve revenue, margin, stock
-              availability and purchasing confidence.
+              A secondary Vault Brain view for commercial recommendation
+              detail. Use Vault Brain for cross-domain priorities.
             </p>
+            <Link className="advisor-vault-brain-link" href="/missions">
+              Open Vault Brain priorities →
+            </Link>
           </div>
 
           <article className="advisor-confidence-card">
@@ -537,9 +543,7 @@ export default async function AdvisorPage() {
             <section className="advisor-primary-section">
               <div className="advisor-section-heading">
                 <div>
-                  <p className="vault-eyebrow">
-                    Today&apos;s Commercial Decision
-                  </p>
+                  <p className="vault-eyebrow">COMMERCIAL DETAIL</p>
                   <h2>{primaryDecision.title}</h2>
                 </div>
                 <span className={`advisor-priority is-${primaryDecision.priority}`}>
@@ -550,7 +554,9 @@ export default async function AdvisorPage() {
               <div className="advisor-primary-card">
                 <OpportunitySummary opportunity={primaryDecision} />
                 {primaryProduct && primaryCommercialInput ? (
-                  <dl className="advisor-opportunity-facts advisor-trusted-evidence">
+                  <details className="advisor-evidence-details">
+                    <summary>View commercial evidence and inputs</summary>
+                    <dl className="advisor-opportunity-facts advisor-trusted-evidence">
                     <div><dt>Supplier</dt><dd>{primaryProduct.supplier_company ?? "Unavailable"}</dd></div>
                     <div><dt>Current stock</dt><dd>{primaryProduct.stock_on_hand}</dd></div>
                     <div><dt>Committed</dt><dd>{primaryProduct.committed_stock ?? "Unavailable"}</dd></div>
@@ -563,7 +569,8 @@ export default async function AdvisorPage() {
                     <div><dt>Estimated order cost</dt><dd>{formatGbp(primaryCommercialInput.purchaseCost * primaryCommercialInput.recommendedOrderQuantity)}</dd></div>
                     <div><dt>Margin</dt><dd>{primaryCommercialInput.marginPercent === null ? "Unavailable" : `${primaryCommercialInput.marginPercent.toFixed(1)}%`}</dd></div>
                     <div><dt>Return on capital</dt><dd>{primaryCommercialInput.returnOnCapital === null ? "Unavailable" : `${primaryCommercialInput.returnOnCapital.toFixed(1)}%`}</dd></div>
-                  </dl>
+                    </dl>
+                  </details>
                 ) : null}
                 {blockers[0] ? (
                   <div className="advisor-primary-blocker">
@@ -636,7 +643,11 @@ export default async function AdvisorPage() {
               )}
             </section>
 
-            <section className="advisor-decision-section">
+            <details className="advisor-decision-section advisor-evidence-details">
+              <summary>
+                <span className="vault-eyebrow">EVIDENCE / WHY</span>
+                <strong>Why Vault OS recommends this</strong>
+              </summary>
               <div className="advisor-section-heading">
                 <div>
                   <p className="vault-eyebrow">Advisor Rationale</p>
@@ -661,7 +672,7 @@ export default async function AdvisorPage() {
                   </div>
                 </dl>
               </article>
-            </section>
+            </details>
           </>
         ) : (
           <section className="advisor-readiness-panel">

@@ -26,8 +26,8 @@ test("Vault Brain V2 reuses governed outputs for a decision trace without recrea
   assert.match(model, /blockerReasons/);
   assert.doesNotMatch(model, /cockpit\.attention/);
   assert.doesNotMatch(model, /available_purchasing_power_gbp|TrustedBuyingCandidateClassifier|PurchaseIntelligenceEngine/);
-  assert.match(component, /What Vault OS understands now/);
-  assert.match(component, /DECISION TRACE/);
+  assert.match(component, /What should I do next\?/);
+  assert.match(component, /Decision trace, rationale and source evidence/);
   assert.match(component, /data\.decisionTrace\.map/);
   assert.match(component, /GOVERNED DECISION REASONS/);
   assert.match(component, /does not create a buying, reorder, or approval recommendation/);
@@ -39,7 +39,8 @@ test("Vault Brain V2 fails closed, formats freshness for people, and links speci
   assert.match(component, /Freshness unavailable/);
   assert.match(component, /Intl\.DateTimeFormat/);
   assert.doesNotMatch(component, /toLocaleString/);
-  assert.match(component, /No governed executive conclusion is currently available/);
+  assert.match(component, /No immediate action recommended/);
+  assert.match(component, /Review governed evidence/);
   assert.match(component, /href="\/intelligence"/);
   assert.match(component, /Open authoritative surface/);
   assert.match(component, /Europe\/London/);

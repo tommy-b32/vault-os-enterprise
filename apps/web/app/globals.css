@@ -2165,6 +2165,15 @@ input:focus-visible {
   line-height: 1.65;
 }
 
+.advisor-vault-brain-link {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--vault-gold-bright);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .advisor-confidence-card {
   padding: 18px;
   border: 1px solid var(--vault-border-gold);
@@ -2407,6 +2416,44 @@ input:focus-visible {
 
 .advisor-rationale-card dl {
   max-width: 760px;
+}
+
+.advisor-evidence-details {
+  border: 1px solid var(--vault-border);
+  border-radius: 12px;
+  background: var(--vault-panel);
+}
+
+.advisor-evidence-details > summary {
+  display: block;
+  padding: 17px 20px;
+  color: #f4f1e9;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.advisor-evidence-details > summary .vault-eyebrow,
+.advisor-evidence-details > summary strong {
+  display: block;
+}
+
+.advisor-evidence-details > summary strong {
+  margin-top: 5px;
+}
+
+.advisor-evidence-details > .advisor-opportunity-facts {
+  margin: 0 20px 20px;
+}
+
+.advisor-decision-section.advisor-evidence-details > .advisor-section-heading,
+.advisor-decision-section.advisor-evidence-details > .advisor-rationale-card {
+  margin-right: 20px;
+  margin-left: 20px;
+}
+
+.advisor-decision-section.advisor-evidence-details > .advisor-rationale-card {
+  margin-bottom: 20px;
 }
 
 .advisor-compact-empty {
@@ -14058,5 +14105,91 @@ body :is(input:not([type="button"], [type="checkbox"], [type="color"], [type="fi
   .purchase-order-receiving-table-head,
   .purchase-order-receiving-row {
     min-width: 590px;
+  }
+}
+
+/* Purchase Order lifecycle */
+
+.purchase-order-lifecycle {
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.purchase-order-lifecycle h2 {
+  margin: 4px 0;
+  font-size: 18px;
+}
+
+.purchase-order-lifecycle p {
+  margin: 0;
+  color: #9aa19c;
+  font-size: 13px;
+}
+
+.purchase-order-lifecycle ol {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.purchase-order-lifecycle li {
+  min-width: 0;
+  padding: 10px;
+  border-left: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.purchase-order-lifecycle li span,
+.purchase-order-lifecycle li strong,
+.purchase-order-lifecycle li small {
+  display: block;
+}
+
+.purchase-order-lifecycle li span {
+  color: #87908a;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.purchase-order-lifecycle li strong {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.purchase-order-lifecycle li small {
+  margin-top: 4px;
+  color: #9aa19c;
+  font-size: 11px;
+}
+
+.purchase-order-lifecycle li.complete {
+  border-color: #72d997;
+}
+
+.purchase-order-lifecycle li.current {
+  border-color: #dfb64b;
+  background: rgba(223, 182, 75, 0.08);
+}
+
+.purchase-order-lifecycle li.current span {
+  color: #dfb64b;
+}
+
+@media (max-width: 800px) {
+  .purchase-order-lifecycle ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 500px) {
+  .purchase-order-lifecycle ol {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
