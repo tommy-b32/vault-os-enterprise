@@ -106,3 +106,8 @@ test("existing recommendation presentation remains intact", () => {
   assert.match(source, /unavailable\.flatMap\(\(result\) => result\.reasons\)/);
   assert.match(source, /notApplicable\.flatMap\(\(result\) => result\.reasons\)/);
 });
+
+test("panel uses only the committed size recommendation transport", () => {
+  for (const unsupported of ["baselineDailyVelocity", "responsiveDailyVelocity", "trendPercent", "demandState", "currentDaysCover"]) assert.doesNotMatch(source, new RegExp(unsupported));
+  for (const supported of ["normalizedSize", "netAvailableStock", "incomingStock", "sales7DayUnits", "sales14DayUnits", "sales30DayUnits", "unitsPerPack", "purchasedUnits", "targetStockUnits", "idealSizeNeed", "projectedStock", "remainingShortage", "projectedExcess", "projectedDaysCover", "drivesPackNeed", "reasonCodes", "recommendedTotalUnits", "recommendedPackCount", "governedLeadTimeDays", "reorderThresholdDays"]) assert.match(source, new RegExp(supported));
+});
