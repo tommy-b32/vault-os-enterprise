@@ -61,7 +61,7 @@ export function PurchasingWallet({
       <header className="commercial-card-header">
         <div>
           <p className="vault-eyebrow">
-            Commercial Intelligence
+            FINANCE · CASH &amp; PURCHASING CAPACITY
           </p>
 
           <h2>Purchasing Wallet</h2>

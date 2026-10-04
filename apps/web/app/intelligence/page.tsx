@@ -13,10 +13,6 @@ function money(value: number): string {
   }).format(value);
 }
 
-function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
-
 function signedPercent(value: number | null): string {
   if (value === null) return "NEW";
   const amount = Math.round(value * 100);
@@ -59,7 +55,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
             <p className="vault-eyebrow">FINANCE</p>
             <h1>Product Performance</h1>
             <p>
-              Sales performance, profitability, momentum and trading patterns by product and period. Historical migration data before 4 May 2026 is excluded.
+              The authoritative Finance view for product sales, profitability, momentum and trading patterns. Store-wide verified trading totals live in Trading &amp; Reconciliation. Historical migration data before 4 May 2026 is excluded.
             </p>
           </div>
           <div className="intelligence-source-chip">
@@ -68,29 +64,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           </div>
         </header>
 
-        <section className="intelligence-kpis" aria-label="Store intelligence summary">
-          <article><span>Genuine orders</span><strong>{snapshot.sourceOrderCount}</strong><small>Since 4 May 2026</small></article>
-          <article><span>Net revenue</span><strong>{money(snapshot.netRevenue)}</strong><small>Canonical Shopify revenue</small></article>
-          <article><span>Average order value</span><strong>{money(snapshot.averageOrderValue)}</strong><small>Net revenue / order</small></article>
-          <article><span>Items per order</span><strong>{snapshot.averageItemsPerOrder.toFixed(2)}</strong><small>{percent(snapshot.twoItemOrderShare)} are exactly 2 items</small></article>
-          <article><span>Refund rate</span><strong>{percent(snapshot.refundRate)}</strong><small>Refund value / gross value</small></article>
-        </section>
-
-        <section className="trend-grid">
-          {snapshot.trends.map((trend) => (
-            <article className="intelligence-panel trend-card" key={trend.label}>
-              <div className="trend-heading">
-                <div><span>{trend.label.toUpperCase()} MOMENTUM</span><h2>{money(trend.currentRevenue)}</h2></div>
-                <span className={`confidence-badge is-${trend.confidence}`}>{trend.confidence} confidence</span>
-              </div>
-              <div className="trend-metrics">
-                <div><small>Revenue</small><strong className={(trend.revenueChange ?? 0) >= 0 ? "is-up" : "is-down"}>{signedPercent(trend.revenueChange)}</strong><span>vs {money(trend.previousRevenue)}</span></div>
-                <div><small>Orders</small><strong className={(trend.orderChange ?? 0) >= 0 ? "is-up" : "is-down"}>{signedPercent(trend.orderChange)}</strong><span>{trend.currentOrders} vs {trend.previousOrders}</span></div>
-                <div><small>AOV</small><strong className={(trend.aovChange ?? 0) >= 0 ? "is-up" : "is-down"}>{signedPercent(trend.aovChange)}</strong><span>{money(trend.currentAov)} vs {money(trend.previousAov)}</span></div>
-              </div>
-            </article>
-          ))}
-        </section>
+        <ProductProfitabilityPanel period={profitPeriod} rows={snapshot.productProfitability} summary={snapshot.productProfitabilitySummary} comparison={snapshot.productProfitabilityComparison} />
 
         <section className="intelligence-grid">
           <article className="intelligence-panel intelligence-panel-wide">
@@ -125,9 +99,8 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           </article>
 
           <article className="intelligence-panel">
-            <div className="intelligence-panel-heading"><div><span>META EFFICIENCY</span><h2>Waiting for trusted ad data</h2></div><span className="pending-badge">PENDING</span></div>
-            <p className="intelligence-muted">Vault OS will not recommend budget changes until Meta spend, purchase value and Shopify revenue can be compared by day.</p>
-            <div className="meta-lock">Budget recommendations locked</div>
+            <div className="intelligence-panel-heading"><div><span>PRODUCT COVERAGE</span><h2>Qualified profitability evidence</h2></div></div>
+            <p className="intelligence-muted">Use the product table above to review verified revenue, contribution and margin by product. Open a product for its governed allocation evidence.</p>
           </article>
         </section>
 
@@ -143,8 +116,6 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
             ))}
           </div>
         </section>
-
-        <ProductProfitabilityPanel period={profitPeriod} rows={snapshot.productProfitability} summary={snapshot.productProfitabilitySummary} comparison={snapshot.productProfitabilityComparison} />
 
         <section className="intelligence-panel intelligence-insights-panel">
           <div className="intelligence-panel-heading"><div><span>PRODUCT MOMENTUM</span><h2>Last 14 days vs previous 14 days</h2></div></div>

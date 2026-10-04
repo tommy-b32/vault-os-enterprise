@@ -68,6 +68,6 @@ test("Financial Intelligence repositories are read-only and integrate the verifi
   assert.match(page, /requireAuthenticatedOperator/);
   assert.match(page, /No revenue is shown while verification is unavailable/);
   assert.doesNotMatch(page, /error instanceof Error/);
-  assert.match(loading, /Loading verified financial facts/);
+  assert.match(loading, /Loading Trading & Reconciliation/);
   assert.match(navigation, /href: "\/financial-intelligence"/);
 });

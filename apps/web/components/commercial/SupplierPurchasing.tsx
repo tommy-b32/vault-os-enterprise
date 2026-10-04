@@ -154,7 +154,7 @@ export function SupplierPurchasing({ suppliers }: { suppliers: SupplierPurchasin
     <section className="commercial-card supplier-purchasing">
       <header className="commercial-card-header">
         <div>
-          <p className="vault-eyebrow">Supplier Purchasing</p>
+          <p className="vault-eyebrow">SUPPLIER CONFIGURATION</p>
           <h2>Supplier readiness</h2>
           <p>Maintain the canonical minimum-order policy used by trusted buying decisions.</p>
         </div>

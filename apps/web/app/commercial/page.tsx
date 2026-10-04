@@ -10,6 +10,22 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
+type CostProfileSourceRow = {
+  id: string;
+  supplier_id: string;
+  supplier_currency: string;
+  exchange_rate_to_gbp: number;
+  pack_cost: number;
+  shipping_cost_per_pack: number;
+  import_cost_per_pack: number;
+  units_per_pack: number;
+  price_updated_at: string;
+  effective_from: string;
+  active: boolean;
+  vault_suppliers: { supplier_name: string };
+  vault_cost_types: { id: string; display_name: string };
+};
+
 export default async function CommercialPage({ searchParams }: { searchParams: Promise<{ attention?: string }> }) {
   const operator = await requireAuthenticatedOperator();
   const [walletResponse, supplierResponse, supplierRuleResponse, costProfileResponse, cashLedgerResult] =
@@ -98,7 +114,7 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
     ...supplier,
     minimum_order_packs: packMinimumBySupplierId.get(supplier.id) ?? null,
   })) as SupplierPurchasingData[];
-  const costProfiles = (costProfileResponse.data ?? []).map((row: any) => ({
+  const costProfiles = ((costProfileResponse.data ?? []) as unknown as CostProfileSourceRow[]).map((row) => ({
     id: row.id, supplier_id: row.supplier_id, supplier_name: row.vault_suppliers.supplier_name,
     cost_type_id: row.vault_cost_types.id, cost_type_name: row.vault_cost_types.display_name,
     supplier_currency: row.supplier_currency, exchange_rate_to_gbp: row.exchange_rate_to_gbp,
@@ -122,8 +138,7 @@ export default async function CommercialPage({ searchParams }: { searchParams: P
             <h1>Cash &amp; Purchasing Capacity</h1>
 
             <p>
-              Cash position, purchasing power, commitments and supplier
-              purchasing capacity.
+              The authoritative Finance view for cash position, available purchasing power and committed cash. Supplier master-data controls are retained below while they move to Suppliers.
             </p>
           </div>
         </header>

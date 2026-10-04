@@ -5268,6 +5268,42 @@ grid-template-columns:1fr;
   gap: 22px;
 }
 
+.commercial-capacity-constraints,
+.commercial-deferred-supplier {
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.commercial-capacity-constraints .vault-eyebrow,
+.commercial-deferred-supplier summary span {
+  color: #c6a448;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.commercial-capacity-constraints > p:last-child,
+.commercial-deferred-supplier > p {
+  margin: 7px 0 0;
+  color: #929b95;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.commercial-deferred-supplier summary {
+  display: grid;
+  gap: 5px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.commercial-deferred-supplier summary::-webkit-details-marker { display: none; }
+.commercial-deferred-supplier summary strong { color: #f3efe5; font-size: 1.05rem; }
+.commercial-deferred-supplier[open] { background: rgba(212, 168, 54, 0.035); }
+.commercial-deferred-supplier .commercial-card { margin-top: 18px; }
+
 .supplier-purchasing-grid {
   display: grid;
   grid-template-columns: repeat(

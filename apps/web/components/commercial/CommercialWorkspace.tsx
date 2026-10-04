@@ -34,8 +34,17 @@ export function CommercialWorkspace({
 
       <CashLedger canCreateTransactions={canCreateCashTransactions} errorMessage={cashLedgerError} snapshot={cashLedger} />
 
-      <SupplierPurchasing suppliers={suppliers} />
-      <SupplierCostProfiles suppliers={suppliers} profiles={costProfiles} />
+      <section className="commercial-capacity-constraints" aria-label="Purchasing capacity constraints">
+        <p className="vault-eyebrow">PURCHASING-CAPACITY CONSTRAINTS</p>
+        <p>Available capacity is constrained by the protected reserve, committed orders, and the wallet state above.</p>
+      </section>
+
+      <details className="commercial-deferred-supplier">
+        <summary><span>SUPPLIER CONFIGURATION</span><strong>Supplier minimums and cost profiles</strong></summary>
+        <p>Supplier rules and cost profiles will ultimately live under Suppliers/Catalogue.</p>
+        <SupplierPurchasing suppliers={suppliers} />
+        <SupplierCostProfiles suppliers={suppliers} profiles={costProfiles} />
+      </details>
     </div>
   );
 }

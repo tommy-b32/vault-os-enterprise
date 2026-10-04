@@ -18,7 +18,7 @@ export function FinancialIntelligenceDashboard({ period, snapshot }: FinancialIn
   const hasWarning = !snapshot.reconciliationPassed || snapshot.unreconciledRefundOrderCount > 0;
   return <main className="financial-intelligence-page">
     <header className="financial-intelligence-header">
-      <div><p className="vault-eyebrow">FINANCIAL INTELLIGENCE</p><h1>Verified Shopify revenue</h1><p>Evidence-gated revenue facts only. Cost and profit are intentionally not shown until verified cost evidence exists.</p></div>
+      <div><p className="vault-eyebrow">FINANCE · TRADING &amp; RECONCILIATION</p><h1>Verified Shopify revenue</h1><p>The authoritative Finance view for evidence-gated Shopify trading totals and reconciliation. Cost and profit remain in Product Performance until verified cost evidence exists.</p></div>
       <form className="financial-period" action="/financial-intelligence" method="get"><label htmlFor="financial-period">Business period</label><select defaultValue={period} id="financial-period" name="period"><option value="today">Today</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="90d">Last 90 days</option></select><button type="submit">Apply</button></form>
     </header>
 
@@ -36,9 +36,7 @@ export function FinancialIntelligenceDashboard({ period, snapshot }: FinancialIn
       <dl><div><dt>Eligible</dt><dd>{snapshot.verifiedOrderCount}</dd></div><div><dt>Excluded</dt><dd>{snapshot.excludedOrderCount}</dd></div><div><dt>Incomplete</dt><dd>{snapshot.incompleteOrderCount}</dd></div><div><dt>Unreconciled refunds</dt><dd>{snapshot.unreconciledRefundOrderCount}</dd></div></dl>
     </section>
 
-    {snapshot.excludedOrderCount > 0 ? <p className="financial-note">{snapshot.excludedOrderCount} canonical order{snapshot.excludedOrderCount === 1 ? " is" : "s are"} outside the GBP verified-view contract ({snapshot.currencyCodes.join(", ")}). They are excluded, not converted or estimated.</p> : null}
-    {snapshot.incompleteOrderCount > 0 ? <p className="financial-note">{snapshot.incompleteOrderCount} GBP canonical order{snapshot.incompleteOrderCount === 1 ? " is" : "s are"} not admitted by the verified view. Missing or failed evidence is not treated as a zero-value event.</p> : null}
-    {snapshot.unreconciledRefundOrderCount > 0 ? <p className="financial-note">Refund header evidence is present for {snapshot.unreconciledRefundOrderCount} order{snapshot.unreconciledRefundOrderCount === 1 ? "" : "s"} but remains unreconciled. It is displayed separately and never subtracted from canonical net revenue.</p> : null}
+    {(snapshot.excludedOrderCount > 0 || snapshot.incompleteOrderCount > 0 || snapshot.unreconciledRefundOrderCount > 0) ? <section className="financial-supporting-evidence"><p className="vault-eyebrow">SUPPORTING EVIDENCE &amp; DIAGNOSTICS</p>{snapshot.excludedOrderCount > 0 ? <p className="financial-note">{snapshot.excludedOrderCount} canonical order{snapshot.excludedOrderCount === 1 ? " is" : "s are"} outside the GBP verified-view contract ({snapshot.currencyCodes.join(", ")}). They are excluded, not converted or estimated.</p> : null}{snapshot.incompleteOrderCount > 0 ? <p className="financial-note">{snapshot.incompleteOrderCount} GBP canonical order{snapshot.incompleteOrderCount === 1 ? " is" : "s are"} not admitted by the verified view. Missing or failed evidence is not treated as a zero-value event.</p> : null}{snapshot.unreconciledRefundOrderCount > 0 ? <p className="financial-note">Refund header evidence is present for {snapshot.unreconciledRefundOrderCount} order{snapshot.unreconciledRefundOrderCount === 1 ? "" : "s"} but remains unreconciled. It is displayed separately and never subtracted from canonical net revenue.</p> : null}</section> : null}
     <FinancialIntelligenceStyles />
   </main>;
 }
@@ -61,7 +59,7 @@ function FinancialIntelligenceStyles() {
     .financial-reconciliation { display:flex; justify-content:space-between; gap:28px; margin-top:18px; padding:22px; } .financial-reconciliation.is-warning { border-color:rgba(217,150,67,.55); } .financial-reconciliation.is-verified { border-color:rgba(91,188,126,.38); }
     .financial-reconciliation h2 { margin:5px 0 8px; font-size:19px; } .financial-reconciliation p { margin:0; color:#adb4ae; font-size:13px; line-height:1.55; max-width:630px; }
     .financial-reconciliation dl { display:grid; grid-template-columns:repeat(4,minmax(75px,1fr)); gap:16px; margin:0; } .financial-reconciliation dt { color:#8f9791; font-size:10px; text-transform:uppercase; letter-spacing:.06em; } .financial-reconciliation dd { margin:7px 0 0; color:#f0c55b; font-size:23px; font-weight:700; }
-    .financial-note { margin:12px 0 0; padding:12px 14px; border-left:2px solid #dfb64b; background:rgba(223,182,75,.06); }
+    .financial-supporting-evidence { margin-top:18px; }.financial-supporting-evidence .vault-eyebrow { color:#b48d35; font-size:9px; letter-spacing:.12em; }.financial-note { margin:12px 0 0; padding:12px 14px; border-left:2px solid #dfb64b; background:rgba(223,182,75,.06); }
     @media (max-width:1000px) { .financial-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .financial-reconciliation { display:block; } .financial-reconciliation dl { margin-top:20px; } }
     @media (max-width:680px) { .financial-intelligence-page { padding:20px 14px; } .financial-intelligence-header { display:block; } .financial-period { margin-top:18px; } .financial-kpis { grid-template-columns:1fr; } .financial-reconciliation dl { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   `}</style>;

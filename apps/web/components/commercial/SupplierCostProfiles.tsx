@@ -25,7 +25,7 @@ export function SupplierCostProfiles({ suppliers, profiles }: { suppliers: Suppl
   const unitGbp = landedGbp === null || units === null ? null : landedGbp / units;
 
   return <section className="commercial-card supplier-cost-profiles">
-    <header className="commercial-card-header"><div><p className="vault-eyebrow">Replacement-cost profiles</p><h2>Supplier + canonical cost type</h2><p>Defaults are never inferred from historic product prices. Products inherit only after an explicit choice in their Commercial tab.</p></div></header>
+    <header className="commercial-card-header"><div><p className="vault-eyebrow">SUPPLIER CONFIGURATION</p><h2>Supplier + canonical cost type</h2><p>Defaults are never inferred from historic product prices. Products inherit only after an explicit choice in their Commercial tab.</p></div></header>
     {profiles.map((profile) => <article key={profile.id}><strong>{profile.supplier_name} · {profile.cost_type_name}</strong><p>{profile.supplier_currency} {profile.pack_cost} pack + {profile.shipping_cost_per_pack} shipping + {profile.import_cost_per_pack} import · {profile.units_per_pack}/pack · FX {profile.exchange_rate_to_gbp} · updated {profile.price_updated_at} · {profile.active ? "Active" : "Inactive"}</p><button onClick={() => { setSelected(profile); setDraft(draftFrom(profile)); }} type="button">Edit</button></article>)}
     <form action={action} className="supplier-minimum-form">
       {selected ? <input name="profile_id" type="hidden" value={selected.id} /> : null}

@@ -92,7 +92,7 @@ export function CashLedger({ snapshot, errorMessage, canCreateTransactions }: Ca
     <section className="commercial-card cash-ledger">
       <header className="commercial-card-header">
         <div>
-          <p className="vault-eyebrow">Canonical Finance</p>
+          <p className="vault-eyebrow">FINANCE · CASH LEDGER</p>
           <h2>Cash Ledger</h2>
           <p>Append-only business cash movements and their resulting balance.</p>
         </div>

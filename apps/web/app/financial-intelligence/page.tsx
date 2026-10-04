@@ -13,6 +13,6 @@ export default async function FinancialIntelligencePage({ searchParams }: { sear
     const snapshot = await FinancialIntelligenceRepository.getSnapshot(financialRangeForPeriod(period));
     return <VaultAppShell searchPlaceholder="Search Financial Intelligence..." systemStatusLabel={snapshot.reconciliationPassed ? "Financial evidence reconciled" : "Financial evidence requires attention"}><FinancialIntelligenceDashboard period={period} snapshot={snapshot} /></VaultAppShell>;
   } catch {
-    return <VaultAppShell searchPlaceholder="Search Financial Intelligence..." systemStatusLabel="Financial intelligence unavailable"><main className="financial-intelligence-page"><p className="vault-eyebrow">FINANCIAL INTELLIGENCE</p><h1>Financial Intelligence unavailable</h1><p>Verified financial facts could not be loaded. No revenue is shown while verification is unavailable.</p></main></VaultAppShell>;
+    return <VaultAppShell searchPlaceholder="Search Finance..." systemStatusLabel="Finance · Trading & Reconciliation unavailable"><main className="financial-intelligence-page"><p className="vault-eyebrow">FINANCE</p><h1>Trading & Reconciliation unavailable</h1><p>Verified financial facts could not be loaded. No revenue is shown while verification is unavailable.</p></main></VaultAppShell>;
   }
 }
