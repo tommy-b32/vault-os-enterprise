@@ -10,11 +10,14 @@ const detailSource = await readFile(new URL("../app/purchase-orders/[id]/page.ts
 const indexSource = await readFile(new URL("../app/purchase-orders/page.tsx", import.meta.url), "utf8");
 const recommendationsSource = await readFile(new URL("../app/purchase-intelligence/PurchaseRecommendationsPanel.tsx", import.meta.url), "utf8");
 const intelligenceSource = await readFile(new URL("../app/purchase-intelligence/page.tsx", import.meta.url), "utf8");
+const trackingSource = await readFile(new URL("../lib/purchase-orders/PurchaseOrderTracking.ts", import.meta.url), "utf8");
+const trackingMigration = await readFile(new URL("../../../supabase/migrations/20261087000000_purchase_order_tracking_status.sql", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 const lifecycleModule = { exports: {} };
 vm.runInNewContext(compiled, { module: lifecycleModule, exports: lifecycleModule.exports, require: () => ({ jsx: () => null, jsxs: () => null }) });
 const derive = lifecycleModule.exports.derivePurchaseOrderLifecycle;
 const stage = (status, evidence, name) => derive(status, evidence).find((entry) => entry.name === name);
+const formatTrackingDetail = lifecycleModule.exports.formatTrackingDetail;
 const unpaid = { payment: "unpaid", shipped: false, fullyReceived: false, inventoryPosting: "unposted" };
 
 test("lifecycle semantics are evidence-aware across all approved PO states", () => {
@@ -49,6 +52,24 @@ test("shipped and paid PO has payment and shipping complete with receiving curre
   assert.equal(stage("shipped", evidence, "Payment").state, "complete");
   assert.equal(stage("shipped", evidence, "Shipping").state, "complete");
   assert.equal(stage("shipped", evidence, "Receiving").state, "current");
+});
+
+test("shipping tracking is supplementary and formats concise live status details", () => {
+  const now = new Date("2026-10-05T12:00:00Z");
+  assert.equal(formatTrackingDetail({ status: "In transit", detail: null, location: "Castle Donington", updatedAt: "2026-10-05T11:42:00Z", deliveredAt: null }, now), "In transit · Castle Donington · Updated 18 mins ago");
+  assert.equal(formatTrackingDetail({ status: "Exception", detail: "Customs clearance delay", location: null, updatedAt: "2026-10-05T11:53:00Z", deliveredAt: null }, now), "Customs clearance delay · Updated 7 mins ago");
+  assert.match(formatTrackingDetail({ status: "Delivered", detail: null, location: null, updatedAt: "2026-10-02T13:32:00Z", deliveredAt: "2026-10-02T13:32:00Z" }, now), /^Delivered · 2 Oct 2026, 14:32$/);
+  assert.equal(stage("shipped", { payment: "paid", shipped: true, fullyReceived: false, inventoryPosting: "unposted" }, "Shipping").state, "complete");
+  assert.match(source, /tracking\?: PurchaseOrderTrackingSummary \| null/);
+});
+
+test("tracking persistence and server-only adapter boundary do not alter lifecycle rules", () => {
+  for (const column of ["tracking_status", "tracking_status_detail", "tracking_location", "tracking_updated_at", "tracking_delivered_at", "tracking_last_checked_at"]) assert.match(trackingMigration, new RegExp(column));
+  assert.match(trackingSource, /import "server-only"/);
+  assert.match(trackingSource, /getLatestPurchaseOrderTracking/);
+  assert.match(trackingSource, /refreshPurchaseOrderTracking/);
+  assert.match(trackingSource, /ups.*fedex.*royal_mail.*dhl.*dpd/s);
+  assert.doesNotMatch(trackingMigration, /set status|mark_vault_purchase_order_shipped|received_at|inventory/i);
 });
 
 test("received and paid PO with unposted inventory keeps inventory posting current", () => {

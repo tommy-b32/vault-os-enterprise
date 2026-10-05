@@ -10,6 +10,7 @@ const repository = await readFile(new URL("lib/purchase-orders/PurchaseOrderRepo
 const actions = await readFile(new URL("app/purchase-orders/actions.ts", root), "utf8");
 const component = await readFile(new URL("components/purchase-orders/PurchaseOrderShipping.tsx", root), "utf8");
 const detail = await readFile(new URL("app/purchase-orders/[id]/page.tsx", root), "utf8");
+const trackingLink = await readFile(new URL("lib/purchase-orders/CarrierTrackingLink.ts", root), "utf8");
 
 const shippedFunction = migration.slice(
   migration.indexOf("create function public.mark_vault_purchase_order_shipped"),
@@ -58,6 +59,9 @@ test("shipping UI shows evidence, refreshes state, and has no external effects",
   assert.match(component, /Tracking reference \(optional\)/);
   assert.match(component, /router\.refresh\(\)/);
   assert.match(detail, /draft\.shipped_at/);
+  assert.match(component, /target="_blank"/);
+  assert.match(component, /getCarrierTrackingUrl/);
+  for (const carrier of ["ups", "fedex", "royal mail", "dhl", "dpd"]) assert.match(trackingLink, new RegExp(carrier));
   const repositoryShipping = repository.slice(
     repository.indexOf("export async function markPurchaseOrderShipped"),
     repository.indexOf("export async function recordPurchaseOrderPayment"),

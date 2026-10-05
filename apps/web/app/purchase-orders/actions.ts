@@ -25,8 +25,29 @@ import { addFixedPackRecommendationToDraft, type AddFixedPackRecommendationInput
 import { addManualFixedPackToDraft, type AddManualFixedPackInput, type ManualFixedPackDraftResult } from "@/lib/purchase-orders/ManualFixedPackDraftRepository";
 import { addPendingCatalogueProductToDraft, updatePendingCataloguePackQuantity, type AddPendingCatalogueProductInput, type PendingCatalogueDraftResult, type UpdatePendingCataloguePackQuantityInput, type UpdatePendingCataloguePackQuantityResult } from "@/lib/purchase-orders/PendingCatalogueDraftRepository";
 import { linkPendingCatalogueProduct } from "@/lib/purchase-orders/PendingCatalogueLinkRepository";
+import { refreshPurchaseOrderTracking } from "@/lib/purchase-orders/PurchaseOrderTracking";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export type RefreshPurchaseOrderTrackingState = { status: "idle" | "success" | "error"; message: string };
+
+export async function refreshPurchaseOrderTrackingAction(
+  _previousState: RefreshPurchaseOrderTrackingState,
+  formData: FormData,
+): Promise<RefreshPurchaseOrderTrackingState> {
+  try {
+    await requireAuthenticatedOperator();
+    const purchaseOrderId = formData.get("purchase_order_id");
+    if (typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId)) return { status: "error", message: "Invalid purchase order." };
+    const result = await refreshPurchaseOrderTracking(purchaseOrderId);
+    if (result.outcome !== "refreshed") return { status: "error", message: result.message };
+    revalidatePath(`/purchase-orders/${purchaseOrderId}`);
+    return { status: "success", message: `Tracking refreshed: ${result.tracking.status}.` };
+  } catch (error) {
+    console.error("Unable to refresh purchase-order tracking", error);
+    return { status: "error", message: error instanceof Error ? error.message : "Tracking could not be refreshed. Existing tracking data was left unchanged." };
+  }
+}
 
 export async function createBlankSupplierPurchaseOrderAction(input: { supplierId: string; idempotencyKey: string }): Promise<{ success: true; purchaseOrderId: string } | { success: false; error: string }> {
   try {

@@ -39,6 +39,24 @@ export type PurchaseOrderLifecycleEvidence = {
   inventoryPosting: InventoryPostingEvidence;
 };
 
+export type PurchaseOrderTrackingSummary = {
+  status: string;
+  detail: string | null;
+  location: string | null;
+  updatedAt: string | null;
+  deliveredAt: string | null;
+};
+
+export function formatTrackingDetail(tracking: PurchaseOrderTrackingSummary, now = new Date()): string {
+  const status = tracking.detail?.trim() || tracking.status;
+  const location = tracking.location?.trim();
+  if (tracking.deliveredAt) return `${status}${location ? ` · ${location}` : ""} · ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(tracking.deliveredAt))}`;
+  if (!tracking.updatedAt) return `${status}${location ? ` · ${location}` : ""}`;
+  const minutes = Math.max(0, Math.round((now.getTime() - new Date(tracking.updatedAt).getTime()) / 60000));
+  const relative = minutes < 60 ? `${minutes} min${minutes === 1 ? "" : "s"} ago` : `${Math.floor(minutes / 60)}h ago`;
+  return `${status}${location ? ` · ${location}` : ""} · Updated ${relative}`;
+}
+
 export type LifecycleStage = {
   name: (typeof stages)[number];
   state: StageState;
@@ -177,9 +195,11 @@ export function derivePurchaseOrderLifecycle(
 export function PurchaseOrderLifecycleStrip({
   status,
   evidence,
+  tracking,
 }: {
   status: PurchaseOrderStatus;
   evidence: PurchaseOrderLifecycleEvidence;
+  tracking?: PurchaseOrderTrackingSummary | null;
 }) {
   if (status === "cancelled") {
     return (
@@ -242,7 +262,9 @@ export function PurchaseOrderLifecycleStrip({
 
             <strong>{stage.name}</strong>
 
-            {stage.detail ? (
+            {stage.name === "Shipping" && tracking ? (
+              <small>{formatTrackingDetail(tracking)}</small>
+            ) : stage.detail ? (
               <small>
                 {stage.detail}
               </small>

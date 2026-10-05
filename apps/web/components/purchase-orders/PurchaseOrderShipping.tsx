@@ -2,13 +2,17 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getCarrierTrackingUrl } from "@/lib/purchase-orders/CarrierTrackingLink";
 
 import {
   markPurchaseOrderAsShipped,
+  refreshPurchaseOrderTrackingAction,
   type MarkPurchaseOrderShippedState,
+  type RefreshPurchaseOrderTrackingState,
 } from "@/app/purchase-orders/actions";
 
 const initialState: MarkPurchaseOrderShippedState = { status: "idle", message: "" };
+const initialRefreshState: RefreshPurchaseOrderTrackingState = { status: "idle", message: "" };
 
 export function PurchaseOrderShipping({
   purchaseOrderId,
@@ -25,8 +29,10 @@ export function PurchaseOrderShipping({
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(markPurchaseOrderAsShipped, initialState);
+  const [refreshState, refreshAction, refreshPending] = useActionState(refreshPurchaseOrderTrackingAction, initialRefreshState);
   const [selectedDispatchDate, setSelectedDispatchDate] = useState(() => new Date().toISOString().slice(0, 10));
   const canMarkShipped = status === "ordered" || status === "part_paid" || status === "paid";
+  const trackingUrl = getCarrierTrackingUrl(carrier, trackingReference);
 
   useEffect(() => {
     if (state.status === "success") router.refresh();
@@ -43,9 +49,19 @@ export function PurchaseOrderShipping({
         <div className="purchase-order-supplier-totals">
           <div><span>Dispatch date</span><strong>{dispatchDate}</strong></div>
           <div><span>Carrier</span><strong>{carrier ?? "Not supplied"}</strong></div>
-          <div><span>Tracking reference</span><strong>{trackingReference ?? "Not supplied"}</strong></div>
+          <div><span>Tracking reference</span><strong>{trackingUrl ? <a href={trackingUrl} rel="noopener noreferrer" target="_blank">{trackingReference}</a> : trackingReference ?? "Not supplied"}</strong></div>
         </div>
       ) : <p>No supplier dispatch evidence recorded.</p>}
+
+      {carrier?.trim() && trackingReference?.trim() ? (
+        <form action={refreshAction} className="purchase-order-shipping-card">
+          <input name="purchase_order_id" type="hidden" value={purchaseOrderId} />
+          <button className="purchase-order-primary-button" disabled={refreshPending} type="submit">
+            {refreshPending ? "Refreshing Tracking…" : "Refresh Tracking"}
+          </button>
+          {refreshState.message ? <p role={refreshState.status === "error" ? "alert" : "status"}>{refreshState.message}</p> : null}
+        </form>
+      ) : null}
 
       {canMarkShipped ? (
         <form action={action} className="purchase-order-shipping-card">

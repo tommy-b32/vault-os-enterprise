@@ -18,6 +18,7 @@ import { PurchaseOrderLifecycleStrip, type InventoryPostingEvidence, type Paymen
 import { PendingCataloguePackQuantityEditor } from "@/components/purchase-orders/PendingCataloguePackQuantityEditor";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { getPurchaseOrder, getPurchaseOrderEvidenceState } from "@/lib/purchase-orders/PurchaseOrderRepository";
+import { getLatestPurchaseOrderTracking } from "@/lib/purchase-orders/PurchaseOrderTracking";
 import { loadManualFixedPackCandidates } from "@/lib/purchase-orders/ManualFixedPackCandidates";
 import { loadPendingCatalogueLinkContexts } from "@/lib/purchase-orders/PendingCatalogueLinkRepository";
 import { loadPendingCatalogueDuplicateCandidates, loadPendingCatalogueGovernedOptions } from "@/lib/purchase-orders/PendingCatalogueDraftRepository";
@@ -239,6 +240,7 @@ export default async function PurchaseOrderDetailPage({
       blockedPostingAllocations.add(postingLine.receipt_allocation_id);
     }
   }
+  const tracking = await getLatestPurchaseOrderTracking(id);
   const governedPayment = draft.governed_reconciled_payment_state;
   const reconciledPaid = Number(governedPayment?.supplier_paid_minor_units ?? 0);
   const reconciledBalance = Number(governedPayment?.supplier_balance_minor_units ?? Number.POSITIVE_INFINITY);
@@ -291,6 +293,7 @@ export default async function PurchaseOrderDetailPage({
             fullyReceived: Boolean(draft.received_at) || ["received", "closed"].includes(draft.status),
             inventoryPosting: lifecycleInventoryPosting,
           }}
+          tracking={tracking}
         />
 
         <section className="purchase-order-context">
