@@ -154,9 +154,79 @@ export type StoreIntelligenceSnapshot = {
   productProfitability: ProductProfitability[];
   productProfitabilitySummary: ProductProfitabilitySummary;
   productProfitabilityComparison: ProductProfitabilityComparison | null;
+  productProfitabilityAvailability: ProductProfitabilityAvailability;
   insights: StoreInsight[];
   metaStatus: "pending";
 };
+
+export type ProductProfitabilityAvailability = {
+  available: boolean;
+  message: string;
+};
+
+type ProductProfitabilityReadModelState = ProductProfitabilityAvailability & {
+  generation: number | null;
+};
+
+const PRODUCT_PROFITABILITY_READ_MODEL = "vault_shopify_verified_product_profitability_read_model";
+const PRODUCT_PROFITABILITY_STATE = "vault_shopify_verified_product_profitability_read_model_state";
+
+async function getProductProfitabilityReadModelState(): Promise<ProductProfitabilityReadModelState> {
+  const result = await supabaseAdmin
+    .from(PRODUCT_PROFITABILITY_STATE)
+    .select("state,refresh_generation")
+    .eq("singleton", true)
+    .maybeSingle();
+
+  if (result.error || !result.data) {
+    return { available: false, message: "Product Performance is unavailable because its freshness state could not be verified.", generation: null };
+  }
+
+  const { state, refresh_generation: generation } = result.data as { state?: unknown; refresh_generation?: unknown };
+  if (state === "valid" && Number.isSafeInteger(generation) && Number(generation) > 0) return { available: true, message: "", generation: Number(generation) };
+  if (state === "failed") {
+    return { available: false, message: "Product Performance is unavailable because the governed refresh failed. A server-side diagnostic was recorded.", generation: null };
+  }
+  if (state === "refreshing") {
+    return { available: false, message: "Product Performance is temporarily unavailable while governed data is refreshing.", generation: null };
+  }
+  if (state === "stale") {
+    return { available: false, message: "Product Performance is unavailable because governed data is stale and awaiting refresh.", generation: null };
+  }
+  return { available: false, message: "Product Performance is unavailable because its freshness state is not valid.", generation: null };
+}
+
+async function getProductProfitabilityAvailability(): Promise<ProductProfitabilityAvailability> {
+  const { available, message } = await getProductProfitabilityReadModelState();
+  return { available, message };
+}
+
+async function fetchProductProfitabilityReadModelRows(range: { from: string; to: string } | null, productId?: string) {
+  const initialState = await getProductProfitabilityReadModelState();
+  if (!initialState.available || initialState.generation === null) throw new Error(initialState.message);
+
+  const generation = initialState.generation;
+  const rows = await collectPaginated(async (from, to) => {
+    let query = supabaseAdmin
+      .from(PRODUCT_PROFITABILITY_READ_MODEL)
+      .select("shopify_created_at,product_id,product_name,order_id,order_line_id,eligible_units,allocated_total_revenue_gbp,resolved_cogs_gbp,allocated_shipping_cost_gbp,allocated_payment_fees_gbp,operational_contribution_gbp")
+      .eq("refresh_generation", generation)
+      .gte("shopify_created_at", range?.from ?? ANALYTICS_START)
+      .order("shopify_created_at", { ascending: true })
+      .order("order_line_id", { ascending: true })
+      .range(from, to);
+    if (productId) query = query.eq("product_id", productId);
+    const result = await (range ? query.lt("shopify_created_at", range.to) : query);
+    if (result.error) throw new Error("Governed Product Performance read model could not be read.");
+    return result.data ?? [];
+  });
+
+  const finalState = await getProductProfitabilityReadModelState();
+  if (!finalState.available || finalState.generation !== generation) {
+    throw new Error("Product Performance is unavailable because governed data changed while it was being read.");
+  }
+  return rows;
+}
 
 function amount(value: number | string): number {
   const parsed = Number(value);
@@ -467,7 +537,7 @@ function buildInsights(
 export const StoreIntelligence = {
   async getProductProfitabilityDetail(productId: string, profitPeriod: ProfitPeriod = "30d") {
     const bounds = profitPeriodBounds(profitPeriod);
-    const fetchLines = async (range: { from: string; to: string } | null) => collectPaginated(async (from, to) => { const query = supabaseAdmin.from("vault_shopify_verified_product_profitability_line_allocations").select("shopify_created_at,product_id,product_name,order_id,order_line_id,eligible_units,allocated_total_revenue_gbp,resolved_cogs_gbp,allocated_shipping_cost_gbp,allocated_payment_fees_gbp,operational_contribution_gbp").eq("product_id", productId).order("shopify_created_at", { ascending: true }).order("order_line_id", { ascending: true }).range(from, to); const result = await (range ? query.gte("shopify_created_at", range.from).lt("shopify_created_at", range.to) : query); if (result.error) throw new Error(result.error.message); return result.data ?? []; });
+    const fetchLines = (range: { from: string; to: string } | null) => fetchProductProfitabilityReadModelRows(range, productId);
     const lines = await fetchLines(bounds);
     const orderIds = [...new Set(lines.map((line: any) => line.order_id))];
     const orders = orderIds.length ? await supabaseAdmin.from("vault_shopify_orders").select("id,order_number").in("id", orderIds) : { data: [], error: null };
@@ -481,6 +551,7 @@ export const StoreIntelligence = {
     return { productId, productName: lines[0]?.product_name ?? null, period: profitPeriod, eligibleUnits: units, eligibleOrders: orderIds.length, verifiedRevenue: revenue, cogs: total("resolved_cogs_gbp"), shippingCost: total("allocated_shipping_cost_gbp"), paymentFees: total("allocated_payment_fees_gbp"), contribution, asp: units > 0 ? revenue / units : null, contributionPerUnit: units > 0 ? contribution / units : null, contributionMarginPct: revenue > 0 ? contribution / revenue * 100 : null, comparison, lines: lines.map((line: any) => ({ orderNumber: orderNumbers.get(line.order_id) ?? "Order", saleDate: line.shopify_created_at, quantity: amount(line.eligible_units), revenue: amount(line.allocated_total_revenue_gbp), cogs: amount(line.resolved_cogs_gbp), shipping: amount(line.allocated_shipping_cost_gbp), fees: amount(line.allocated_payment_fees_gbp), contribution: amount(line.operational_contribution_gbp) })) };
   },
   async getSnapshot(profitPeriod: ProfitPeriod = "30d"): Promise<StoreIntelligenceSnapshot> {
+    const productProfitabilityAvailability = await getProductProfitabilityAvailability();
     const ordersResult = await supabaseAdmin
       .from("vault_shopify_orders")
       .select("id, shopify_created_at, net_revenue, gross_total, refunds, cancelled_at, metadata")
@@ -492,22 +563,28 @@ export const StoreIntelligence = {
 
     const profitBounds = profitPeriodBounds(profitPeriod);
     const previousProfitBounds = previousProfitPeriodBounds(profitPeriod, profitBounds);
-    // Fetch adjacent comparison periods in one bounded read.  The allocation view
-    // expands governed financial, COGS, shipping and fee evidence, so issuing one
-    // query per period duplicated that expensive evidence evaluation without
-    // changing any allocation or coverage semantics.
-    const profitabilityQuery = supabaseAdmin.from("vault_shopify_verified_product_profitability_line_allocations").select("shopify_created_at,product_id,product_name,order_id,eligible_units,allocated_total_revenue_gbp,resolved_cogs_gbp,allocated_shipping_cost_gbp,allocated_payment_fees_gbp,operational_contribution_gbp");
-    const coverageQuery = supabaseAdmin.from("vault_shopify_product_profitability_coverage_lines").select("shopify_created_at,product_id,order_id,stage_1_eligible,units,revenue");
     const combinedProfitabilityBounds = previousProfitBounds
       ? { from: previousProfitBounds.from, to: profitBounds!.to }
       : profitBounds;
-    const [profitabilityResult, coverageResult] = await Promise.all([
-      combinedProfitabilityBounds ? profitabilityQuery.gte("shopify_created_at", combinedProfitabilityBounds.from).lt("shopify_created_at", combinedProfitabilityBounds.to) : profitabilityQuery,
+    const coverageQuery = supabaseAdmin.from("vault_shopify_product_profitability_coverage_lines").select("shopify_created_at,product_id,order_id,stage_1_eligible,units,revenue");
+    // Current and previous periods are partitioned from one governed read-model
+    // scan. The source allocation view is never read during page rendering.
+    let profitabilityRows: any[] = [];
+    let profitabilityReadAvailability = productProfitabilityAvailability;
+    const [profitabilityRead, coverageResult] = await Promise.allSettled([
+      fetchProductProfitabilityReadModelRows(combinedProfitabilityBounds),
       profitBounds ? coverageQuery.gte("shopify_created_at", profitBounds.from).lt("shopify_created_at", profitBounds.to) : coverageQuery,
     ]);
-    if (profitabilityResult.error) throw new Error(profitabilityResult.error.message);
-    if (coverageResult.error) throw new Error(coverageResult.error.message);
-    const profitabilityRows = profitabilityResult.data ?? [];
+    let coverageRows: any[] = [];
+    const coverageFailed = coverageResult.status === "rejected" || (coverageResult.status === "fulfilled" && Boolean(coverageResult.value.error));
+    if (coverageFailed) {
+      profitabilityReadAvailability = { available: false, message: "Product Performance is unavailable because coverage data could not be read safely." };
+    } else if (profitabilityRead.status === "fulfilled") {
+      profitabilityRows = profitabilityRead.value;
+    } else {
+      profitabilityReadAvailability = { available: false, message: profitabilityRead.reason instanceof Error ? profitabilityRead.reason.message : "Product Performance is unavailable because governed data could not be read safely." };
+    }
+    if (!coverageFailed && coverageResult.status === "fulfilled") coverageRows = coverageResult.value.data ?? [];
     const currentProfitabilityRows = previousProfitBounds
       ? profitabilityRows.filter((row: any) => Date.parse(row.shopify_created_at) >= Date.parse(profitBounds!.from))
       : profitabilityRows;
@@ -515,7 +592,7 @@ export const StoreIntelligence = {
       ? profitabilityRows.filter((row: any) => Date.parse(row.shopify_created_at) < Date.parse(profitBounds!.from))
       : [];
     const coverageByProduct = new Map<string, { eligibleRevenue: number; excludedRevenue: number; excludedOrders: Set<string> }>();
-    for (const row of coverageResult.data ?? []) { const item = coverageByProduct.get((row as any).product_id) ?? { eligibleRevenue: 0, excludedRevenue: 0, excludedOrders: new Set<string>() }; if ((row as any).stage_1_eligible) item.eligibleRevenue += amount((row as any).revenue); else { item.excludedRevenue += amount((row as any).revenue); item.excludedOrders.add((row as any).order_id); } coverageByProduct.set((row as any).product_id, item); }
+    for (const row of coverageRows) { const item = coverageByProduct.get((row as any).product_id) ?? { eligibleRevenue: 0, excludedRevenue: 0, excludedOrders: new Set<string>() }; if ((row as any).stage_1_eligible) item.eligibleRevenue += amount((row as any).revenue); else { item.excludedRevenue += amount((row as any).revenue); item.excludedOrders.add((row as any).order_id); } coverageByProduct.set((row as any).product_id, item); }
     const makeRows = (source: any[]): ProductProfitability[] => { const totals = new Map<string, any>(); for (const row of source) { const current = totals.get(row.product_id) ?? { ...row, eligible_units: 0, allocated_total_revenue_gbp: 0, resolved_cogs_gbp: 0, allocated_shipping_cost_gbp: 0, allocated_payment_fees_gbp: 0, operational_contribution_gbp: 0, orderIds: new Set<string>() }; for (const key of ["eligible_units","allocated_total_revenue_gbp","resolved_cogs_gbp","allocated_shipping_cost_gbp","allocated_payment_fees_gbp","operational_contribution_gbp"]) current[key] += amount(row[key]); current.orderIds.add(row.order_id); totals.set(row.product_id, current); } return [...totals.values()].map((row): ProductProfitability => { const coverage = coverageByProduct.get(row.product_id); const eligibleRevenue = coverage?.eligibleRevenue ?? 0, excludedRevenue = coverage?.excludedRevenue ?? 0; const contribution = amount(row.operational_contribution_gbp), units = amount(row.eligible_units), revenue = amount(row.allocated_total_revenue_gbp); return { productId: row.product_id, productName: row.product_name, eligibleUnits: units, eligibleOrders: row.orderIds.size, verifiedRevenue: revenue, cogs: amount(row.resolved_cogs_gbp), shippingCost: amount(row.allocated_shipping_cost_gbp), paymentFees: amount(row.allocated_payment_fees_gbp), contribution, asp: units > 0 ? revenue / units : null, contributionPerUnit: units > 0 ? contribution / units : null, contributionMarginPct: revenue > 0 ? contribution / revenue * 100 : null, revenueCoveragePct: eligibleRevenue + excludedRevenue > 0 ? eligibleRevenue / (eligibleRevenue + excludedRevenue) : null, excludedOrders: coverage?.excludedOrders.size ?? 0 }; }); };
     const productProfitability = makeRows(currentProfitabilityRows).sort((a,b)=>b.contribution-a.contribution||a.productName.localeCompare(b.productName));
     const verifiedRevenue = productProfitability.reduce((sum, row) => sum + row.verifiedRevenue, 0);
@@ -676,6 +753,7 @@ export const StoreIntelligence = {
       productProfitability,
       productProfitabilitySummary,
       productProfitabilityComparison,
+      productProfitabilityAvailability: profitabilityReadAvailability,
       insights: buildInsights(weekdays, twoItemOrderShare, bestSundayWindow, trends, momentum),
       metaStatus: "pending",
     };

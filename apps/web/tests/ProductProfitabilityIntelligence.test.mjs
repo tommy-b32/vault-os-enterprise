@@ -38,13 +38,40 @@ test("Stage 2 empty profitability remains empty rather than zero-profit", () => 
   assert.equal(summary.asp, null); assert.equal(summary.contributionMarginPct, null); assert.equal(summary.verifiedRevenue, 0);
 });
 
-test("Stage 2 keeps the detail evidence contract and fail-closed allocation source", async () => {
+test("Product Performance uses only the governed read model behind a valid freshness state", async () => {
   const [store, panel, detail] = await Promise.all([
     readFile(new URL("../lib/intelligence/StoreIntelligence.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/intelligence/ProductProfitabilityPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/intelligence/products/[productId]/page.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(store, /vault_shopify_verified_product_profitability_line_allocations/);
+  assert.match(store, /vault_shopify_verified_product_profitability_read_model_state/);
+  assert.match(store, /vault_shopify_verified_product_profitability_read_model/);
+  assert.doesNotMatch(store, /vault_shopify_verified_product_profitability_line_allocations/);
+  assert.match(store, /state === "valid"/);
+  for (const state of ["stale", "refreshing", "failed"]) assert.match(store, new RegExp(`state === "${state}"`));
+  assert.match(store, /!result\.data/);
+  assert.match(store, /ANALYTICS_START/);
+  assert.match(store, /combinedProfitabilityBounds/);
+  assert.match(store, /previousProfitPeriodBounds/);
+  assert.match(store, /vault_shopify_product_profitability_coverage_lines/);
+  assert.match(store, /eligibleCoverageRevenue/);
+  assert.match(store, /excludedCoverageRevenue/);
+  assert.match(store, /revenueCoveragePct: eligibleRevenue \+ excludedRevenue > 0/);
+  assert.match(store, /excludedOrders: coverage\?\.excludedOrders\.size \?\? 0/);
+  assert.match(store, /from\("vault_shopify_orders"\)\.select\("id,order_number"\)/);
+  assert.match(store, /orderNumbers\.get\(line\.order_id\) \?\? "Order"/);
+  assert.match(store, /\.eq\("product_id", productId\)/);
+  assert.match(store, /\.eq\("refresh_generation", generation\)/);
+  assert.match(store, /finalState\.generation !== generation/);
+  assert.match(panel, /availability\.message/);
   assert.match(panel, /Units<\/th><th>Orders<\/th><th>ASP/);
   for (const field of ["Order", "Sale date", "COGS", "Contribution"]) assert.match(detail, new RegExp(field));
+});
+
+test("Product Performance coverage failure fails closed without aborting the Store Intelligence snapshot", async () => {
+  const store = await readFile(new URL("../lib/intelligence/StoreIntelligence.ts", import.meta.url), "utf8");
+  assert.match(store, /const coverageFailed = coverageResult\.status === "rejected"/);
+  assert.match(store, /profitabilityRows = profitabilityRead\.value/);
+  assert.match(store, /if \(coverageFailed\) \{\s+profitabilityReadAvailability = \{ available: false, message: "Product Performance is unavailable because coverage data could not be read safely\." \};\s+\} else if \(profitabilityRead\.status === "fulfilled"\)/);
+  assert.match(store, /if \(!coverageFailed && coverageResult\.status === "fulfilled"\) coverageRows = coverageResult\.value\.data \?\? \[\];/);
 });

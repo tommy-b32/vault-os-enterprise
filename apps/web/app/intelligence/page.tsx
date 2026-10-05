@@ -64,7 +64,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           </div>
         </header>
 
-        <ProductProfitabilityPanel period={profitPeriod} rows={snapshot.productProfitability} summary={snapshot.productProfitabilitySummary} comparison={snapshot.productProfitabilityComparison} />
+        <ProductProfitabilityPanel period={profitPeriod} rows={snapshot.productProfitability} summary={snapshot.productProfitabilitySummary} comparison={snapshot.productProfitabilityComparison} availability={snapshot.productProfitabilityAvailability} />
 
         <section className="intelligence-grid">
           <article className="intelligence-panel intelligence-panel-wide">
