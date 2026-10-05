@@ -1935,6 +1935,28 @@ export async function cancelPurchaseOrder(input: {
   };
 }
 
+export async function deleteDisposablePurchaseOrder(input: {
+  purchaseOrderId: string;
+  operatorId: string;
+}): Promise<{ purchaseOrderId: string; deletedLineCount: number }> {
+  const { data, error } = await supabaseAdmin.rpc(
+    "delete_disposable_vault_purchase_order",
+    {
+      target_purchase_order_id: input.purchaseOrderId,
+      target_operator_id: input.operatorId,
+    },
+  );
+  if (error) throw new Error(error.message);
+  const result = data?.[0];
+  if (!result || result.deleted_purchase_order_id !== input.purchaseOrderId || !Number.isInteger(result.deleted_line_count)) {
+    throw new Error("Purchase-order deletion did not return canonical evidence.");
+  }
+  return {
+    purchaseOrderId: result.deleted_purchase_order_id,
+    deletedLineCount: result.deleted_line_count,
+  };
+}
+
 export async function recordPurchaseOrderPayment(input: {
   purchaseOrderId: string;
   operatorId: string;

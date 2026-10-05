@@ -2995,6 +2995,42 @@ input:focus-visible {
   text-decoration: none;
 }
 
+.purchase-order-delete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.purchase-order-delete__button {
+  border: 1px solid rgba(221, 95, 95, 0.7);
+  border-radius: 7px;
+  background: rgba(153, 38, 38, 0.16);
+  color: #ffb4b4;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 7px 10px;
+}
+
+.purchase-order-delete__button:hover:not(:disabled) {
+  background: rgba(188, 51, 51, 0.28);
+}
+
+.purchase-order-delete__button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.purchase-order-delete__message {
+  margin: 0;
+  color: #ffb4b4;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .purchase-order-summary dl {
   display: grid;
   gap: 9px;

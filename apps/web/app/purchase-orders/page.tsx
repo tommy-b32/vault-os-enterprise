@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { PurchasingWalletData } from "@/components/commercial/PurchasingWallet";
 import VaultAppShell from "@/components/layout/VaultAppShell";
 import { BlankSupplierPurchaseOrderPanel } from "@/components/purchase-orders/BlankSupplierPurchaseOrderPanel";
+import { DeletePurchaseOrderButton } from "@/components/purchase-orders/DeletePurchaseOrderButton";
 import {
   PurchaseOrderDraftWorkspace,
   type SupplierDraftOrder,
@@ -546,11 +547,8 @@ export default async function PurchaseOrdersPage() {
                   ).length;
 
                 return (
-                  <Link
-                    className="purchase-order-saved-card"
-                    href={`/purchase-orders/${draft.id}`}
-                    key={draft.id}
-                  >
+                  <article className="purchase-order-saved-card" key={draft.id}>
+                    <Link href={`/purchase-orders/${draft.id}`}>
                     <div className="purchase-order-section-heading">
                       <div>
                         <p className="vault-eyebrow">
@@ -626,7 +624,11 @@ export default async function PurchaseOrdersPage() {
                     <p>
                       Open saved purchase order →
                     </p>
-                  </Link>
+                    </Link>
+                    {draft.status === "draft" || draft.status === "cancelled" ? (
+                      <DeletePurchaseOrderButton purchaseOrderId={draft.id} />
+                    ) : null}
+                  </article>
                 );
               })}</div></section>)}
             </div>

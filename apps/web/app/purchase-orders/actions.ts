@@ -9,6 +9,7 @@ import {
   cancelPurchaseOrder,
   createBlankSupplierPurchaseOrder,
   createPurchaseOrderDraft,
+  deleteDisposablePurchaseOrder,
   markPurchaseOrderOrdered,
   closeGovernedPurchaseOrder,
   markPurchaseOrderShipped,
@@ -552,6 +553,33 @@ export async function closePurchaseOrder(_previousState: MarkPurchaseOrderShippe
   } catch (error) {
     console.error("Unable to close purchase order", error);
     return { status: "error", message: error instanceof Error ? error.message : "Purchase order could not be closed." };
+  }
+}
+
+export type DeletePurchaseOrderState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export async function deleteDisposablePurchaseOrderAction(
+  _previousState: DeletePurchaseOrderState,
+  formData: FormData,
+): Promise<DeletePurchaseOrderState> {
+  try {
+    const purchaseOrderId = formData.get("purchase_order_id");
+    if (typeof purchaseOrderId !== "string" || !UUID_PATTERN.test(purchaseOrderId)) {
+      return { status: "error", message: "Invalid purchase order." };
+    }
+    const operator = await requireAuthenticatedOperator();
+    await deleteDisposablePurchaseOrder({ purchaseOrderId, operatorId: operator.id });
+    revalidatePath("/purchase-orders");
+    return { status: "success", message: "Purchase order permanently deleted." };
+  } catch (error) {
+    console.error("Unable to delete purchase order", error);
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Purchase order could not be deleted.",
+    };
   }
 }
 
