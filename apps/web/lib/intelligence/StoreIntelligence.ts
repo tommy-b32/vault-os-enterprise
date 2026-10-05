@@ -492,26 +492,37 @@ export const StoreIntelligence = {
 
     const profitBounds = profitPeriodBounds(profitPeriod);
     const previousProfitBounds = previousProfitPeriodBounds(profitPeriod, profitBounds);
+    // Fetch adjacent comparison periods in one bounded read.  The allocation view
+    // expands governed financial, COGS, shipping and fee evidence, so issuing one
+    // query per period duplicated that expensive evidence evaluation without
+    // changing any allocation or coverage semantics.
     const profitabilityQuery = supabaseAdmin.from("vault_shopify_verified_product_profitability_line_allocations").select("shopify_created_at,product_id,product_name,order_id,eligible_units,allocated_total_revenue_gbp,resolved_cogs_gbp,allocated_shipping_cost_gbp,allocated_payment_fees_gbp,operational_contribution_gbp");
     const coverageQuery = supabaseAdmin.from("vault_shopify_product_profitability_coverage_lines").select("shopify_created_at,product_id,order_id,stage_1_eligible,units,revenue");
-    const previousProfitabilityQuery = supabaseAdmin.from("vault_shopify_verified_product_profitability_line_allocations").select("product_id,product_name,order_id,eligible_units,allocated_total_revenue_gbp,resolved_cogs_gbp,allocated_shipping_cost_gbp,allocated_payment_fees_gbp,operational_contribution_gbp");
-    const [profitabilityResult, coverageResult, previousProfitabilityResult] = await Promise.all([
-      profitBounds ? profitabilityQuery.gte("shopify_created_at", profitBounds.from).lt("shopify_created_at", profitBounds.to) : profitabilityQuery,
+    const combinedProfitabilityBounds = previousProfitBounds
+      ? { from: previousProfitBounds.from, to: profitBounds!.to }
+      : profitBounds;
+    const [profitabilityResult, coverageResult] = await Promise.all([
+      combinedProfitabilityBounds ? profitabilityQuery.gte("shopify_created_at", combinedProfitabilityBounds.from).lt("shopify_created_at", combinedProfitabilityBounds.to) : profitabilityQuery,
       profitBounds ? coverageQuery.gte("shopify_created_at", profitBounds.from).lt("shopify_created_at", profitBounds.to) : coverageQuery,
-      previousProfitBounds ? previousProfitabilityQuery.gte("shopify_created_at", previousProfitBounds.from).lt("shopify_created_at", previousProfitBounds.to) : Promise.resolve({ data: [], error: null }),
     ]);
     if (profitabilityResult.error) throw new Error(profitabilityResult.error.message);
     if (coverageResult.error) throw new Error(coverageResult.error.message);
-    if (previousProfitabilityResult.error) throw new Error(previousProfitabilityResult.error.message);
+    const profitabilityRows = profitabilityResult.data ?? [];
+    const currentProfitabilityRows = previousProfitBounds
+      ? profitabilityRows.filter((row: any) => Date.parse(row.shopify_created_at) >= Date.parse(profitBounds!.from))
+      : profitabilityRows;
+    const previousProfitabilityRows = previousProfitBounds
+      ? profitabilityRows.filter((row: any) => Date.parse(row.shopify_created_at) < Date.parse(profitBounds!.from))
+      : [];
     const coverageByProduct = new Map<string, { eligibleRevenue: number; excludedRevenue: number; excludedOrders: Set<string> }>();
     for (const row of coverageResult.data ?? []) { const item = coverageByProduct.get((row as any).product_id) ?? { eligibleRevenue: 0, excludedRevenue: 0, excludedOrders: new Set<string>() }; if ((row as any).stage_1_eligible) item.eligibleRevenue += amount((row as any).revenue); else { item.excludedRevenue += amount((row as any).revenue); item.excludedOrders.add((row as any).order_id); } coverageByProduct.set((row as any).product_id, item); }
     const makeRows = (source: any[]): ProductProfitability[] => { const totals = new Map<string, any>(); for (const row of source) { const current = totals.get(row.product_id) ?? { ...row, eligible_units: 0, allocated_total_revenue_gbp: 0, resolved_cogs_gbp: 0, allocated_shipping_cost_gbp: 0, allocated_payment_fees_gbp: 0, operational_contribution_gbp: 0, orderIds: new Set<string>() }; for (const key of ["eligible_units","allocated_total_revenue_gbp","resolved_cogs_gbp","allocated_shipping_cost_gbp","allocated_payment_fees_gbp","operational_contribution_gbp"]) current[key] += amount(row[key]); current.orderIds.add(row.order_id); totals.set(row.product_id, current); } return [...totals.values()].map((row): ProductProfitability => { const coverage = coverageByProduct.get(row.product_id); const eligibleRevenue = coverage?.eligibleRevenue ?? 0, excludedRevenue = coverage?.excludedRevenue ?? 0; const contribution = amount(row.operational_contribution_gbp), units = amount(row.eligible_units), revenue = amount(row.allocated_total_revenue_gbp); return { productId: row.product_id, productName: row.product_name, eligibleUnits: units, eligibleOrders: row.orderIds.size, verifiedRevenue: revenue, cogs: amount(row.resolved_cogs_gbp), shippingCost: amount(row.allocated_shipping_cost_gbp), paymentFees: amount(row.allocated_payment_fees_gbp), contribution, asp: units > 0 ? revenue / units : null, contributionPerUnit: units > 0 ? contribution / units : null, contributionMarginPct: revenue > 0 ? contribution / revenue * 100 : null, revenueCoveragePct: eligibleRevenue + excludedRevenue > 0 ? eligibleRevenue / (eligibleRevenue + excludedRevenue) : null, excludedOrders: coverage?.excludedOrders.size ?? 0 }; }); };
-    const productProfitability = makeRows(profitabilityResult.data ?? []).sort((a,b)=>b.contribution-a.contribution||a.productName.localeCompare(b.productName));
+    const productProfitability = makeRows(currentProfitabilityRows).sort((a,b)=>b.contribution-a.contribution||a.productName.localeCompare(b.productName));
     const verifiedRevenue = productProfitability.reduce((sum, row) => sum + row.verifiedRevenue, 0);
     const eligibleCoverageRevenue = [...coverageByProduct.values()].reduce((sum, row) => sum + row.eligibleRevenue, 0);
     const excludedCoverageRevenue = [...coverageByProduct.values()].reduce((sum, row) => sum + row.excludedRevenue, 0);
-    const productProfitabilitySummary = summarizeProductProfitability(productProfitability, { eligibleRevenue: eligibleCoverageRevenue, excludedRevenue: excludedCoverageRevenue }, (profitabilityResult.data ?? []).map((row: any) => row.order_id));
-    const previousProductProfitabilitySummary = previousProfitBounds ? summarizeProductProfitability(makeRows(previousProfitabilityResult.data ?? []), { eligibleRevenue: 0, excludedRevenue: 0 }, (previousProfitabilityResult.data ?? []).map((row: any) => row.order_id)) : null;
+    const productProfitabilitySummary = summarizeProductProfitability(productProfitability, { eligibleRevenue: eligibleCoverageRevenue, excludedRevenue: excludedCoverageRevenue }, currentProfitabilityRows.map((row: any) => row.order_id));
+    const previousProductProfitabilitySummary = previousProfitBounds ? summarizeProductProfitability(makeRows(previousProfitabilityRows), { eligibleRevenue: 0, excludedRevenue: 0 }, previousProfitabilityRows.map((row: any) => row.order_id)) : null;
     const productProfitabilityComparison = compareProductProfitability(productProfitabilitySummary, previousProductProfitabilitySummary);
 
     const orders = ((ordersResult.data ?? []) as OrderRow[]).filter(
