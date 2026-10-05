@@ -548,8 +548,7 @@ export default async function PurchaseOrdersPage() {
 
                 return (
                   <article className="purchase-order-saved-card" key={draft.id}>
-                    <Link href={`/purchase-orders/${draft.id}`}>
-                    <div className="purchase-order-section-heading">
+                    <div className="purchase-order-saved-card__header">
                       <div>
                         <p className="vault-eyebrow">
                           {draft.status.toUpperCase()}
@@ -560,14 +559,14 @@ export default async function PurchaseOrdersPage() {
                         </h3>
                       </div>
 
-                      <span>
+                      <span className="purchase-order-saved-card__timestamp">
                         {formatDate(
                           draft.created_at,
                         )}
                       </span>
                     </div>
 
-                    <div className="purchase-order-supplier-totals">
+                    <div className="purchase-order-saved-card__metrics">
                       <div>
                         <span>
                           Total cost
@@ -621,13 +620,14 @@ export default async function PurchaseOrdersPage() {
                       </div>
                     </div>
 
-                    <p>
-                      Open saved purchase order →
-                    </p>
-                    </Link>
-                    {draft.status === "draft" || draft.status === "cancelled" ? (
-                      <DeletePurchaseOrderButton purchaseOrderId={draft.id} />
-                    ) : null}
+                    <div className="purchase-order-saved-card__actions">
+                      <Link className="vault-primary-button" href={`/purchase-orders/${draft.id}`}>
+                        Open Purchase Order →
+                      </Link>
+                      {draft.status === "draft" || draft.status === "cancelled" ? (
+                        <DeletePurchaseOrderButton purchaseOrderId={draft.id} />
+                      ) : null}
+                    </div>
                   </article>
                 );
               })}</div></section>)}
