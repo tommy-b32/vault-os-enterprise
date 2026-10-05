@@ -624,7 +624,7 @@ export default async function PurchaseOrdersPage() {
                       <Link className="vault-primary-button" href={`/purchase-orders/${draft.id}`}>
                         Open Purchase Order →
                       </Link>
-                      {draft.status === "draft" || draft.status === "cancelled" ? (
+                      {draft.status === "draft" ? (
                         <DeletePurchaseOrderButton purchaseOrderId={draft.id} />
                       ) : null}
                     </div>

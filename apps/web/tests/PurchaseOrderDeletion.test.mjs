@@ -28,10 +28,11 @@ test("draft purchase orders can be deleted", () => {
   assert.match(listPage, /draft\.status === "draft"/);
 });
 
-test("cancelled purchase orders can be deleted", () => {
+test("cancelled purchase orders remain visible but do not expose permanent deletion", () => {
   assert.match(migration, /purchase_order\.status not in \('draft', 'cancelled'\)/);
   assert.match(migration, /Only draft or cancelled purchase orders can be deleted/);
-  assert.match(listPage, /draft\.status === "cancelled"/);
+  assert.doesNotMatch(listPage, /draft\.status === "cancelled"/);
+  assert.match(listPage, /statuses: \["closed", "cancelled"\]/);
 });
 
 test("active purchase orders fail closed without a status exception", () => {
