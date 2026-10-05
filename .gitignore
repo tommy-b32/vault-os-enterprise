@@ -16,3 +16,5 @@ supabase/.branches/
 # Windows
 Thumbs.db
 .vercel
+
+supabase/migration-hold/
