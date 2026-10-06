@@ -284,7 +284,6 @@ function TodayPerformanceCard({ data }: DataProps) {
 
 function SevenDayForecastCard({ data }: DataProps) {
   const forecast = data.sevenDayForecast;
-  const delivery = data.latestDelivery;
   const values = forecast.value;
 
   const metric = (value: number | null): CockpitValue<number> =>
@@ -311,117 +310,16 @@ function SevenDayForecastCard({ data }: DataProps) {
         }).format(new Date(`${value}T12:00:00Z`))
       : "Unavailable";
 
-  const deliveryValue = delivery.value;
-
-  const deliveryIdentity = deliveryValue
-    ? [deliveryValue.supplierName, deliveryValue.carrier]
-        .filter(
-          (value): value is string =>
-            typeof value === "string" && value.trim().length > 0,
-        )
-        .join(" · ")
-    : null;
-
-  const deliveryStatus = deliveryValue
-    ? deliveryValue.trackingStatus?.trim() ||
-      "Tracking awaiting update"
-    : null;
-
-  const deliveryUpdatedAt =
-    deliveryValue?.trackingUpdatedAt ??
-    deliveryValue?.trackingLastCheckedAt ??
-    delivery.updatedAt;
-
-  return (
-    <KpiCard
-      eyebrow="Forecast"
-      icon="analytics"
-      accent="violet"
-      value={
-        values
-          ? formatMoney({
-              amount: values.forecastRevenue,
-              currency: "GBP",
-            })
-          : display(forecast)
-      }
-      valueLabel="Next 7 full London days"
-      trendContent={false}
-    >
-      <div className="cc-forecast-delivery-card">
-        <section className="cc-forecast-section">
-          <div className="cc-performance-support">
-            <MetricRow
-              label="Forecast orders"
-              value={metric(values?.forecastOrders ?? null)}
-              formatter={(value) => Number(value).toFixed(1)}
-            />
-
-            <MetricRow
-              label="Expected AOV"
-              value={metric(values?.expectedAov ?? null)}
-              formatter={(value) =>
-                formatMoney({
-                  amount: Number(value),
-                  currency: "GBP",
-                })
-              }
-            />
-
-            <MetricRow
-              label={`Strongest · ${day(values?.strongestDay)}`}
-              value={metric(values?.strongestRevenue ?? null)}
-              formatter={(value) =>
-                formatMoney({
-                  amount: Number(value),
-                  currency: "GBP",
-                })
-              }
-            />
-          </div>
-        </section>
-
-        <section className="cc-latest-delivery-section">
-          <div className="cc-latest-delivery-heading">
-            LATEST DELIVERY
-          </div>
-
-          {deliveryValue ? (
-            <>
-              {deliveryIdentity ? (
-                <div className="cc-latest-delivery-identity">
-                  {deliveryIdentity}
-                </div>
-              ) : null}
-
-              <div className="cc-latest-delivery-status">
-                {deliveryStatus}
-              </div>
-
-              {deliveryValue.trackingLocation ? (
-                <div className="cc-latest-delivery-location">
-                  {deliveryValue.trackingLocation}
-                </div>
-              ) : null}
-
-              <div className="cc-latest-delivery-updated">
-                {deliveryUpdatedAt
-                  ? `Updated ${relativeTime(
-                      deliveryUpdatedAt,
-                      data.generatedAt,
-                    )}`
-                  : "Update time unavailable"}
-              </div>
-            </>
-          ) : (
-            <div className="cc-latest-delivery-empty">
-              No active tracked delivery
-            </div>
-          )}
-        </section>
-      </div>
-    </KpiCard>
-  );
+  return <KpiCard eyebrow="Forecast" icon="analytics" accent="violet" value={values ? formatMoney({ amount: values.forecastRevenue, currency: "GBP" }) : display(forecast)} valueLabel="Next 7 full London days" trendContent={false}>
+    <div className="cc-performance-support">
+      <MetricRow label="Forecast orders" value={metric(values?.forecastOrders ?? null)} formatter={(value) => Number(value).toFixed(1)} />
+      <MetricRow label="Expected AOV" value={metric(values?.expectedAov ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label="Average revenue/day" value={metric(values?.averageRevenuePerDay ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label={`Strongest · ${day(values?.strongestDay)}`} value={metric(values?.strongestRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <MetricRow label={`Weakest · ${day(values?.weakestDay)}`} value={metric(values?.weakestRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
+      <p>{values ? `${values.minimumSampleCount}–${values.maximumSampleCount} matching weekdays · ${values.coverageSampleCount} verified samples · Europe/London` : "Each forecast weekday needs 4 verified matching weekdays"}</p>
+    </div>
+  </KpiCard>;
 }
 
 function Snapshot({ title, subtitle, icon, href, children }: {
@@ -475,12 +373,29 @@ export function CommandCentreCockpit({ data }: DataProps) {
   const percentValue = (value: CockpitValue<number>) => display(value, (entry) => `${entry.toLocaleString("en-GB", { maximumFractionDigits: 1 })}%`);
   const shopifyAnalyticsAvailable = data.website.shopifyAnalytics.sessions.state === "available" || data.website.shopifyAnalytics.sessions.state === "stale";
   const shopifyAnalyticsState = data.website.shopifyAnalytics.availability === "live" ? "Live" : "Stale";
+  const delivery = data.latestDelivery.value;
+  const deliveryIdentity = delivery
+    ? [delivery.supplierName, delivery.carrier]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join(" · ")
+    : null;
+  const deliveryStatus = delivery?.trackingStatus?.trim() || "Tracking awaiting update";
+  const deliveryUpdatedAt = delivery?.trackingUpdatedAt ?? delivery?.trackingLastCheckedAt ?? data.latestDelivery.updatedAt;
 
   return (
     <div className="cc-page">
       <VaultSaleCelebration recentOrders={data.trading.recentOrders} />
       <header className="cc-page-header">
         <div><p>THE FABRIC VAULT</p><h1>Command Centre</h1><span>Your business. At a glance.</span></div>
+        <div className="cc-header-delivery">
+          <span className="cc-header-delivery-label">Latest Delivery</span>
+          {delivery ? <>
+            {deliveryIdentity ? <strong className="cc-header-delivery-identity">{deliveryIdentity}</strong> : null}
+            <span className="cc-header-delivery-status">{deliveryStatus}</span>
+            {delivery.trackingLocation ? <span className="cc-header-delivery-location">{delivery.trackingLocation}</span> : null}
+            <small className="cc-header-delivery-updated">{deliveryUpdatedAt ? `Updated ${relativeTime(deliveryUpdatedAt, data.generatedAt)}` : "Update time unavailable"}</small>
+          </> : <span className="cc-header-delivery-empty">No active tracked delivery</span>}
+        </div>
         <div className={`cc-pulse is-${data.businessPulse.state}`} aria-label={`Business Pulse: ${data.businessPulse.label}`}>
           <span>Business Pulse</span>
           <strong>{data.businessPulse.label}</strong>
@@ -669,7 +584,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 function CommandCentreCockpitStyles() {
   return <style>{`
     .cc-profit-support,.cc-performance-support{display:grid;width:100%;min-width:0;gap:5px}.cc-profit-rows .cc-metric-row,.cc-performance-support .cc-metric-row{padding:3px 0;font-size:12px;gap:8px}.cc-profit-rows .cc-metric-row>span,.cc-performance-support .cc-metric-row>span{text-align:left}.cc-profit-support p,.cc-performance-support p{margin:0;font-size:11px;line-height:1.35}.cc-profit-support .cc-hint-content,.cc-performance-support .cc-hint-content{text-align:left}@media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(6){contain:size;align-self:stretch;overflow:visible}}
-    .cc-kpi-card.is-violet .cc-forecast-delivery-card{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);width:100%;min-width:0;overflow:hidden}.cc-kpi-card.is-violet .cc-forecast-section{min-width:0;padding-bottom:7px}.cc-kpi-card.is-violet .cc-forecast-delivery-card .cc-performance-support{gap:3px}.cc-kpi-card.is-violet .cc-latest-delivery-section{display:grid;align-content:start;min-width:0;gap:3px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07)}.cc-kpi-card.is-violet .cc-latest-delivery-heading{color:#9fa7a4;font-size:10px;font-weight:700;letter-spacing:.05em;line-height:1.2;text-transform:uppercase}.cc-kpi-card.is-violet .cc-latest-delivery-identity,.cc-kpi-card.is-violet .cc-latest-delivery-status,.cc-kpi-card.is-violet .cc-latest-delivery-location{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-kpi-card.is-violet .cc-latest-delivery-identity{color:#c5c8c4;font-size:12px;line-height:1.35}.cc-kpi-card.is-violet .cc-latest-delivery-status{color:#f0efea;font-size:13px;font-weight:650;line-height:1.35}.cc-kpi-card.is-violet .cc-latest-delivery-location{color:#9fa7a4;font-size:12px;line-height:1.35}.cc-kpi-card.is-violet .cc-latest-delivery-updated,.cc-kpi-card.is-violet .cc-latest-delivery-empty{min-width:0;overflow:hidden;color:#838b85;font-size:11px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.cc-kpi-card.is-violet .cc-latest-delivery-empty{padding-top:2px;color:#9fa7a4}
+    .cc-header-delivery{display:grid;min-width:0;max-width:330px;gap:2px;padding:9px 12px;border:1px solid rgba(150,166,162,.16);border-radius:8px;background:rgba(19,25,25,.58)}.cc-header-delivery-label{color:#dbae35!important;font-size:10px!important;font-weight:700;letter-spacing:.06em;line-height:1.2;text-transform:uppercase}.cc-header-delivery-identity,.cc-header-delivery-status,.cc-header-delivery-location,.cc-header-delivery-updated,.cc-header-delivery-empty{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-header-delivery-identity{color:#d8dcda;font-size:12px;line-height:1.3}.cc-header-delivery-status{color:#f0efea!important;font-size:13px!important;font-weight:650;line-height:1.3}.cc-header-delivery-location{color:#9fa7a4!important;font-size:11px!important;line-height:1.3}.cc-header-delivery-updated,.cc-header-delivery-empty{color:#838b85!important;font-size:11px!important;line-height:1.3}.cc-header-delivery-empty{color:#9fa7a4!important}
     @media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(n+2):nth-child(-n+4){contain:size;align-self:stretch;overflow:visible}.cc-kpi-card.is-meta>.cc-kpi-support{gap:4px;margin-top:4px}.cc-kpi-card.is-meta .cc-meta-details{padding-top:0}.cc-kpi-card.is-meta .cc-meta-details .cc-metric-row{padding:2px 0}}
     .cc-kpi-card.is-meta>.cc-kpi-support{flex-direction:column}.cc-meta-details{min-width:0;border-top:1px solid rgba(255,255,255,.12);padding-top:3px}.cc-meta-details .cc-metric-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:8px;padding:6px 0}.cc-meta-details .cc-metric-row>span{text-align:left;min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-metric-row>strong{min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-hint-content{width:min(260px,70vw)}
     .cc-kpi-card.is-meta{overflow:visible}.cc-kpi-card.is-meta:after{display:none}.cc-kpi-card.is-meta:hover,.cc-kpi-card.is-meta:focus-within{z-index:3}.cc-kpi-support .cc-hint .cc-hint-content{text-align:left}.cc-kpi-values>div:last-child .cc-hint-content{left:auto;right:0}
@@ -679,7 +594,7 @@ function CommandCentreCockpitStyles() {
     .cc-orders-support{display:grid;width:100%;min-width:0;gap:10px}.cc-orders-today{display:flex;justify-content:space-between;gap:8px}.cc-recent-orders{border-top:1px solid rgba(255,255,255,.07);padding-top:10px;min-width:0}.cc-recent-orders h3{display:flex;justify-content:space-between;margin:0 0 7px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#9fa7a4}.cc-recent-orders h3 small{font-size:10px;font-weight:400}.cc-recent-orders ul{list-style:none;padding:0;margin:0;display:grid;gap:5px}.cc-recent-orders li{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:8px;align-items:baseline;font-size:11px}.cc-recent-orders a{color:#d8dcda;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-recent-orders strong{color:#d8dcda;font-weight:600}.cc-recent-orders time{text-align:right;white-space:nowrap}.cc-recent-orders p{margin:0}
     .cc-revenue-support{display:grid;width:100%;min-width:0;gap:10px}.cc-revenue-today{display:flex;justify-content:space-between;gap:8px}.cc-calendar-revenue{min-width:0;border-top:1px solid rgba(255,255,255,.07);padding-top:3px}.cc-calendar-revenue .cc-metric-row{align-items:baseline;flex-wrap:wrap;gap:4px 12px;padding:6px 0;font-size:12px}.cc-calendar-revenue .cc-metric-row strong{margin-left:auto;overflow-wrap:anywhere}.cc-calendar-revenue p{margin:7px 0 0;color:#9fa7a4;font-size:11px;line-height:1.35}
     .cc-page{--cc-text-xs:11px;--cc-text-sm:12px;--cc-text-md:14px;--cc-text-lg:16px;--cc-card-padding:18px;--cc-panel-gap:14px;--cc-row-space:11px;min-width:0;min-height:calc(100vh - 72px);padding:26px 30px 20px;color:#f4f2ec;background:radial-gradient(circle at 48% -10%,rgba(75,124,148,.075),transparent 38%),radial-gradient(circle at 70% 26%,rgba(164,83,222,.035),transparent 31%)}
-    .cc-page-header{display:flex;align-items:end;justify-content:space-between;margin-bottom:18px}.cc-page-header p,.cc-panel-heading p,.cc-feed header p{display:flex;align-items:center;gap:8px;margin:0 0 5px;color:#f0bd36;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.cc-page-header h1{margin:0;font-size:34px;line-height:1.08}.cc-page-header>div>span{color:#b3b8b7;font-size:14px}.cc-pulse{min-width:220px;padding:14px 18px;border:1px solid rgba(222,176,57,.28);border-radius:10px;background:linear-gradient(145deg,#121716,#0a0e0d);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}.cc-pulse>span,.cc-pulse small{display:block;color:#9da39f;font-size:12px}.cc-pulse strong{display:block;margin:4px 0;color:#fff;font-size:22px}.cc-pulse.is-critical strong{color:#ff7474}.cc-pulse.is-attention strong,.cc-pulse.is-watch strong{color:#e3b43e}.cc-pulse.is-healthy strong{color:#58d27d}
+    .cc-page-header{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,330px) auto;align-items:center;gap:18px;margin-bottom:18px}.cc-page-header p,.cc-panel-heading p,.cc-feed header p{display:flex;align-items:center;gap:8px;margin:0 0 5px;color:#f0bd36;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.cc-page-header h1{margin:0;font-size:34px;line-height:1.08}.cc-page-header>div>span{color:#b3b8b7;font-size:14px}.cc-pulse{min-width:220px;padding:14px 18px;border:1px solid rgba(222,176,57,.28);border-radius:10px;background:linear-gradient(145deg,#121716,#0a0e0d);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}.cc-pulse>span,.cc-pulse small{display:block;color:#9da39f;font-size:12px}.cc-pulse strong{display:block;margin:4px 0;color:#fff;font-size:22px}.cc-pulse.is-critical strong{color:#ff7474}.cc-pulse.is-attention strong,.cc-pulse.is-watch strong{color:#e3b43e}.cc-pulse.is-healthy strong{color:#58d27d}
     .cc-card{border:1px solid rgba(150,166,162,.16);border-radius:10px;background:linear-gradient(145deg,rgba(19,25,25,.98),rgba(10,14,14,.99));box-shadow:0 12px 30px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.018)}
     .cc-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:auto;align-items:start;gap:var(--cc-panel-gap)}.cc-kpi-card{position:relative;min-width:0;min-height:194px;padding:var(--cc-card-padding);overflow:hidden}.cc-kpi-card:after{position:absolute;inset:auto -20% -65% 20%;height:110px;border-radius:50%;background:currentColor;filter:blur(55px);opacity:.04;content:""}.cc-kpi-card header{display:flex;align-items:center;gap:10px}.cc-kpi-card header>span{display:grid;color:currentColor}.cc-kpi-card h2{margin:0;color:#d8dcda;font-size:11px;text-transform:uppercase;letter-spacing:.035em}.cc-kpi-card.is-gold{color:#f0b91f}.cc-kpi-card.is-green{color:#48da7d}.cc-kpi-card.is-blue{color:#54c8f3}.cc-kpi-card.is-violet{color:#9c69ed}.cc-kpi-card.is-pink{color:#ee4da8}.cc-kpi-value{margin-top:16px;color:#fff;font-size:29px;font-weight:780;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cc-kpi-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}.cc-kpi-values>div{min-width:0}.cc-kpi-values>div:nth-child(2){text-align:center}.cc-kpi-values>div:last-child{text-align:right}.cc-kpi-values strong,.cc-kpi-values span{display:block}.cc-kpi-values strong{overflow:hidden;text-overflow:ellipsis}.cc-kpi-values strong{color:#fff;font-size:21px;line-height:1.1;white-space:nowrap}.cc-kpi-values>div:first-child strong{font-size:29px}.cc-kpi-values span{overflow-wrap:anywhere;margin-top:4px;color:#a9b0ac;font-size:11px;line-height:1.25}.cc-change{position:absolute;top:62px;right:16px;max-width:45%;font-size:11px;font-weight:700;text-align:right}.cc-change small{display:block;color:#929894;font-size:11px;font-weight:500}.cc-change.is-positive{color:#4bd17a}.cc-change.is-negative{color:#ff6969}.cc-sparkline{display:block;width:100%;height:38px;margin-top:8px;overflow:visible}.cc-sparkline-empty{display:flex;height:38px;align-items:center;margin-top:8px;color:#69716e;font-size:11px}.cc-kpi-support{position:relative;z-index:1;display:flex;justify-content:space-between;gap:8px;margin-top:8px;color:#9fa7a4;font-size:11px;line-height:1.35}.cc-kpi-support span:last-child{text-align:right}.cc-kpi-support .cc-traffic-breakdown{max-width:100%}
     .cc-shopify-analytics{display:grid;width:100%;gap:9px}.cc-shopify-source{min-width:0;overflow-wrap:anywhere}.cc-shopify-status{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 8px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.07)}.cc-shopify-status strong{color:#58d27d}.cc-shopify-status strong.is-stale{color:#e3b43e}.cc-shopify-funnel{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:5px}.cc-shopify-funnel div{min-width:0}.cc-shopify-funnel span,.cc-shopify-funnel strong{display:block}.cc-shopify-funnel span{min-height:28px;color:#8f9894}.cc-shopify-funnel strong{color:#f4f2ec;font-size:16px}.cc-shopify-funnel i{color:#6e7773;font-style:normal}.cc-vault-tracking{display:grid;gap:3px;padding:8px;border:1px solid rgba(84,200,243,.15);border-radius:7px;background:rgba(84,200,243,.035)}.cc-vault-tracking strong{color:#75cdeb;text-transform:uppercase;letter-spacing:.035em}.cc-vault-tracking span{text-align:left!important}
@@ -691,7 +606,7 @@ function CommandCentreCockpitStyles() {
     .cc-snapshot{min-width:0}.cc-snapshot>header>span,.cc-snapshot>header>a{display:grid;color:#dfb33e}.cc-snapshot>header>div{min-width:0}.cc-snapshot>header>a{margin-left:auto}
     @media(max-width:1500px){.cc-page{padding:24px}.cc-kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.cc-domain-strip{grid-template-columns:repeat(4,minmax(0,1fr))}.cc-snapshot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:1050px){.cc-middle-grid{grid-template-columns:1fr}.cc-briefing-columns{gap:12px}.cc-domain-strip{grid-template-columns:repeat(4,1fr)}}
-    @media(max-width:820px){.cc-page{padding:20px}.cc-page-header{align-items:flex-start}.cc-page-header h1{font-size:28px}.cc-pulse{min-width:190px}.cc-kpi-grid{grid-template-columns:repeat(2,1fr)}.cc-briefing-columns{grid-template-columns:1fr}.cc-briefing-columns>div+div{padding:12px 0 0;border-top:1px solid rgba(255,255,255,.07);border-left:0}.cc-domain-strip{grid-template-columns:repeat(2,1fr)}.cc-snapshot-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:820px){.cc-page{padding:20px}.cc-page-header{grid-template-columns:minmax(0,1fr) auto;align-items:start}.cc-page-header h1{font-size:28px}.cc-header-delivery{grid-column:1/-1;grid-row:2;max-width:none}.cc-pulse{grid-column:1/-1;grid-row:3;min-width:190px;justify-self:start}.cc-kpi-grid{grid-template-columns:repeat(2,1fr)}.cc-briefing-columns{grid-template-columns:1fr}.cc-briefing-columns>div+div{padding:12px 0 0;border-top:1px solid rgba(255,255,255,.07);border-left:0}.cc-domain-strip{grid-template-columns:repeat(2,1fr)}.cc-snapshot-grid{grid-template-columns:repeat(2,1fr)}}
     @media(max-width:600px){.cc-page{padding:16px}.cc-page-header{display:grid;gap:14px}.cc-page-header h1{font-size:24px}.cc-pulse{width:100%;min-width:0}.cc-kpi-grid{grid-template-columns:1fr;grid-auto-rows:auto}.cc-kpi-card{min-width:0}.cc-kpi-values{grid-template-columns:1fr}.cc-kpi-values>div:nth-child(n){text-align:left}.cc-shopify-funnel{grid-template-columns:1fr}.cc-shopify-funnel i{display:none}.cc-shopify-funnel span{min-height:0}.cc-shopify-funnel div{display:flex;align-items:center;justify-content:space-between;gap:12px}.cc-panel-heading{align-items:flex-start;gap:10px}.cc-briefing-focus{grid-template-columns:1fr}.cc-domain-strip{grid-template-columns:1fr}.cc-snapshot-grid{grid-template-columns:1fr}.cc-feed-grid{grid-template-columns:1fr}.cc-feed>header{align-items:flex-start;gap:10px}.cc-feed-grid article{grid-template-columns:16px minmax(0,1fr)}.cc-feed-grid time{grid-column:2}.cc-footer{flex-direction:column;gap:7px}}
   `}</style>;
 }
