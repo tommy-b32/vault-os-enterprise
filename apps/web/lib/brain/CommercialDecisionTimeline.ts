@@ -17,7 +17,7 @@ const REMEDIABLE_CATALOGUE_BLOCKERS = new Set<RemediableBuyingBlocker>([
   "reorder_approval_missing", "invalid_or_missing_commercial_cost", "target_stock_days_missing",
 ]);
 
-function isRemediableBuyingBlocker(reason: TrustedBuyingCandidateRejectionReason): reason is RemediableBuyingBlocker {
+function isRemediableBuyingBlocker(reason: string): reason is RemediableBuyingBlocker {
   return REMEDIABLE_CATALOGUE_BLOCKERS.has(reason as RemediableBuyingBlocker) || reason === "wallet_freshness_unknown" || reason === "wallet_stale";
 }
 
@@ -258,7 +258,9 @@ function reasonSummaryItems(summary: BuyingDecisionReasonSummary): CommercialDec
     reason.state !== "NO_ACTION_REQUIRED" && reason.state !== "INFORMATIONAL"
   ).map((reason) => {
     const source = reason.stage === "INVENTORY" ? "inventory" : reason.stage === "COMMERCIAL" ? "commercial" : reason.stage === "SUPPLIER" ? "supplier" : reason.stage === "CAPITAL" ? "wallet" : "classifier" as const;
-    const destination = reason.stage === "INVENTORY" ? "/inventory" : reason.stage === "COMMERCIAL" || reason.stage === "CAPITAL" ? "/commercial" : reason.stage === "SUPPLIER" ? "/purchase-intelligence" : "/catalogue";
+    const destination = isRemediableBuyingBlocker(reason.code)
+      ? remediationDestination(reason.code)
+      : reason.stage === "INVENTORY" ? "/inventory" : reason.stage === "COMMERCIAL" || reason.stage === "CAPITAL" ? "/commercial" : reason.stage === "SUPPLIER" ? "/purchase-intelligence" : "/catalogue";
     return { id: `reason-summary-${reason.code}`, source, category: reason.state === "GATHERING_EVIDENCE" ? "follow_up" : "blocker", status: reason.state === "GATHERING_EVIDENCE" ? "monitoring" : reason.state === "UNAVAILABLE" ? "unavailable" : "blocked", priority: reason.state === "GATHERING_EVIDENCE" ? "medium" : "high", title: reason.explanation, description: reason.explanation, effectiveAt: summary.generatedAt, deadlineAt: null, predictedAt: null, confidence: null, confidenceMeaning: null, entityType: "catalogue_style_set", entityId: null, destination, evidence: [{ label: "Affected styles", value: String(reason.affectedStyleIds.length) }], blockerReasons: [reason.code], affectedParentProductIds: reason.affectedParentProductIds, affectedStyleIds: reason.affectedStyleIds } satisfies CommercialDecisionTimelineItem;
   });
 }

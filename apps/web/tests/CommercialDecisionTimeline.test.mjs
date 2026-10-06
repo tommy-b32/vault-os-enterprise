@@ -60,6 +60,43 @@ function advisor(candidates, opportunity = null) {
   };
 }
 
+function reasonSummary(reason) {
+  return {
+    generatedAt,
+    reasons: [{
+      source: "TrustedBuyingCandidateClassifier",
+      affectedStyleIds: ["parent::Black"],
+      affectedParentProductIds: ["parent"],
+      details: [],
+      ...reason,
+    }],
+  };
+}
+
+test("reason summaries prefer blocker-specific remediation without changing blocker semantics", () => {
+  const cases = [
+    ["invalid_or_missing_commercial_cost", "COMMERCIAL", "BLOCKED", "/catalogue?attention=invalid_or_missing_commercial_cost"],
+    ["wallet_stale", "CAPITAL", "GATHERING_EVIDENCE", "/commercial?attention=wallet_stale"],
+    ["wallet_freshness_unknown", "CAPITAL", "GATHERING_EVIDENCE", "/commercial?attention=wallet_freshness_unknown"],
+    ["commercial_data_missing", "COMMERCIAL", "BLOCKED", "/commercial"],
+  ];
+
+  for (const [code, stage, state, destination] of cases) {
+    const explanation = `Reason ${code}`;
+    const result = CommercialDecisionTimeline.build({
+      advisor: advisor([]),
+      candidates: [],
+      reasonSummary: reasonSummary({ code, stage, state, explanation }),
+      generatedAt,
+    });
+    const item = result.items.find((entry) => entry.id === `reason-summary-${code}`);
+    assert.equal(item.destination, destination);
+    assert.equal(item.title, explanation);
+    assert.equal(item.description, explanation);
+    assert.equal(item.blockerReasons[0], code);
+  }
+});
+
 test("classifier blocker becomes an undated Blocked item", () => {
   const candidates = [candidate()];
   const result = CommercialDecisionTimeline.build({
