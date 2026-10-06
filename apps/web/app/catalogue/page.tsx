@@ -26,12 +26,13 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
   const { products, suppliers, costProfiles, packProfiles, summary } = result.data;
   if (attention) {
     const attentionStyleCount = products.filter((product) => attentionProductIds.includes(product.parent_product_id)).length;
-    const remediationDetails: Record<CatalogueRemediationBlocker, { title: string; explanation: string }> = {
+    const remediationDetailsByReason: Record<CatalogueRemediationBlocker, { title: string; explanation: string }> = {
       reorder_approval_missing: { title: "Review reorder approvals", explanation: "These products need an explicit operator approval before Vault Brain can use them for reordering." },
       commercial_data_missing: { title: "Complete commercial data", explanation: "These products need trusted canonical commercial data before Vault Brain can evaluate buying readiness." },
       target_stock_days_missing: { title: "Set target stock days", explanation: "Vault Brain needs a target stock-days rule before it can assess replenishment coverage." },
       invalid_or_missing_commercial_cost: { title: "Complete commercial costs", explanation: "These products need valid commercial cost data before Vault Brain can evaluate commercial readiness." },
-    }[attention];
+    };
+    const remediationDetails = remediationDetailsByReason[attention];
     return <VaultAppShell searchPlaceholder="Search affected products..." notificationCount={attentionProductIds.length} systemStatusLabel="Catalogue remediation active"><main className="catalogue-page catalogue-remediation-page"><header className="catalogue-remediation-header"><div><p className="vault-eyebrow">VAULT BRAIN REMEDIATION</p><h1>{remediationDetails.title}</h1><p>{remediationDetails.explanation}</p><strong>{attentionProductIds.length} product{attentionProductIds.length === 1 ? "" : "s"} / {attentionStyleCount} style{attentionStyleCount === 1 ? "" : "s"} require attention.</strong></div><Link className="catalogue-remediation-back" href="/catalogue">Back to full Catalogue</Link></header><CatalogueWorkspace products={products} suppliers={suppliers} costProfiles={costProfiles} packProfiles={packProfiles} attention={attention} attentionProductIds={attentionProductIds} remediationTitle={remediationDetails.title} /></main></VaultAppShell>;
   }
 
