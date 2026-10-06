@@ -1,4 +1,4 @@
-export type InventoryValuationInput = { styleId: string; parentProductId: string; stockOnHand: number; commercialCost: { trusted: boolean; currency: string; landedCostPerPackGbp: number | null; unitsPerPack: number | null } | null };
+export type InventoryValuationInput = { styleId: string; parentProductId: string; stockOnHand: number; commercialCost: { landedCostPerPackGbp: number | null; unitsPerPack: number | null; missingRequirements: string[]; resolutionMode: string; packCostSource: string; unitsSource: string; fxSource: string; shippingCostSource: string; importCostSource: string } | null };
 
 export type InventoryValuation = {
   totalUnits: number;
@@ -20,7 +20,9 @@ export function valueCurrentInventory(products: readonly InventoryValuationInput
     const cost = product.commercialCost;
     const packCost = cost?.landedCostPerPackGbp;
     const unitsPerPack = cost?.unitsPerPack;
-    if (!cost || !cost.trusted || cost.currency !== "GBP" || typeof packCost !== "number" || !Number.isFinite(packCost) || packCost < 0 || typeof unitsPerPack !== "number" || !Number.isSafeInteger(unitsPerPack) || unitsPerPack <= 0) continue;
+    const unavailableSource = (source: string) => source === "unavailable" || source === "";
+    const costBlockingRequirement = cost?.missingRequirements.some((requirement) => ["pack_cost", "units_per_pack", "exchange_rate_to_gbp", "shipping_cost", "import_cost"].includes(requirement));
+    if (!cost || cost.resolutionMode === "unavailable" || unavailableSource(cost.packCostSource) || unavailableSource(cost.unitsSource) || unavailableSource(cost.fxSource) || unavailableSource(cost.shippingCostSource) || unavailableSource(cost.importCostSource) || costBlockingRequirement || typeof packCost !== "number" || !Number.isFinite(packCost) || packCost < 0 || typeof unitsPerPack !== "number" || !Number.isSafeInteger(unitsPerPack) || unitsPerPack <= 0) continue;
     costedUnits += positiveUnits;
     totalGbp += positiveUnits * (packCost / unitsPerPack);
   }
