@@ -37,6 +37,8 @@ import {
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { classifyInventoryActionability, summarizeInventoryActionability } from "@/lib/brain/InventoryActionability";
 import { runGovernedDecisionEvaluation } from "@/lib/brain/runGovernedDecisionEvaluation";
+import { valueCurrentInventory } from "@/lib/command-centre/InventoryValuation";
+import { InventoryValuationRepository } from "@/lib/command-centre/InventoryValuationRepository";
 
 function available<T>(value: T, updatedAt: string | null, stale = false): CockpitValue<T> {
   return { state: stale ? "stale" : "available", value, updatedAt };
@@ -48,7 +50,7 @@ function money(amount: number, currency: string | null): CockpitMoney | null {
 
 export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitData> {
   const business = await getVaultBusinessState({ refreshExternalSources: false });
-  const [timeline, governedEvaluation, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping, todayPaymentFees, todayPerformance, sevenDayForecast] = await Promise.all([
+  const [timeline, governedEvaluation, walletResult, funnelResult, operationsResult, shopifyAnalytics, metaAds, calendarRevenue, recentOrders, recentLedger, todayCogs, todayShipping, todayPaymentFees, todayPerformance, sevenDayForecast, catalogue] = await Promise.all([
     getCommercialDecisionTimeline(business.generatedAt),
     runGovernedDecisionEvaluation(business.generatedAt).catch(() => null),
     supabaseAdmin.from("vault_purchasing_wallet").select(`
@@ -76,6 +78,7 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     ShopifyPaymentFeeRepository.getToday(new Date(business.generatedAt)).catch(() => null),
     ShopifyTradingRepository.getTodayPerformance(new Date(business.generatedAt)).catch(() => null),
     ShopifyTradingRepository.getSevenDayForecast(new Date(business.generatedAt)).catch(() => null),
+    InventoryValuationRepository.getCurrent().catch(() => null),
   ]);
 
   const trading = business.trading.data;
@@ -468,7 +471,11 @@ export async function getCommandCentreCockpit(): Promise<CommandCentreCockpitDat
     inventory: {
       lowStockStyles: inventory ? available(inventory.lowStockProducts, inventoryAt, inventoryStale) : unavailable(),
       outOfStockStyles: inventory ? available(inventory.outOfStockProducts, inventoryAt, inventoryStale) : unavailable(),
-      stockValue: unavailable(),
+      stockValue: (() => {
+        const valuation = inventory && catalogue ? valueCurrentInventory(catalogue) : null;
+        if (!valuation || valuation.uncostedUnits > 0) return unavailable();
+        return available({ amount: valuation.totalGbp, currency: "GBP" }, inventoryAt, inventoryStale);
+      })(),
       freshness: inventory
         ? available(
           inventory.sync.syncStatus,
