@@ -15,7 +15,7 @@ import { loadFixedPackPurchaseRecommendations } from "@/lib/fixed-pack-purchase-
 import { loadCurrentFixedPackDraftMatches } from "@/lib/purchase-orders/FixedPackDraftRepository";
 import { buildStockPurchasingPlan, type StockPurchasingPlanCandidate } from "@/lib/stock-purchasing-plan";
 import { stage3CurrentDaysCover, stage3PackFit, stage3StockState } from "@/lib/stock-reorder-presentation";
-import PurchaseRecommendationsPanel from "./PurchaseRecommendationsPanel";
+import PurchaseRecommendationsPanel, { ReplenishmentDiagnostics } from "./PurchaseRecommendationsPanel";
 import StockPurchasingPlanPanel from "./StockPurchasingPlanPanel";
 
 export const dynamic = "force-dynamic";
@@ -177,6 +177,7 @@ export default async function PurchaseIntelligencePage() {
             ))}
           </div>
         </details>
+        {presentedFixedPackResults === null ? null : <ReplenishmentDiagnostics results={presentedFixedPackResults} />}
       </main>
     </VaultAppShell>
   );

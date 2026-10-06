@@ -79,6 +79,22 @@ function Stage3ActionableRows({ recommendations }: { recommendations: PresentedF
   })}</tbody></table></div>;
 }
 
+export function ReplenishmentDiagnostics({ results }: Props) {
+  const recommendations = results.filter((result) => result.kind === "recommendation");
+  const buyNothing = recommendations.filter((result) => result.recommendation.recommendedPackCount === 0);
+  const unavailable = results.filter((result) => result.kind === "unavailable");
+  const notApplicable = results.filter((result) => result.kind === "not_applicable");
+
+  return <details className="purchase-intelligence-diagnostics">
+    <summary>Replenishment diagnostics · {buyNothing.length} buy nothing · {unavailable.length} needs attention · {notApplicable.length} do not restock</summary>
+    <div className="purchase-intelligence-diagnostic-grid">
+      <article className="purchase-intelligence-diagnostic"><header><div><span>Buy Nothing</span><h3>{buyNothing.length}</h3></div></header><p>Valid calculations with zero packs required.</p><ReasonList reasons={buyNothing.flatMap((result) => result.recommendation.reasonCodes)} /></article>
+      <article className="purchase-intelligence-diagnostic is-blocked"><header><div><span>Needs Attention</span><h3>{unavailable.length}</h3></div></header><ReasonList reasons={[...new Set(unavailable.flatMap((result) => result.reasons))]} /></article>
+      <article className="purchase-intelligence-diagnostic"><header><div><span>Do Not Restock</span><h3>{notApplicable.length}</h3></div></header><p>Valid calculations with zero packs required.</p><ReasonList reasons={[...new Set(notApplicable.flatMap((result) => result.reasons))]} /></article>
+    </div>
+  </details>;
+}
+
 export default function PurchaseRecommendationsPanel({ results }: Props) {
   const [expandedEvidence, setExpandedEvidence] = useState<ReadonlySet<string>>(new Set());
   const recommendations = results.filter((result) => result.kind === "recommendation");
@@ -93,7 +109,7 @@ export default function PurchaseRecommendationsPanel({ results }: Props) {
   const units = buyNow.reduce((total, result) => total + (result.recommendation.recommendedTotalUnits ?? 0), 0);
   const metrics = [["BUY NOW", buyNow.length], ["BUY NOTHING", buyNothing.length], ["NEEDS ATTENTION", unavailable.length], ["DO NOT RESTOCK", notApplicable.length], ["PACKS TO BUY", packs], ["UNITS TO BUY", units]];
 
-  return <section className="purchase-intelligence-diagnostics" aria-labelledby="fixed-pack-recommendations"><style jsx>{`.purchase-intelligence-diagnostics[aria-labelledby="fixed-pack-recommendations"]{display:flex;flex-direction:column}.purchase-intelligence-diagnostics[aria-labelledby="fixed-pack-recommendations"]>.purchase-intelligence-diagnostics-heading{order:0}.purchase-intelligence-diagnostics[aria-labelledby="fixed-pack-recommendations"]>.purchase-intelligence-metrics{order:1}.purchase-intelligence-diagnostics[aria-labelledby="fixed-pack-recommendations"]>.purchase-intelligence-supplier:nth-of-type(2){order:2}.purchase-intelligence-diagnostics[aria-labelledby="fixed-pack-recommendations"]>.purchase-intelligence-diagnostic-grid{order:3}.purchase-intelligence-diagnostics[aria-labelledby="fixed-pack-recommendations"]>.purchase-intelligence-supplier:first-of-type{order:4}`}</style>
+  return <section className="purchase-intelligence-diagnostics" aria-labelledby="fixed-pack-recommendations">
     <div className="purchase-intelligence-diagnostics-heading"><div><p className="vault-eyebrow">FIXED-PACK RECOMMENDATIONS</p><h2 id="fixed-pack-recommendations">Purchase Recommendations</h2><p>Read-only recommendations from the fixed-pack service.</p></div><span>Advisory only</span></div>
     <div className="purchase-intelligence-metrics">{metrics.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}</div>
     <section className="purchase-intelligence-supplier"><div className="purchase-intelligence-supplier-heading"><div><p className="vault-eyebrow">STOCK & REORDER INTELLIGENCE</p><h2>Model/design/size-first recommendation context</h2><p>45-day total target; supplier lead time and governed pack selection remain authoritative.</p></div><span>Presentation only</span></div><Stage3ActionableRows recommendations={recommendations.filter((result) => result.recommendation.trusted).map((result) => result.recommendation)} /></section>
@@ -104,6 +120,5 @@ export default function PurchaseRecommendationsPanel({ results }: Props) {
         const toggleEvidence = () => setExpandedEvidence((current) => { const next = new Set(current); if (next.has(recommendation.recommendationId)) next.delete(recommendation.recommendationId); else next.add(recommendation.recommendationId); return next; });
         return <Fragment key={recommendation.recommendationId}><tr><td><strong>{recommendation.productName ?? "Identity unavailable"}</strong></td><td>{recommendation.modelDesign}</td><td>{recommendation.supplierName ?? "Identity unavailable"}</td><td><strong>{recommendation.recommendedPackCount}</strong></td><td><strong>{recommendation.recommendedTotalUnits}</strong></td><td>{composition || "—"}</td><td><ReasonList reasons={recommendation.reasonCodes} /></td><td><button className="vault-secondary-button" type="button" aria-expanded={expanded} onClick={toggleEvidence}>View size evidence</button></td><td><AddToDraftButton styleId={recommendation.styleId} parentProductId={recommendation.parentProductId} draftMatch={recommendation.draftMatch} /></td></tr>{expanded ? <tr><td colSpan={9}><div className="purchase-intelligence-table-wrap"><table><thead><tr><th>Size</th><th>Stock now</th><th>Incoming</th><th>Sold 7d</th><th>Sold 14d</th><th>Sold 30d</th><th>Target</th><th>Ideal need</th><th>Units/pack</th><th>Buying</th><th>Projected stock</th><th>Shortage</th><th>Excess</th></tr></thead><tbody>{recommendation.sizes.map((size) => <tr key={size.normalizedSize}><td>{size.normalizedSize}</td><td>{size.netAvailableStock ?? "—"}</td><td>{size.incomingStock ?? "—"}</td><td>{size.sales7DayUnits ?? "—"}</td><td>{size.sales14DayUnits ?? "—"}</td><td>{size.sales30DayUnits ?? "—"}</td><td>{size.targetStockUnits ?? "—"}</td><td>{size.idealSizeNeed ?? "—"}</td><td>{size.unitsPerPack ?? "—"}</td><td>{size.purchasedUnits ?? "—"}</td><td>{size.projectedStock ?? "—"}</td><td>{size.remainingShortage ?? "—"}</td><td>{size.projectedExcess ?? "—"}</td></tr>)}</tbody></table></div></td></tr> : null}</Fragment>;
       })}</tbody></table></div>}</section>
-    <div className="purchase-intelligence-diagnostic-grid"><article className="purchase-intelligence-diagnostic"><header><div><span>Buy Nothing</span><h3>{buyNothing.length}</h3></div></header><p>Valid calculations with zero packs required.</p><ReasonList reasons={buyNothing.flatMap((result) => result.recommendation.reasonCodes)} /></article><article className="purchase-intelligence-diagnostic is-blocked"><header><div><span>Needs Attention</span><h3>{unavailable.length}</h3></div></header><ReasonList reasons={[...new Set(unavailable.flatMap((result) => result.reasons))]} /></article><article className="purchase-intelligence-diagnostic"><header><div><span>Do Not Restock</span><h3>{notApplicable.length}</h3></div></header><p>Valid calculations with zero packs required.</p><ReasonList reasons={[...new Set(notApplicable.flatMap((result) => result.reasons))]} /></article></div>
   </section>;
 }
