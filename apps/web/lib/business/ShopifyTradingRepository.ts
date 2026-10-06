@@ -205,7 +205,7 @@ function shiftCalendarDay(
   };
 }
 
-function getDayRange(now = new Date()): ShopifyTradingRange {
+export function getTodayTradingRange(now = new Date()): ShopifyTradingRange {
   const today = getZonedParts(now);
   const tomorrow = shiftCalendarDay(today, 1);
 
@@ -459,7 +459,7 @@ export const ShopifyTradingRepository = {
   },
 
   async getTodaySummary(now = new Date()): Promise<ShopifyTodaySummary> {
-    const range = getDayRange(now);
+    const range = getTodayTradingRange(now);
     const orders = await getOrdersInRange(range);
     const orderIds = orders.map((order) => order.id);
     let itemsSold = 0;

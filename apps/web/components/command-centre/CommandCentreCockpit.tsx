@@ -9,6 +9,7 @@ import type {
   CockpitValue,
   CommandCentreCockpitData,
 } from "@/lib/command-centre/CommandCentreCockpit";
+import { DEFAULT_OUTBOUND_SHIPPING_GBP } from "@/lib/command-centre/CommandCentreCockpit";
 import { getAttentionPriorityPresentation } from "@/lib/command-centre/AttentionPriorityPresentation";
 
 type DataProps = { data: CommandCentreCockpitData };
@@ -239,6 +240,7 @@ function MetaMetricRows({ meta, scope }: { meta: CommandCentreCockpitData["meta"
 
 export function ProfitTodayCard({ data }: DataProps) {
   const profit = data.profit;
+  const shippingIsEstimated = profit.shippingEstimatedOrderCount > 0;
   const cost = (entry: number | CockpitMoney | string) => formatMoney({ ...(entry as CockpitMoney), amount: -(entry as CockpitMoney).amount });
   return <KpiCard eyebrow="Profit Today" icon="target" accent="green" value={display(profit.estimatedProfit, formatMoney)} trendContent={false}>
     <div className="cc-profit-support">
@@ -246,13 +248,13 @@ export function ProfitTodayCard({ data }: DataProps) {
       <div className="cc-profit-rows">
         <MetricRow label="Revenue" value={profit.revenue} formatter={(entry) => formatMoney(entry as CockpitMoney)} />
         <MetricRow label="Product cost" value={profit.productCost} formatter={cost} helpScope="profit" helpDescription="Cost of today's sold units, using trusted costs allocated to those sales. Current supplier prices alone cannot establish sold-item COGS." />
-        <MetricRow label="Shipping" value={profit.shipping} formatter={cost} />
+        <MetricRow label={shippingIsEstimated ? "Estimated shipping" : "Shipping"} value={profit.shipping} formatter={cost} />
         <MetricRow label="Meta ad spend" value={profit.metaSpend} formatter={cost} />
         <MetricRow label="Payment fees" value={profit.paymentFees} formatter={cost} />
-        <MetricRow label="Margin" value={profit.margin} formatter={(entry) => `${Number(entry).toFixed(1)}%`} helpScope="profit" helpDescription="Estimated contribution divided by net Shopify revenue, as a percentage. Unavailable when revenue is zero or required costs are missing." />
+        <MetricRow label={shippingIsEstimated ? "Estimated margin" : "Margin"} value={profit.margin} formatter={(entry) => `${Number(entry).toFixed(1)}%`} helpScope="profit" helpDescription="Estimated contribution divided by net Shopify revenue, as a percentage. Unavailable when revenue is zero or required costs are missing." />
       </div>
       {profit.missingInputs.length ? <p>Incomplete{profit.shippingSourceState === "awaiting_shopify_cost" ? " · Awaiting Shopify cost data" : ""} · Missing: {profit.missingInputs.join(", ")}</p> : <p>{profit.estimatedProfit.state === "stale" ? "Stale estimate" : "Estimated profit"}</p>}
-      <p>{display(data.trading.orders)} orders · {display(data.trading.units)} units · Today · Europe/London</p>
+      <p>{shippingIsEstimated ? `${profit.shippingActualOrderCount ? `${profit.shippingActualOrderCount} actual · ` : ""}${profit.shippingEstimatedOrderCount} ${profit.shippingEstimatedOrderCount === 1 ? "order" : "orders"} · Shipping estimated at £${DEFAULT_OUTBOUND_SHIPPING_GBP.toFixed(2)}/order` : `${display(data.trading.orders)} orders`} · {display(data.trading.units)} units · Today · Europe/London</p>
     </div>
   </KpiCard>;
 }

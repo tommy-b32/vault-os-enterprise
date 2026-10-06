@@ -38,28 +38,53 @@ export type CockpitValue<T> =
 
 export type CockpitMoney = { amount: number; currency: string };
 
-export type ProfitTodayInputs = Record<"revenue" | "productCost" | "shipping" | "metaSpend" | "paymentFees", CockpitValue<CockpitMoney>>;
+/** Command Centre read-model fallback only; it never enters canonical finance evidence. */
+export const DEFAULT_OUTBOUND_SHIPPING_GBP = 2.95;
+
+export type ShippingCostValue = CockpitValue<CockpitMoney> & {
+  estimatedOrderCount?: number;
+  actualOrderCount?: number;
+};
+
+export type ProfitTodayInputs = {
+  revenue: CockpitValue<CockpitMoney>;
+  productCost: CockpitValue<CockpitMoney>;
+  shipping: ShippingCostValue;
+  metaSpend: CockpitValue<CockpitMoney>;
+  paymentFees: CockpitValue<CockpitMoney>;
+};
 export type ProfitTodayData = ProfitTodayInputs & {
   // Purchased-label totals remain operational until credits/adjustments are reconciled.
   shippingAccountingStatus?: "unreconciled";
   shippingSourceState?: "awaiting_shopify_cost";
+  shippingEstimatedOrderCount: number;
+  shippingActualOrderCount: number;
   estimatedProfit: CockpitValue<CockpitMoney>;
   margin: CockpitValue<number>;
   missingInputs: string[];
 };
 
 export function createShippingCostValue(
-  shipping: { total: number | null; orderCount: number; coveredOrders: number; sourceAt: string | null } | null,
+  shipping: { total: number | null; coveredTotal?: number | null; orderCount: number; coveredOrders: number; sourceAt: string | null } | null,
   trading: { orderCount: number; currency: string | null } | null,
   source: { status: string; generatedAt: string },
-): CockpitValue<CockpitMoney> {
-  if (!shipping || !trading || !["live", "stale"].includes(source.status) || trading.currency !== "GBP" ||
-      shipping.orderCount <= 0 || shipping.orderCount !== trading.orderCount || shipping.coveredOrders !== shipping.orderCount ||
-      shipping.total === null || !Number.isFinite(shipping.total) || shipping.total < 0 || !shipping.sourceAt) return unavailable();
-  const age = Date.parse(source.generatedAt) - Date.parse(shipping.sourceAt);
-  if (!Number.isFinite(age) || age < 0) return unavailable();
+): ShippingCostValue {
+  if (!trading || !["live", "stale"].includes(source.status) || trading.currency !== "GBP" ||
+      !Number.isSafeInteger(trading.orderCount) || trading.orderCount < 0) return unavailable<CockpitMoney>();
+  if (trading.orderCount === 0) return { state: source.status === "stale" ? "stale" : "available", value: { amount: 0, currency: "GBP" }, updatedAt: source.generatedAt, actualOrderCount: 0, estimatedOrderCount: 0 };
+  if (shipping && (shipping.orderCount !== trading.orderCount || !Number.isSafeInteger(shipping.coveredOrders) || shipping.coveredOrders < 0 || shipping.coveredOrders > shipping.orderCount)) return unavailable<CockpitMoney>();
+  if (shipping && !shipping.sourceAt) return unavailable<CockpitMoney>();
+
+  const actualTotal = shipping?.total ?? shipping?.coveredTotal ?? 0;
+  if (!Number.isFinite(actualTotal) || actualTotal < 0) return unavailable<CockpitMoney>();
+  const actualOrderCount = shipping?.coveredOrders ?? 0;
+  const estimatedOrderCount = trading.orderCount - actualOrderCount;
+  const updatedAt = shipping?.sourceAt ?? source.generatedAt;
+  const age = Date.parse(source.generatedAt) - Date.parse(updatedAt);
+  if (!Number.isFinite(age) || age < 0) return unavailable<CockpitMoney>();
   return { state: source.status === "stale" || age > 30 * 60_000 ? "stale" : "available",
-    value: { amount: shipping.total, currency: "GBP" }, updatedAt: shipping.sourceAt };
+    value: { amount: actualTotal + estimatedOrderCount * DEFAULT_OUTBOUND_SHIPPING_GBP, currency: "GBP" }, updatedAt,
+    actualOrderCount, estimatedOrderCount };
 }
 
 export function createPaymentFeeValue(
@@ -108,7 +133,7 @@ export function createProfitTodayValue(inputs: ProfitTodayInputs): ProfitTodayDa
     !Number.isFinite(entry.value.amount) || (key !== "revenue" && entry.value.amount < 0) ||
     !/^[A-Z]{3}$/.test(entry.value.currency) || !entry.updatedAt || !Number.isFinite(Date.parse(entry.updatedAt)),
   ).map(([key]) => labels[key]);
-  const result: ProfitTodayData = { ...inputs, estimatedProfit: unavailable(), margin: unavailable(), missingInputs };
+  const result: ProfitTodayData = { ...inputs, shippingEstimatedOrderCount: inputs.shipping.estimatedOrderCount ?? 0, shippingActualOrderCount: inputs.shipping.actualOrderCount ?? 0, estimatedProfit: unavailable(), margin: unavailable(), missingInputs };
   if (missingInputs.length) return result;
   const currency = inputs.revenue.value!.currency;
   if (entries.some(([, entry]) => entry.value!.currency !== currency)) {

@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
-import { createProfitTodayValue, createProductCostValue, createPaymentFeeValue, unavailable } from "./CommandCentreCockpit.ts";
+import { createProfitTodayValue, createProductCostValue, createPaymentFeeValue, createShippingCostValue, unavailable } from "./CommandCentreCockpit.ts";
 
 const at = "2026-09-07T12:00:00Z";
 const money = (amount, state = "available", currency = "GBP") => ({ state, value: { amount, currency }, updatedAt: at });
@@ -33,6 +33,16 @@ test("trusted complete costs subtract each expense once and margin divides by ne
   assert.deepEqual(result.estimatedProfit, money(105));
   assert.equal(result.margin.value, 52.5);
   assert.deepEqual(result.missingInputs, []);
+});
+
+test("estimated shipping produces an estimated margin without weakening other missing evidence", () => {
+  const shipping = createShippingCostValue(null, { orderCount: 1, currency: "GBP" }, { status: "live", generatedAt: at });
+  const result = createProfitTodayValue({ ...inputs(), shipping });
+  assert.equal(result.shipping.value.amount, 2.95);
+  assert.equal(result.shippingEstimatedOrderCount, 1);
+  assert.equal(Number(result.estimatedProfit.value.amount.toFixed(2)), 112.05);
+  assert.equal(Number(result.margin.value.toFixed(3)), 56.025);
+  assert.deepEqual(createProfitTodayValue({ ...inputs(), shipping, paymentFees: unavailable() }).estimatedProfit, unavailable());
 });
 
 for (const key of ["productCost", "shipping", "paymentFees", "revenue", "metaSpend"]) {
@@ -100,6 +110,15 @@ test("Profit card follows Finance without changing headline layout and renders i
   const financeStart = source.indexOf('<KpiCard eyebrow="Finance Position"');
   assert.ok(source.slice(source.indexOf("</KpiCard>", financeStart)).startsWith('</KpiCard>\n        <ProfitTodayCard data={data} />') || source.replaceAll("\r\n", "\n").slice(source.replaceAll("\r\n", "\n").indexOf("</KpiCard>", source.replaceAll("\r\n", "\n").indexOf('<KpiCard eyebrow="Finance Position"'))).startsWith('</KpiCard>\n        <ProfitTodayCard data={data} />'));
   assert.ok(source.includes('.cc-kpi-grid>.cc-kpi-card:nth-child(6){contain:size;align-self:stretch;overflow:visible}'));
+  assert.ok(source.includes('"Estimated shipping"'));
+  assert.ok(source.includes('"Estimated margin"'));
+});
+
+test("shipping fallback remains a read-only Command Centre calculation", async () => {
+  const model = await readFile(new URL("./CommandCentreCockpit.ts", import.meta.url), "utf8");
+  const repository = await readFile(new URL("../business/ShopifyShippingRepository.ts", import.meta.url), "utf8");
+  assert.match(model, /DEFAULT_OUTBOUND_SHIPPING_GBP = 2\.95/);
+  assert.doesNotMatch(repository, /\.insert\(|\.update\(|\.upsert\(|\.delete\(/);
 });
 
 test("Profit card identifies Shopify reporting lag without weakening its missing-cost state", async () => {

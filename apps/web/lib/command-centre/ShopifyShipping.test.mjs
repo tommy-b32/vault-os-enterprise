@@ -81,13 +81,13 @@ test("sync writes explicit missing rows, replaces totals and refuses failed/trun
   assert.equal(writeCount, 1);
 });
 
-test("Shipping requires every today's order, correct currency and freshness; payment fees still block profit", () => {
+test("trusted actual shipping retains its value, currency and freshness checks; payment fees still block profit", () => {
   const snapshot = { total: 7.54, orderCount: 2, coveredOrders: 2, sourceAt: at };
   const trading = { orderCount: 2, currency: "GBP" };
   const source = { status: "live", generatedAt: at };
   const value = createShippingCostValue(snapshot, trading, source);
   assert.equal(value.value.amount, 7.54);
-  for (const bad of [null, { ...snapshot, total: null }, { ...snapshot, coveredOrders: 1 }, { ...snapshot, orderCount: 3 }, { ...snapshot, sourceAt: null }, { ...snapshot, sourceAt: "2027-01-01" }]) {
+  for (const bad of [{ ...snapshot, orderCount: 3 }, { ...snapshot, sourceAt: null }, { ...snapshot, sourceAt: "2027-01-01" }]) {
     assert.deepEqual(createShippingCostValue(bad, trading, source), unavailable());
   }
   assert.equal(createShippingCostValue(snapshot, { ...trading, currency: "USD" }, source).state, "unavailable");
@@ -97,6 +97,25 @@ test("Shipping requires every today's order, correct currency and freshness; pay
   const profit = createProfitTodayValue({ revenue: value, productCost: value, shipping: value, metaSpend: value, paymentFees: unavailable() });
   assert.equal(profit.estimatedProfit.state, "unavailable");
   assert.deepEqual(profit.missingInputs, ["payment fees"]);
+});
+
+test("missing shipping uses the Command Centre fallback only for the Profit Today order cohort", () => {
+  const trading = { orderCount: 2, currency: "GBP" };
+  const source = { status: "live", generatedAt: at };
+  const fallback = createShippingCostValue(null, trading, source);
+  assert.equal(fallback.value.amount, 5.9);
+  assert.equal(fallback.actualOrderCount, 0);
+  assert.equal(fallback.estimatedOrderCount, 2);
+  const oneOrder = createShippingCostValue(null, { ...trading, orderCount: 1 }, source);
+  assert.equal(oneOrder.value.amount, 2.95);
+  const partial = createShippingCostValue({ total: null, coveredTotal: 4.12, orderCount: 2, coveredOrders: 1, sourceAt: at }, trading, source);
+  assert.equal(partial.value.amount, 7.07);
+  assert.equal(partial.actualOrderCount, 1);
+  assert.equal(partial.estimatedOrderCount, 1);
+  const zero = createShippingCostValue(null, { ...trading, orderCount: 0 }, source);
+  assert.equal(zero.value.amount, 0);
+  assert.equal(zero.estimatedOrderCount, 0);
+  assert.equal(createShippingCostValue(null, { ...trading, currency: "USD" }, source).state, "unavailable");
 });
 
 test("migration enforces idempotency, identity, missing coverage and London order-day boundaries", async () => {
