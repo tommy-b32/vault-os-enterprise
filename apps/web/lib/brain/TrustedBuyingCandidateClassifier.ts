@@ -16,6 +16,34 @@ import {
 export const TRUSTED_BUYING_MARGIN_PERCENT = 45;
 export const TRUSTED_BUYING_RETURN_PERCENT = 100;
 
+export type TrustedBuyingThresholdPolicy = {
+  id: "global_fallback" | "tee" | "polo" | "hoodie" | "jacket";
+  requiredMarginPercent: number;
+  requiredReturnOnCapitalPercent: number;
+};
+
+const CATEGORY_THRESHOLDS: Record<string, TrustedBuyingThresholdPolicy> = {
+  tee: { id: "tee", requiredMarginPercent: 45, requiredReturnOnCapitalPercent: 100 },
+  tees: { id: "tee", requiredMarginPercent: 45, requiredReturnOnCapitalPercent: 100 },
+  t_shirt: { id: "tee", requiredMarginPercent: 45, requiredReturnOnCapitalPercent: 100 },
+  t_shirts: { id: "tee", requiredMarginPercent: 45, requiredReturnOnCapitalPercent: 100 },
+  polo: { id: "polo", requiredMarginPercent: 45, requiredReturnOnCapitalPercent: 100 },
+  polos: { id: "polo", requiredMarginPercent: 45, requiredReturnOnCapitalPercent: 100 },
+  hoodie: { id: "hoodie", requiredMarginPercent: 40, requiredReturnOnCapitalPercent: 80 },
+  hoodies: { id: "hoodie", requiredMarginPercent: 40, requiredReturnOnCapitalPercent: 80 },
+  jacket: { id: "jacket", requiredMarginPercent: 40, requiredReturnOnCapitalPercent: 75 },
+  jackets: { id: "jacket", requiredMarginPercent: 40, requiredReturnOnCapitalPercent: 75 },
+};
+
+export function resolveTrustedBuyingThresholdPolicy(costTypeId: string | null): TrustedBuyingThresholdPolicy {
+  const canonicalCostTypeId = costTypeId?.trim().toLowerCase() ?? "";
+  return CATEGORY_THRESHOLDS[canonicalCostTypeId] ?? {
+    id: "global_fallback",
+    requiredMarginPercent: TRUSTED_BUYING_MARGIN_PERCENT,
+    requiredReturnOnCapitalPercent: TRUSTED_BUYING_RETURN_PERCENT,
+  };
+}
+
 export type TrustedBuyingCandidateStatus =
   | "eligible"
   | "ineligible"
@@ -95,6 +123,9 @@ export type TrustedBuyingCandidateResult = {
   grossProfitPerUnitGbp: number | null;
   marginPercent: number | null;
   returnOnCapitalPercent: number | null;
+  requiredMarginPercent: number;
+  requiredReturnOnCapitalPercent: number;
+  thresholdPolicyId: TrustedBuyingThresholdPolicy["id"];
   supplierMinimum: SupplierMinimum & {
     evaluation:
       | "not_evaluated"
@@ -196,6 +227,9 @@ export function classifyTrustedBuyingCandidate({
       grossProfitPerUnitGbp: null,
       marginPercent: null,
       returnOnCapitalPercent: null,
+      requiredMarginPercent: TRUSTED_BUYING_MARGIN_PERCENT,
+      requiredReturnOnCapitalPercent: TRUSTED_BUYING_RETURN_PERCENT,
+      thresholdPolicyId: "global_fallback",
       supplierMinimum: { ...emptyMinimum, evaluation: "not_evaluated" },
       capitalEvaluation: {
         status: "unavailable",
@@ -213,6 +247,7 @@ export function classifyTrustedBuyingCandidate({
   }
 
   const commercial = product.commercial_cost;
+  const thresholdPolicy = resolveTrustedBuyingThresholdPolicy(commercial.cost_type_id);
   const replenishment = product.replenishment_intelligence;
   const demand = DemandIntelligenceEngine.evaluate(product);
   const supplierMinimum = SupplierMinimumContract.create({
@@ -239,10 +274,10 @@ export function classifyTrustedBuyingCandidate({
     commercial.estimated_return_on_pack_capital_percent === null ||
     commercial.estimated_gross_profit_per_unit === null
   ) add(reasons, "profitability_incomplete");
-  if ((commercial.estimated_margin_percent ?? Number.NEGATIVE_INFINITY) < TRUSTED_BUYING_MARGIN_PERCENT) {
+  if ((commercial.estimated_margin_percent ?? Number.NEGATIVE_INFINITY) < thresholdPolicy.requiredMarginPercent) {
     if (commercial.estimated_margin_percent !== null) add(reasons, "margin_below_threshold");
   }
-  if ((commercial.estimated_return_on_pack_capital_percent ?? Number.NEGATIVE_INFINITY) < TRUSTED_BUYING_RETURN_PERCENT) {
+  if ((commercial.estimated_return_on_pack_capital_percent ?? Number.NEGATIVE_INFINITY) < thresholdPolicy.requiredReturnOnCapitalPercent) {
     if (commercial.estimated_return_on_pack_capital_percent !== null) add(reasons, "return_below_threshold");
   }
 
@@ -320,6 +355,9 @@ export function classifyTrustedBuyingCandidate({
     grossProfitPerUnitGbp: commercial.estimated_gross_profit_per_unit,
     marginPercent: commercial.estimated_margin_percent,
     returnOnCapitalPercent: commercial.estimated_return_on_pack_capital_percent,
+    requiredMarginPercent: thresholdPolicy.requiredMarginPercent,
+    requiredReturnOnCapitalPercent: thresholdPolicy.requiredReturnOnCapitalPercent,
+    thresholdPolicyId: thresholdPolicy.id,
     supplierMinimum: { ...supplierMinimum, evaluation: minimumEvaluation },
     capitalEvaluation: {
       status: wallet?.available ? "not_evaluated" : "unavailable",
@@ -337,6 +375,7 @@ export function classifyTrustedBuyingCandidate({
       "canonical commercial intelligence",
       "canonical replenishment intelligence",
       "canonical supplier minimum",
+      `trusted buying threshold policy: ${thresholdPolicy.id} (${thresholdPolicy.requiredMarginPercent}% margin / ${thresholdPolicy.requiredReturnOnCapitalPercent}% return)`,
       "purchasing wallet provenance",
     ],
   };

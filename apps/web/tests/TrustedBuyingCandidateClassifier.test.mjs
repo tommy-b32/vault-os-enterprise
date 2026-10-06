@@ -76,6 +76,22 @@ test("classifier owns established ineligible gates and thresholds", async () => 
   assert.match(source, /TRUSTED_BUYING_RETURN_PERCENT = 100/);
 });
 
+test("governed cost type selects deterministic buying thresholds", async () => {
+  const source = await readFile(classifierUrl, "utf8");
+  for (const [costType, margin, returnOnCapital] of [["tees", 45, 100], ["polos", 45, 100], ["hoodies", 40, 80], ["jackets", 40, 75]]) {
+    assert.match(source, new RegExp(`${costType}: \\{ id: ".*?", requiredMarginPercent: ${margin}, requiredReturnOnCapitalPercent: ${returnOnCapital} \\}`));
+  }
+  assert.match(source, /costTypeId: string \| null/);
+  assert.match(source, /id: "global_fallback"/);
+});
+
+test("A|X jacket economics pass only the governed jacket policy", () => {
+  const margin = 44.72;
+  const returnOnCapital = 80.89;
+  assert.ok(margin >= 40 && returnOnCapital >= 75);
+  assert.ok(margin < 45 && returnOnCapital < 100);
+});
+
 test("calculated quantity and MOQ remain distinct and unresolved", async () => {
   const recommendation = BuyingRecommendationEngine.buildRecommendation({
     product: quantityProduct(),
