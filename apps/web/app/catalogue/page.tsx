@@ -5,7 +5,7 @@ import { CatalogueWorkspace } from "@/components/catalogue/CatalogueWorkspace";
 import VaultAppShell from "@/components/layout/VaultAppShell";
 import { getCatalogueData } from "@/lib/catalogue";
 import { getCommercialDecisionTimeline } from "@/lib/brain/getCommercialDecisionTimeline";
-import { isCatalogueRemediationBlocker, remediationProductIds } from "@/lib/brain/CommercialDecisionTimeline";
+import { isCatalogueRemediationBlocker, remediationProductIds, type CatalogueRemediationBlocker } from "@/lib/brain/CommercialDecisionTimeline";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +26,9 @@ export default async function CataloguePage({ searchParams }: { searchParams: Pr
   const { products, suppliers, costProfiles, packProfiles, summary } = result.data;
   if (attention) {
     const attentionStyleCount = products.filter((product) => attentionProductIds.includes(product.parent_product_id)).length;
-    const remediationDetails = {
+    const remediationDetails: Record<CatalogueRemediationBlocker, { title: string; explanation: string }> = {
       reorder_approval_missing: { title: "Review reorder approvals", explanation: "These products need an explicit operator approval before Vault Brain can use them for reordering." },
+      commercial_data_missing: { title: "Complete commercial data", explanation: "These products need trusted canonical commercial data before Vault Brain can evaluate buying readiness." },
       target_stock_days_missing: { title: "Set target stock days", explanation: "Vault Brain needs a target stock-days rule before it can assess replenishment coverage." },
       invalid_or_missing_commercial_cost: { title: "Complete commercial costs", explanation: "These products need valid commercial cost data before Vault Brain can evaluate commercial readiness." },
     }[attention];

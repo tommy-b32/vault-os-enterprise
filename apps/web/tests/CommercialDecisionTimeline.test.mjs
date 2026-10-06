@@ -94,6 +94,7 @@ test("reason summaries prefer blocker-specific remediation without changing bloc
     assert.equal(item.title, explanation);
     assert.equal(item.description, explanation);
     assert.equal(item.blockerReasons[0], code);
+    if (code === "commercial_data_missing") assert.deepEqual(remediationProductIds(result, code), ["parent"]);
   }
 });
 
@@ -134,6 +135,9 @@ test("only supported catalogue blockers resolve current affected products", () =
   const candidates = [candidate({ reasons: ["reorder_approval_missing"] })];
   const result = CommercialDecisionTimeline.build({ advisor: advisor(candidates), candidates, generatedAt });
   assert.equal(isCatalogueRemediationBlocker("reorder_approval_missing"), true);
+  assert.equal(isCatalogueRemediationBlocker("commercial_data_missing"), true);
+  assert.equal(isCatalogueRemediationBlocker("invalid_or_missing_commercial_cost"), true);
+  assert.equal(isCatalogueRemediationBlocker("target_stock_days_missing"), true);
   assert.equal(isCatalogueRemediationBlocker("not-a-blocker"), false);
   assert.deepEqual(remediationProductIds(result, "reorder_approval_missing"), ["parent"]);
   assert.deepEqual(remediationProductIds(result, "not-a-blocker"), []);

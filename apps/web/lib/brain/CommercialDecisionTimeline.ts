@@ -17,6 +17,9 @@ const REMEDIABLE_CATALOGUE_BLOCKERS = new Set<RemediableBuyingBlocker>([
   "reorder_approval_missing", "commercial_data_missing", "invalid_or_missing_commercial_cost", "target_stock_days_missing",
 ]);
 
+export type CatalogueRemediationBlocker = Extract<RemediableBuyingBlocker,
+  "reorder_approval_missing" | "commercial_data_missing" | "invalid_or_missing_commercial_cost" | "target_stock_days_missing">;
+
 function isRemediableBuyingBlocker(reason: string): reason is RemediableBuyingBlocker {
   return REMEDIABLE_CATALOGUE_BLOCKERS.has(reason as RemediableBuyingBlocker) || reason === "wallet_freshness_unknown" || reason === "wallet_stale";
 }
@@ -26,8 +29,7 @@ function remediationDestination(reason: RemediableBuyingBlocker): string {
   return `${REMEDIABLE_CATALOGUE_BLOCKERS.has(reason) ? "/catalogue" : "/commercial"}?${params}`;
 }
 
-export function isCatalogueRemediationBlocker(value: string | undefined): value is Extract<RemediableBuyingBlocker,
-  "reorder_approval_missing" | "invalid_or_missing_commercial_cost" | "target_stock_days_missing"> {
+export function isCatalogueRemediationBlocker(value: string | undefined): value is CatalogueRemediationBlocker {
   return Boolean(value && REMEDIABLE_CATALOGUE_BLOCKERS.has(value as RemediableBuyingBlocker));
 }
 

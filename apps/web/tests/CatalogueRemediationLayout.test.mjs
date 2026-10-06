@@ -52,6 +52,10 @@ test("catalogue keeps remediation deep links and makes the product workspace pri
   assert.match(page, /Missing supplier/);
   assert.match(page, /Missing commercial cost/);
   assert.match(page, /\/catalogue\?attention=invalid_or_missing_commercial_cost/);
+  assert.match(page, /commercial_data_missing/);
+  assert.match(page, /Complete commercial data/);
+  assert.match(page, /These products need trusted canonical commercial data before Vault Brain can evaluate buying readiness\./);
+  assert.match(page, /Record<CatalogueRemediationBlocker/);
   assert.match(page, /\/catalogue\?attention=reorder_approval_missing/);
   assert.match(page, /\/catalogue\?attention=target_stock_days_missing/);
   assert.match(page, /Open product workspace/);
