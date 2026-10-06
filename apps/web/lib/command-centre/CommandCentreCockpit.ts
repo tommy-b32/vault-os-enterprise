@@ -5,6 +5,7 @@ import type { CommercialDecisionTimelineResult } from "@/lib/brain/CommercialDec
 import type { ExecutiveBriefing } from "@/lib/brain/ExecutiveIntelligenceEngine";
 import type { InventorySyncStatus } from "@/lib/inventory/InventoryFreshness";
 import type { ShopifyCalendarRevenue, ShopifyRecentOrderSummary } from "@/lib/business/ShopifyTradingRepository";
+import type { LatestDelivery } from "@/lib/command-centre/LatestDeliveryRepository";
 
 export type TodayPerformance = {
   todayRevenue: number;
@@ -197,6 +198,7 @@ export type TodaysFocus =
   | { state: "unavailable" };
 
 export type CommandCentreCockpitData = {
+  latestDelivery: CockpitValue<LatestDelivery>;
   profit: ProfitTodayData;
   todayPerformance: CockpitValue<TodayPerformance>;
   sevenDayForecast: CockpitValue<SevenDayForecast>;

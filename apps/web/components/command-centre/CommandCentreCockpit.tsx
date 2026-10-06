@@ -284,24 +284,144 @@ function TodayPerformanceCard({ data }: DataProps) {
 
 function SevenDayForecastCard({ data }: DataProps) {
   const forecast = data.sevenDayForecast;
+  const delivery = data.latestDelivery;
   const values = forecast.value;
+
   const metric = (value: number | null): CockpitValue<number> =>
-    value !== null && (forecast.state === "available" || forecast.state === "stale")
-      ? { state: forecast.state, value, updatedAt: forecast.updatedAt }
-      : { state: "unavailable", value: null, updatedAt: null };
-  const day = (value: string | undefined) => value
-    ? new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" }).format(new Date(`${value}T12:00:00Z`))
-    : "Unavailable";
-  return <KpiCard eyebrow="Forecast" icon="analytics" accent="violet" value={values ? formatMoney({ amount: values.forecastRevenue, currency: "GBP" }) : display(forecast)} valueLabel="Next 7 full London days" trendContent={false}>
-    <div className="cc-performance-support">
-      <MetricRow label="Forecast orders" value={metric(values?.forecastOrders ?? null)} formatter={(value) => Number(value).toFixed(1)} />
-      <MetricRow label="Expected AOV" value={metric(values?.expectedAov ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
-      <MetricRow label="Average revenue/day" value={metric(values?.averageRevenuePerDay ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
-      <MetricRow label={`Strongest · ${day(values?.strongestDay)}`} value={metric(values?.strongestRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
-      <MetricRow label={`Weakest · ${day(values?.weakestDay)}`} value={metric(values?.weakestRevenue ?? null)} formatter={(value) => formatMoney({ amount: Number(value), currency: "GBP" })} />
-      <p>{values ? `${values.minimumSampleCount}–${values.maximumSampleCount} matching weekdays · ${values.coverageSampleCount} verified samples · Europe/London` : "Each forecast weekday needs 4 verified matching weekdays"}</p>
-    </div>
-  </KpiCard>;
+    value !== null &&
+    (forecast.state === "available" || forecast.state === "stale")
+      ? {
+          state: forecast.state,
+          value,
+          updatedAt: forecast.updatedAt,
+        }
+      : {
+          state: "unavailable",
+          value: null,
+          updatedAt: null,
+        };
+
+  const day = (value: string | undefined) =>
+    value
+      ? new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Europe/London",
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+        }).format(new Date(`${value}T12:00:00Z`))
+      : "Unavailable";
+
+  const deliveryValue = delivery.value;
+
+  const deliveryIdentity = deliveryValue
+    ? [deliveryValue.supplierName, deliveryValue.carrier]
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        )
+        .join(" · ")
+    : null;
+
+  const deliveryStatus = deliveryValue
+    ? deliveryValue.trackingStatus?.trim() ||
+      "Tracking awaiting update"
+    : null;
+
+  const deliveryUpdatedAt =
+    deliveryValue?.trackingUpdatedAt ??
+    deliveryValue?.trackingLastCheckedAt ??
+    delivery.updatedAt;
+
+  return (
+    <KpiCard
+      eyebrow="Forecast"
+      icon="analytics"
+      accent="violet"
+      value={
+        values
+          ? formatMoney({
+              amount: values.forecastRevenue,
+              currency: "GBP",
+            })
+          : display(forecast)
+      }
+      valueLabel="Next 7 full London days"
+      trendContent={false}
+    >
+      <div className="cc-forecast-delivery-card">
+        <section className="cc-forecast-section">
+          <div className="cc-performance-support">
+            <MetricRow
+              label="Forecast orders"
+              value={metric(values?.forecastOrders ?? null)}
+              formatter={(value) => Number(value).toFixed(1)}
+            />
+
+            <MetricRow
+              label="Expected AOV"
+              value={metric(values?.expectedAov ?? null)}
+              formatter={(value) =>
+                formatMoney({
+                  amount: Number(value),
+                  currency: "GBP",
+                })
+              }
+            />
+
+            <MetricRow
+              label={`Strongest · ${day(values?.strongestDay)}`}
+              value={metric(values?.strongestRevenue ?? null)}
+              formatter={(value) =>
+                formatMoney({
+                  amount: Number(value),
+                  currency: "GBP",
+                })
+              }
+            />
+          </div>
+        </section>
+
+        <section className="cc-latest-delivery-section">
+          <div className="cc-latest-delivery-heading">
+            LATEST DELIVERY
+          </div>
+
+          {deliveryValue ? (
+            <>
+              {deliveryIdentity ? (
+                <div className="cc-latest-delivery-identity">
+                  {deliveryIdentity}
+                </div>
+              ) : null}
+
+              <div className="cc-latest-delivery-status">
+                {deliveryStatus}
+              </div>
+
+              {deliveryValue.trackingLocation ? (
+                <div className="cc-latest-delivery-location">
+                  {deliveryValue.trackingLocation}
+                </div>
+              ) : null}
+
+              <div className="cc-latest-delivery-updated">
+                {deliveryUpdatedAt
+                  ? `Updated ${relativeTime(
+                      deliveryUpdatedAt,
+                      data.generatedAt,
+                    )}`
+                  : "Update time unavailable"}
+              </div>
+            </>
+          ) : (
+            <div className="cc-latest-delivery-empty">
+              No active tracked delivery
+            </div>
+          )}
+        </section>
+      </div>
+    </KpiCard>
+  );
 }
 
 function Snapshot({ title, subtitle, icon, href, children }: {
@@ -549,6 +669,7 @@ export function CommandCentreCockpit({ data }: DataProps) {
 function CommandCentreCockpitStyles() {
   return <style>{`
     .cc-profit-support,.cc-performance-support{display:grid;width:100%;min-width:0;gap:5px}.cc-profit-rows .cc-metric-row,.cc-performance-support .cc-metric-row{padding:3px 0;font-size:12px;gap:8px}.cc-profit-rows .cc-metric-row>span,.cc-performance-support .cc-metric-row>span{text-align:left}.cc-profit-support p,.cc-performance-support p{margin:0;font-size:11px;line-height:1.35}.cc-profit-support .cc-hint-content,.cc-performance-support .cc-hint-content{text-align:left}@media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(6){contain:size;align-self:stretch;overflow:visible}}
+    .cc-kpi-card.is-violet .cc-forecast-delivery-card{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);width:100%;min-width:0;overflow:hidden}.cc-kpi-card.is-violet .cc-forecast-section{min-width:0;padding-bottom:7px}.cc-kpi-card.is-violet .cc-forecast-delivery-card .cc-performance-support{gap:3px}.cc-kpi-card.is-violet .cc-latest-delivery-section{display:grid;align-content:start;min-width:0;gap:3px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07)}.cc-kpi-card.is-violet .cc-latest-delivery-heading{color:#9fa7a4;font-size:10px;font-weight:700;letter-spacing:.05em;line-height:1.2;text-transform:uppercase}.cc-kpi-card.is-violet .cc-latest-delivery-identity,.cc-kpi-card.is-violet .cc-latest-delivery-status,.cc-kpi-card.is-violet .cc-latest-delivery-location{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-kpi-card.is-violet .cc-latest-delivery-identity{color:#c5c8c4;font-size:12px;line-height:1.35}.cc-kpi-card.is-violet .cc-latest-delivery-status{color:#f0efea;font-size:13px;font-weight:650;line-height:1.35}.cc-kpi-card.is-violet .cc-latest-delivery-location{color:#9fa7a4;font-size:12px;line-height:1.35}.cc-kpi-card.is-violet .cc-latest-delivery-updated,.cc-kpi-card.is-violet .cc-latest-delivery-empty{min-width:0;overflow:hidden;color:#838b85;font-size:11px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.cc-kpi-card.is-violet .cc-latest-delivery-empty{padding-top:2px;color:#9fa7a4}
     @media(min-width:1501px){.cc-kpi-grid>.cc-kpi-card:nth-child(n+2):nth-child(-n+4){contain:size;align-self:stretch;overflow:visible}.cc-kpi-card.is-meta>.cc-kpi-support{gap:4px;margin-top:4px}.cc-kpi-card.is-meta .cc-meta-details{padding-top:0}.cc-kpi-card.is-meta .cc-meta-details .cc-metric-row{padding:2px 0}}
     .cc-kpi-card.is-meta>.cc-kpi-support{flex-direction:column}.cc-meta-details{min-width:0;border-top:1px solid rgba(255,255,255,.12);padding-top:3px}.cc-meta-details .cc-metric-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:8px;padding:6px 0}.cc-meta-details .cc-metric-row>span{text-align:left;min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-metric-row>strong{min-width:0;overflow-wrap:anywhere}.cc-meta-details .cc-hint-content{width:min(260px,70vw)}
     .cc-kpi-card.is-meta{overflow:visible}.cc-kpi-card.is-meta:after{display:none}.cc-kpi-card.is-meta:hover,.cc-kpi-card.is-meta:focus-within{z-index:3}.cc-kpi-support .cc-hint .cc-hint-content{text-align:left}.cc-kpi-values>div:last-child .cc-hint-content{left:auto;right:0}
