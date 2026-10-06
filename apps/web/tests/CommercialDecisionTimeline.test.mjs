@@ -78,7 +78,7 @@ test("reason summaries prefer blocker-specific remediation without changing bloc
     ["invalid_or_missing_commercial_cost", "COMMERCIAL", "BLOCKED", "/catalogue?attention=invalid_or_missing_commercial_cost"],
     ["wallet_stale", "CAPITAL", "GATHERING_EVIDENCE", "/commercial?attention=wallet_stale"],
     ["wallet_freshness_unknown", "CAPITAL", "GATHERING_EVIDENCE", "/commercial?attention=wallet_freshness_unknown"],
-    ["commercial_data_missing", "COMMERCIAL", "BLOCKED", "/commercial"],
+    ["commercial_data_missing", "COMMERCIAL", "BLOCKED", "/catalogue?attention=commercial_data_missing"],
   ];
 
   for (const [code, stage, state, destination] of cases) {

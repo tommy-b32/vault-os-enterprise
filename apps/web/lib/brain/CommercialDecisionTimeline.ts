@@ -11,10 +11,10 @@ import { hasStrongEarlyDemand } from "@/lib/brain/TradingEvidencePolicy";
 import type { BuyingDecisionReasonSummary } from "@/lib/brain/BuyingDecisionReasonSummary";
 
 type RemediableBuyingBlocker = Extract<TrustedBuyingCandidateRejectionReason,
-  "reorder_approval_missing" | "invalid_or_missing_commercial_cost" | "target_stock_days_missing" | "wallet_freshness_unknown" | "wallet_stale">;
+  "reorder_approval_missing" | "commercial_data_missing" | "invalid_or_missing_commercial_cost" | "target_stock_days_missing" | "wallet_freshness_unknown" | "wallet_stale">;
 
 const REMEDIABLE_CATALOGUE_BLOCKERS = new Set<RemediableBuyingBlocker>([
-  "reorder_approval_missing", "invalid_or_missing_commercial_cost", "target_stock_days_missing",
+  "reorder_approval_missing", "commercial_data_missing", "invalid_or_missing_commercial_cost", "target_stock_days_missing",
 ]);
 
 function isRemediableBuyingBlocker(reason: string): reason is RemediableBuyingBlocker {
