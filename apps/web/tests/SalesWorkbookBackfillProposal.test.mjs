@@ -37,13 +37,13 @@ test("multi-line orders produce multiple rows, while unresolved financial fields
     order({ orderNumber: "1255", lines: [line({ cardFee: unresolved() })] }),
   ]);
   assert.equal(result.proposals[0].proposedRows.length, 2);
-  for (const proposal of result.proposals.slice(1)) {
-    assert.equal(proposal.classification, "requires_review");
-    assert.equal(proposal.proposedRows[0].profit.status, "unresolved");
-  }
+  assert.equal(result.proposals[1].proposedRows[0].profit.status, "proven");
+  for (const proposal of result.proposals.slice(2)) assert.equal(proposal.proposedRows[0].profit.status, "unresolved");
 });
 
 test("Posted is fulfilment-only: fulfilled is Complete, unfulfilled is blank, and partial is unresolved",async()=>{const{buildBackfillProposal}=await moduleUnderTest();const result=buildBackfillProposal([order({orderNumber:"1251",fulfilmentStatus:"fulfilled"}),order({orderNumber:"1252",fulfilmentStatus:"unfulfilled"}),order({orderNumber:"1253",fulfilmentStatus:"partial"}),order({orderNumber:"1254",fulfilmentStatus:null})]);assert.equal(result.proposals[0].proposedRows[0].posted.value,"Complete");assert.equal(result.proposals[1].proposedRows[0].posted.value,"");assert.equal(result.proposals[2].proposedRows[0].posted.status,"unresolved");assert.equal(result.proposals[3].proposedRows[0].posted.status,"unresolved");});
+
+test("Unit COGS is required for profit and route only accepts trusted sale-time guards",async()=>{const{buildBackfillProposal}=await moduleUnderTest();const result=buildBackfillProposal([order({lines:[line({costAndShip:unresolved()})]})]);assert.equal(result.proposals[0].proposedRows[0].profit.status,"unresolved");const route=await readFile(new URL("app/api/sales-workbook/backfill-proposal/route.ts",root),"utf8");for(const text of["unit_cogs_gbp","line.cogs_status === \"trusted\"","line.cogs_history_id","line.cogs_snapshotted_at","governed_sale_time_unit_cogs","trustedUnitCogsRowCount","unresolvedUnitCogsRowCount","profitResolvedRowCount","profitUnresolvedRowCount"])assert.ok(route.includes(text));assert.doesNotMatch(route,/product_commercial_intelligence|policy_derived|current product cost/i);});
 
 test("refunded/cancelled orders are conservative and older exceptions are excluded", async () => {
   const { buildBackfillProposal } = await moduleUnderTest();
@@ -58,3 +58,5 @@ test("backfill proposal route is read-only and uses protected canonical evidence
   for (const text of ["vault_shopify_order_lines", "vault_shopify_resolved_line_discount_evidence", "vault_shopify_verified_product_profitability_line_allocations", "requireOperatorRole(\"owner\", \"operator\")", "canonical_shopify_fulfilment_status"]) assert.ok(`${source}${route}`.includes(text));
   assert.doesNotMatch(`${source}${route}`, /\.insert\(|\.update\(|\.upsert\(|\.remove\(|storage\.from/i);
 });
+
+test("managed headers accept legacy Cost & Ship and future Unit COGS without mutation",async()=>{const parser=await readFile(new URL("lib/sales-workbook/WorkbookParser.ts",root),"utf8");assert.match(parser,/"Unit COGS"\|\|value==="Cost & Ship"/);assert.match(parser,/"Posted"\|\|value==="Payout"/);assert.doesNotMatch(parser,/writeFile|book_append_sheet|book_new/i);});

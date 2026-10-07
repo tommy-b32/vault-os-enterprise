@@ -12,7 +12,7 @@ const money = (value: unknown, source: string): ProposalField<number> => {
   return Number.isFinite(number) && number >= 0 ? proven(number, source) : unresolved(`${source}_unavailable`);
 };
 type CanonicalOrder = { id: string; order_number: string; shopify_created_at: string; financial_status: string | null; fulfilment_status: string | null; cancelled_at: string | null; refunds: number | string; metadata: unknown };
-type CanonicalLine = { id: string; order_id: string; title: string; total_cogs_gbp: number | string | null; cogs_status: string; cogs_history_id: string | null; cogs_snapshotted_at: string | null };
+type CanonicalLine = { id: string; order_id: string; title: string; total_cogs_gbp: number | string | null; unit_cogs_gbp: number | string | null; cogs_status: string; cogs_history_id: string | null; cogs_snapshotted_at: string | null };
 type VerifiedAllocation = { order_line_id: string; allocated_shipping_cost_gbp: number | string; allocated_payment_fees_gbp: number | string };
 type ResolvedLineRevenue = { order_line_id: string; resolved_net_line_revenue: number | string | null; resolution_status: string; evidence_method: string };
 const query = <T,>(response: { data: T[] | null; error: unknown }) => {
@@ -30,7 +30,7 @@ export async function GET() {
     const orderIds = orders.map(order => order.id);
     if (!orderIds.length) return NextResponse.json({ ...buildBackfillProposal([]), sourceComplete: false });
     const [lines, allocations, revenues] = await Promise.all([
-      query<CanonicalLine>(await supabaseAdmin.from("vault_shopify_order_lines").select("id,order_id,title,total_cogs_gbp,cogs_status,cogs_history_id,cogs_snapshotted_at").in("order_id", orderIds).order("id", { ascending: true })),
+      query<CanonicalLine>(await supabaseAdmin.from("vault_shopify_order_lines").select("id,order_id,title,total_cogs_gbp,unit_cogs_gbp,cogs_status,cogs_history_id,cogs_snapshotted_at").in("order_id", orderIds).order("id", { ascending: true })),
       query<VerifiedAllocation>(await supabaseAdmin.from("vault_shopify_verified_product_profitability_line_allocations").select("order_line_id,allocated_shipping_cost_gbp,allocated_payment_fees_gbp").in("order_id", orderIds)),
       query<ResolvedLineRevenue>(await supabaseAdmin.from("vault_shopify_resolved_line_discount_evidence").select("order_line_id,resolved_net_line_revenue,resolution_status,evidence_method").in("order_id", orderIds)),
     ]);
@@ -45,7 +45,7 @@ export async function GET() {
         product: typeof line.title === "string" && line.title.trim() ? proven(line.title, "canonical_shopify_order_line_title") : unresolved("canonical_shopify_order_line_title_unavailable"),
         salePrice: revenue && revenue.resolution_status !== "unresolved" ? money(revenue.resolved_net_line_revenue, `governed_resolved_line_revenue:${revenue.evidence_method}`) : unresolved("governed_resolved_line_revenue_unavailable"),
         cost: cogsProven ? money(line.total_cogs_gbp, "governed_sale_time_variant_cogs") : unresolved("governed_sale_time_variant_cogs_unavailable"),
-        costAndShip: unresolved("governed_inbound_shipping_allocation_unavailable"),
+        costAndShip: cogsProven && line.unit_cogs_gbp !== null ? money(line.unit_cogs_gbp, "governed_sale_time_unit_cogs") : unresolved("governed_sale_time_unit_cogs_unavailable"),
         postageFee: allocation ? money(allocation.allocated_shipping_cost_gbp, "governed_verified_line_shipping_allocation") : unresolved("governed_verified_line_shipping_allocation_unavailable"),
         cardFee: allocation ? money(allocation.allocated_payment_fees_gbp, "governed_verified_line_payment_fee_allocation") : unresolved("governed_verified_line_payment_fee_allocation_unavailable"),
         tracking: { value: "", status: "not_applicable", source: "canonical_tracking_number_not_available" },
@@ -63,7 +63,10 @@ export async function GET() {
       fulfilmentStatus: order.fulfilment_status,
       lines: linesByOrder.get(order.id) ?? [],
     })));
-    return NextResponse.json({ ...proposal, sourceComplete: proposal.proposalOrderCount === proposal.targetOrderCount });
+    const proposalRows = proposal.proposals.flatMap(item => item.proposedRows);
+    const trustedUnitCogsRowCount = proposalRows.filter(row => row.costAndShip.status === "proven").length;
+    const profitResolvedRowCount = proposalRows.filter(row => row.profit.status === "proven").length;
+    return NextResponse.json({ ...proposal, sourceComplete: proposal.proposalOrderCount === proposal.targetOrderCount, trustedUnitCogsRowCount, unresolvedUnitCogsRowCount: proposalRows.length - trustedUnitCogsRowCount, profitResolvedRowCount, profitUnresolvedRowCount: proposalRows.length - profitResolvedRowCount });
   } catch (error) {
     if (error instanceof OperatorAuthorizationError) return NextResponse.json({ error: error.reason === "forbidden" ? "Forbidden" : "Unauthorized" }, { status: error.reason === "forbidden" ? 403 : 401 });
     console.error("Sales workbook backfill proposal unavailable", { error: error instanceof Error ? error.message : "unknown" });

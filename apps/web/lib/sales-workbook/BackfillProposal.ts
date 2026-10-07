@@ -65,7 +65,7 @@ function inTargetRange(orderNumber: string) {
 }
 
 function profitFor(row: BackfillProposalLineInput): ProposalField<number> {
-  const inputs = [row.salePrice, row.cost, row.costAndShip, row.postageFee, row.cardFee];
+  const inputs = [row.salePrice, row.costAndShip, row.postageFee, row.cardFee];
   if (inputs.some(field => field.status !== "proven" || field.value === null)) return unresolved("profit_prerequisites_unresolved");
   // Cost & Ship is the workbook's all-in product-cost column; Cost is retained as a separate source field.
   return proven(row.salePrice.value! - row.costAndShip.value! - row.postageFee.value! - row.cardFee.value!, "derived_from_proven_sales_workbook_inputs");
