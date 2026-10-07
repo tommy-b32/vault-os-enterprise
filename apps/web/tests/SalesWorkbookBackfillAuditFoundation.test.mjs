@@ -49,3 +49,5 @@ test("RPC remains service-role only and application sanitizer excludes nested or
   assert.match(repository, /BACKFILL_AUDIT_NUMBER_FIELDS/);
   assert.doesNotMatch(repository, /Object\.assign\(.*metadata|\.\.\.value/);
 });
+
+test("forward path-validation correction changes only doubled XLSX regex escapes",async()=>{const source=await readFile(new URL("../../../supabase/migrations/20261097000000_fix_sales_workbook_version_path_validation.sql",import.meta.url),"utf8");assert.match(source,/pg_get_functiondef/);assert.match(source,/E'\\\\\\\\\.xlsx'/);assert.match(source,/E'\\\\\.xlsx'/);assert.match(source,/Expected doubled XLSX regex escape was not found/);assert.match(source,/revoke all on function public\.record_sales_workbook_version\(jsonb\) from public, anon, authenticated/);assert.match(source,/grant execute on function public\.record_sales_workbook_version\(jsonb\) to service_role/);});
