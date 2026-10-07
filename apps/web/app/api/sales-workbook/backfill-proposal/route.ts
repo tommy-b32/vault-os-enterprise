@@ -11,7 +11,7 @@ const money = (value: unknown, source: string): ProposalField<number> => {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? proven(number, source) : unresolved(`${source}_unavailable`);
 };
-type CanonicalOrder = { id: string; order_number: string; shopify_created_at: string; financial_status: string | null; cancelled_at: string | null; refunds: number | string; metadata: unknown };
+type CanonicalOrder = { id: string; order_number: string; shopify_created_at: string; financial_status: string | null; fulfilment_status: string | null; cancelled_at: string | null; refunds: number | string; metadata: unknown };
 type CanonicalLine = { id: string; order_id: string; title: string; total_cogs_gbp: number | string | null; cogs_status: string; cogs_history_id: string | null; cogs_snapshotted_at: string | null };
 type VerifiedAllocation = { order_line_id: string; allocated_shipping_cost_gbp: number | string; allocated_payment_fees_gbp: number | string };
 type ResolvedLineRevenue = { order_line_id: string; resolved_net_line_revenue: number | string | null; resolution_status: string; evidence_method: string };
@@ -25,7 +25,7 @@ export async function GET() {
   try {
     await requireOperatorRole("owner", "operator");
     const orders = query<CanonicalOrder>(await supabaseAdmin.from("vault_shopify_orders")
-      .select("id,shopify_order_id,order_number,shopify_created_at,financial_status,cancelled_at,refunds,metadata")
+      .select("id,shopify_order_id,order_number,shopify_created_at,financial_status,fulfilment_status,cancelled_at,refunds,metadata")
       .eq("source", "shopify").in("order_number", TARGET_ORDER_NUMBERS).order("order_number", { ascending: true }));
     const orderIds = orders.map(order => order.id);
     if (!orderIds.length) return NextResponse.json({ ...buildBackfillProposal([]), sourceComplete: false });
@@ -60,7 +60,7 @@ export async function GET() {
       refunded: Number(order.refunds) > 0 || /refund/i.test(String(order.financial_status ?? "")),
       cancelled: Boolean(order.cancelled_at),
       financiallyUnusual: /cancel|void|partial/i.test(String(order.financial_status ?? "")),
-      payout: unresolved("workbook_payout_semantics_unproven"),
+      fulfilmentStatus: order.fulfilment_status,
       lines: linesByOrder.get(order.id) ?? [],
     })));
     return NextResponse.json({ ...proposal, sourceComplete: proposal.proposalOrderCount === proposal.targetOrderCount });

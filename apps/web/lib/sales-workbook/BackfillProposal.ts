@@ -19,7 +19,7 @@ export type BackfillProposalOrderInput = {
   refunded: boolean;
   cancelled: boolean;
   financiallyUnusual: boolean;
-  payout: ProposalField<string>;
+  fulfilmentStatus: string | null;
   lines: BackfillProposalLineInput[];
 };
 export type ProposedWorkbookRow = {
@@ -30,7 +30,7 @@ export type ProposedWorkbookRow = {
   postageFee: ProposalField<number>;
   cardFee: ProposalField<number>;
   profit: ProposalField<number>;
-  payout: ProposalField<string>;
+  posted: ProposalField<string>;
   tracking: ProposalField<string>;
   blankColumnJ: ProposalField<string>;
   dateOfSale: ProposalField<string>;
@@ -70,6 +70,7 @@ function profitFor(row: BackfillProposalLineInput): ProposalField<number> {
   // Cost & Ship is the workbook's all-in product-cost column; Cost is retained as a separate source field.
   return proven(row.salePrice.value! - row.costAndShip.value! - row.postageFee.value! - row.cardFee.value!, "derived_from_proven_sales_workbook_inputs");
 }
+function postedFor(status: string | null): ProposalField<string> { const value=String(status??"").trim().toLowerCase(); if(value==="fulfilled")return proven("Complete","canonical_shopify_fulfilment_status"); if(value==="unfulfilled")return proven("","canonical_shopify_fulfilment_status"); return unresolved("canonical_shopify_fulfilment_status_incomplete_or_unknown"); }
 
 function proposalFor(order: BackfillProposalOrderInput): BackfillProposalOrder {
   const normalizedOrderNumber = normalizeWorkbookOrderNumber(order.orderNumber);
@@ -83,7 +84,7 @@ function proposalFor(order: BackfillProposalOrderInput): BackfillProposalOrder {
     postageFee: line.postageFee,
     cardFee: line.cardFee,
     profit: profitFor(line),
-    payout: order.payout,
+    posted: postedFor(order.fulfilmentStatus),
     tracking: line.tracking,
     blankColumnJ: proven("", "managed_sales_workbook_layout_blank_column_j"),
     dateOfSale: date,

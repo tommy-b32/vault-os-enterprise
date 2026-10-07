@@ -7,7 +7,7 @@ const root = new URL("../", import.meta.url);
 const proven = value => ({ value, status: "proven", source: "fixture" });
 const unresolved = () => ({ value: null, status: "unresolved", source: "fixture" });
 const line = (overrides = {}) => ({ product: proven("Product"), salePrice: proven(40), cost: proven(10), costAndShip: proven(12), postageFee: proven(3), cardFee: proven(1), tracking: { value: "", status: "not_applicable", source: "fixture" }, ...overrides });
-const order = (overrides = {}) => ({ orderNumber: "1251", createdAt: "2026-07-05T12:00:00.000Z", refunded: false, cancelled: false, financiallyUnusual: false, payout: proven("Complete"), lines: [line()], ...overrides });
+const order = (overrides = {}) => ({ orderNumber: "1251", createdAt: "2026-07-05T12:00:00.000Z", refunded: false, cancelled: false, financiallyUnusual: false, fulfilmentStatus: "fulfilled", lines: [line()], ...overrides });
 
 async function moduleUnderTest() {
   const source = await readFile(new URL("lib/sales-workbook/BackfillProposal.ts", root), "utf8");
@@ -43,6 +43,8 @@ test("multi-line orders produce multiple rows, while unresolved financial fields
   }
 });
 
+test("Posted is fulfilment-only: fulfilled is Complete, unfulfilled is blank, and partial is unresolved",async()=>{const{buildBackfillProposal}=await moduleUnderTest();const result=buildBackfillProposal([order({orderNumber:"1251",fulfilmentStatus:"fulfilled"}),order({orderNumber:"1252",fulfilmentStatus:"unfulfilled"}),order({orderNumber:"1253",fulfilmentStatus:"partial"}),order({orderNumber:"1254",fulfilmentStatus:null})]);assert.equal(result.proposals[0].proposedRows[0].posted.value,"Complete");assert.equal(result.proposals[1].proposedRows[0].posted.value,"");assert.equal(result.proposals[2].proposedRows[0].posted.status,"unresolved");assert.equal(result.proposals[3].proposedRows[0].posted.status,"unresolved");});
+
 test("refunded/cancelled orders are conservative and older exceptions are excluded", async () => {
   const { buildBackfillProposal } = await moduleUnderTest();
   const result = buildBackfillProposal([order({ orderNumber: "1001" }), order({ orderNumber: "1329", refunded: true }), order({ orderNumber: "1256", cancelled: true }), order({ orderNumber: "1330" })]);
@@ -53,6 +55,6 @@ test("refunded/cancelled orders are conservative and older exceptions are exclud
 
 test("backfill proposal route is read-only and uses protected canonical evidence", async () => {
   const [source, route] = await Promise.all([readFile(new URL("lib/sales-workbook/BackfillProposal.ts", root), "utf8"), readFile(new URL("app/api/sales-workbook/backfill-proposal/route.ts", root), "utf8")]);
-  for (const text of ["vault_shopify_order_lines", "vault_shopify_resolved_line_discount_evidence", "vault_shopify_verified_product_profitability_line_allocations", "requireOperatorRole(\"owner\", \"operator\")", "workbook_payout_semantics_unproven"]) assert.ok(`${source}${route}`.includes(text));
+  for (const text of ["vault_shopify_order_lines", "vault_shopify_resolved_line_discount_evidence", "vault_shopify_verified_product_profitability_line_allocations", "requireOperatorRole(\"owner\", \"operator\")", "canonical_shopify_fulfilment_status"]) assert.ok(`${source}${route}`.includes(text));
   assert.doesNotMatch(`${source}${route}`, /\.insert\(|\.update\(|\.upsert\(|\.remove\(|storage\.from/i);
 });
