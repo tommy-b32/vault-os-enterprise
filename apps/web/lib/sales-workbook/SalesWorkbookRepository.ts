@@ -1,6 +1,14 @@
 import "server-only"; import {createHash,randomUUID} from "node:crypto"; import {supabaseAdmin} from "@/lib/supabase-admin"; import {SALES_WORKBOOK_BUCKET,SALES_WORKBOOK_PREFIX,XLSX_MIME,type SalesWorkbookMetadata,type SalesWorkbookVersion,type WorkbookWriteResult,type SignedWorkbookDownload,SalesWorkbookConflictError,SalesWorkbookOrphanedUploadError} from "./types";
 export const sha256=(bytes:Uint8Array)=>createHash("sha256").update(bytes).digest("hex"); export const immutableWorkbookPath=(id:string,v:number,h:string)=>`${SALES_WORKBOOK_PREFIX}/${id}/${v}-${h}.xlsx`;
-const auditMetadata=(value:Record<string,unknown>)=>Object.fromEntries(Object.entries(value).filter(([key,item])=>["filename","storage_path","content_hash","version","predecessor_version","size_bytes","expiry_seconds"].includes(key)&&(typeof item==="string"||typeof item==="number"||typeof item==="boolean"||item===null)));
+const BACKFILL_AUDIT_NUMBER_FIELDS=new Set(["sourceWorkbookVersion","newWorkbookVersion","ordersWritten","rowsWritten","skippedExistingOrders","skippedReviewOrders"]);
+const BACKFILL_AUDIT_RANGE=/^[1-9]\d{0,8}-[1-9]\d{0,8}$/;
+export const sanitizeSalesWorkbookAuditMetadata=(value:Record<string,unknown>)=>Object.fromEntries(Object.entries(value).filter(([key,item])=>{
+ if(["filename","storage_path","content_hash"].includes(key))return typeof item==="string";
+ if(["version","predecessor_version","size_bytes","expiry_seconds"].includes(key))return typeof item==="number"&&Number.isFinite(item);
+ if(BACKFILL_AUDIT_NUMBER_FIELDS.has(key))return typeof item==="number"&&Number.isInteger(item)&&item>=0&&item<=999999999;
+ return key==="targetOrderRange"&&typeof item==="string"&&BACKFILL_AUDIT_RANGE.test(item);
+}));
+const auditMetadata=sanitizeSalesWorkbookAuditMetadata;
 const audit=async(id:string,v:number,event:"download",operator:string,metadata:Record<string,unknown>={})=>{const {error}=await supabaseAdmin.from("vault_sales_workbook_audit_events").insert({workbook_id:id,version:v,event_type:event,operator_id:operator,metadata:auditMetadata(metadata)});if(error)throw new Error(error.message);};
 export const SalesWorkbookRepository={
  async getCurrentWorkbook():Promise<SalesWorkbookMetadata|null>{const {data,error}=await supabaseAdmin.from("vault_sales_workbooks").select("*").order("last_modified_at",{ascending:false}).limit(1).maybeSingle();if(error)throw new Error(error.message);return data as SalesWorkbookMetadata|null;},
