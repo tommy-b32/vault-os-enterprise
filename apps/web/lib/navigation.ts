@@ -15,6 +15,7 @@ export const VAULT_NAVIGATION = [
   { label: "Suppliers", icon: "catalogue", href: "/supplier-catalogue", activePaths: ["/supplier-catalogue"] },
   { label: "Purchasing", icon: "orders", href: "/purchase-intelligence", activePaths: ["/purchase-intelligence", "/purchase-orders"] },
   { label: "Finance", icon: "analytics", href: "/financial-intelligence", activePaths: ["/financial-intelligence", "/intelligence", "/commercial"] },
+  { label: "Operations", icon: "settings", href: "/operations/sales-workbook", activePaths: ["/operations"] },
   { label: "Vault Brain", icon: "advisor", href: "/missions", activePaths: ["/missions", "/advisor"] },
 ] as const satisfies readonly VaultNavigationItem[];
 

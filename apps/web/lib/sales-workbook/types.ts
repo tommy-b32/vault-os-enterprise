@@ -1,0 +1,6 @@
+export const SALES_WORKBOOK_BUCKET="vault-documents", SALES_WORKBOOK_PREFIX="sales-workbook/versions", XLSX_MIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export type SalesWorkbookMetadata={id:string;filename:string;storage_bucket:string;current_storage_path:string;current_version:number;content_hash:string;uploaded_at:string;last_modified_at:string;last_sync_at:string|null;last_sync_status:"never"|"success"|"failed";last_sync_error:string|null;last_shopify_order_number:string|null;uploaded_by_operator_id:string};
+export type SalesWorkbookVersion={id:string;workbook_id:string;version:number;storage_path:string;content_hash:string;filename:string;created_at:string;uploaded_by_operator_id:string;predecessor_version:number|null};
+export type WorkbookWriteResult={workbook:SalesWorkbookMetadata;version:SalesWorkbookVersion;storagePath:string}; export type SignedWorkbookDownload={url:string;expiresIn:number;workbook:SalesWorkbookMetadata};
+export class SalesWorkbookConflictError extends Error{constructor(public readonly current:SalesWorkbookMetadata){super("Sales workbook version conflict");}}
+export class SalesWorkbookOrphanedUploadError extends Error{constructor(public readonly orphanPath:string,cause:unknown){super("Workbook upload left an orphaned private object");this.cause=cause;}}
