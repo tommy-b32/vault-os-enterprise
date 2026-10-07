@@ -5,6 +5,7 @@ import { SalesWorkbookRepository } from "@/lib/sales-workbook/SalesWorkbookRepos
 
 const MIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", MAX=20*1024*1024;
 const safeName=(name:string)=>name.replace(/[^A-Za-z0-9._ -]/g,"_").slice(0,255);
+export async function GET(){try{await requireOperatorRole("owner","operator");const workbook=await SalesWorkbookRepository.getCurrentWorkbook();return NextResponse.json({workbook:workbook?{id:workbook.id,filename:workbook.filename,currentVersion:workbook.current_version,uploadedAt:workbook.uploaded_at,lastModifiedAt:workbook.last_modified_at}:null});}catch(error){if(error instanceof OperatorAuthorizationError)return NextResponse.json({error:error.reason==="forbidden"?"Forbidden":"Unauthorized"},{status:error.reason==="forbidden"?403:401});return NextResponse.json({error:"Workbook metadata is unavailable"},{status:500});}}
 async function validate(file:File){
  if(!/\.xlsx$/i.test(file.name)||/\.xlsm$/i.test(file.name))throw new Error("invalid");
  if(file.type!==MIME||file.size<4||file.size>MAX)throw new Error("invalid");
