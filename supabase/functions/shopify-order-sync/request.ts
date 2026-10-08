@@ -2,11 +2,17 @@ export type OrderSyncRequest =
   | { mode: "reconciliation" }
   | { mode: "historical_maintenance" }
   | {
+      mode: "exact_orders";
+      shopifyOrderIds: string[];
+    }
+  | {
       mode: "historical_backfill";
       createdFrom: string;
       createdBefore: string;
     };
 
+const SHOPIFY_ORDER_GID = /^gid:\/\/shopify\/Order\/[1-9][0-9]*$/;
+const MAX_EXACT_ORDER_IDS = 5;
 const ISO_8601_TIMESTAMP =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
@@ -32,6 +38,25 @@ export function parseOrderSyncRequest(value: unknown): OrderSyncRequest {
   }
 
   const body = value as Record<string, unknown>;
+  if (body.mode === "exact_orders") {
+    if (
+      Object.keys(body).some((key) => key !== "mode" && key !== "shopifyOrderIds") ||
+      !Array.isArray(body.shopifyOrderIds) ||
+      body.shopifyOrderIds.length < 1 ||
+      body.shopifyOrderIds.length > MAX_EXACT_ORDER_IDS ||
+      body.shopifyOrderIds.some(
+        (id) => typeof id !== "string" || !SHOPIFY_ORDER_GID.test(id),
+      ) ||
+      new Set(body.shopifyOrderIds).size !== body.shopifyOrderIds.length
+    ) {
+      throw new Error("exact_orders requires one to five unique Shopify Order GIDs");
+    }
+
+    return {
+      mode: "exact_orders",
+      shopifyOrderIds: body.shopifyOrderIds as string[],
+    };
+  }
   if (body.mode === "historical_maintenance" && Object.keys(body).length === 1) {
     return { mode: "historical_maintenance" };
   }

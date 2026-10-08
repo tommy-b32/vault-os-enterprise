@@ -100,6 +100,10 @@ type SingleOrderResponse = {
   order: ShopifyOrderNode | null;
 };
 
+type ExactOrderNodesResponse = {
+  nodes: Array<ShopifyOrderNode | null>;
+};
+
 const ORDER_FIELDS = `
   id
   checkoutToken
@@ -241,6 +245,54 @@ export async function fetchHistoricalShopifyOrders(
     query: `created_at:>='${createdFrom}' created_at:<'${createdBefore}'`,
     sortKey: "CREATED_AT",
     historical: true,
+  });
+}
+
+/**
+ * Reads only the supplied Shopify Order GIDs. This deliberately uses GraphQL
+ * `nodes(ids:)`, never the searchable/paginated orders connection, so callers
+ * can use it for small controlled reconciliations without widening scope.
+ */
+export async function fetchExactShopifyOrders(
+  shopifyOrderIds: string[],
+): Promise<ShopifyOrderNode[]> {
+  if (
+    shopifyOrderIds.length < 1 ||
+    shopifyOrderIds.length > 5 ||
+    new Set(shopifyOrderIds).size !== shopifyOrderIds.length ||
+    shopifyOrderIds.some((id) => !/^gid:\/\/shopify\/Order\/[1-9][0-9]*$/.test(id))
+  ) {
+    throw new Error("INVALID_EXACT_SHOPIFY_ORDER_IDS");
+  }
+
+  const data = await shopifyGraphQL<ExactOrderNodesResponse>(
+    `query VaultExactOrders($orderIds: [ID!]!) {
+      nodes(ids: $orderIds) { ... on Order { ${ORDER_FIELDS} email customer { id displayName } } }
+    }`,
+    { orderIds: shopifyOrderIds },
+  );
+
+  if (!data || !Array.isArray(data.nodes) || data.nodes.length !== shopifyOrderIds.length) {
+    throw new Error("EXACT_SHOPIFY_ORDERS_INCOMPLETE");
+  }
+
+  const byId = new Map<string, ShopifyOrderNode>();
+  for (const order of data.nodes) {
+    if (!order || !shopifyOrderIds.includes(order.id) || byId.has(order.id)) {
+      throw new Error("EXACT_SHOPIFY_ORDERS_INCOMPLETE");
+    }
+    assertCompleteOrder(order);
+    byId.set(order.id, order);
+  }
+
+  if (byId.size !== shopifyOrderIds.length) {
+    throw new Error("EXACT_SHOPIFY_ORDERS_INCOMPLETE");
+  }
+
+  return shopifyOrderIds.map((id) => {
+    const order = byId.get(id);
+    if (!order) throw new Error("EXACT_SHOPIFY_ORDERS_INCOMPLETE");
+    return order;
   });
 }
 

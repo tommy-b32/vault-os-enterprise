@@ -31,6 +31,37 @@ test("historical maintenance is an explicit internal mode", () => {
   assert.throws(() => parseOrderSyncRequest({ mode: "historical_maintenance", created_from: "2026-01-01T00:00:00Z" }));
 });
 
+test("exact-order validation accepts only one to five unique Shopify Order GIDs", () => {
+  const ids = Array.from({ length: 5 }, (_, index) => `gid://shopify/Order/${index + 1}`);
+  assert.deepEqual(parseOrderSyncRequest({ mode: "exact_orders", shopifyOrderIds: [ids[0]] }), {
+    mode: "exact_orders",
+    shopifyOrderIds: [ids[0]],
+  });
+  assert.deepEqual(parseOrderSyncRequest({ mode: "exact_orders", shopifyOrderIds: ids }), {
+    mode: "exact_orders",
+    shopifyOrderIds: ids,
+  });
+  for (const input of [
+    { mode: "exact_orders", shopifyOrderIds: [] },
+    { mode: "exact_orders", shopifyOrderIds: [...ids, "gid://shopify/Order/6"] },
+    { mode: "exact_orders", shopifyOrderIds: ["1234"] },
+    { mode: "exact_orders", shopifyOrderIds: [ids[0], ids[0]] },
+    { mode: "exact_orders", shopifyOrderIds: [ids[0], "gid://shopify/Product/2"] },
+    { mode: "exact_orders", shopifyOrderIds: [ids[0]], created_from: "2026-01-01T00:00:00Z" },
+  ]) assert.throws(() => parseOrderSyncRequest(input), /exact_orders requires one to five unique Shopify Order GIDs/);
+});
+
+test("exact-order mode is bounded to requested Shopify IDs and cannot claim coverage", async () => {
+  const [handler, source] = await Promise.all([readFile(functionUrl, "utf8"), readFile(ordersUrl, "utf8")]);
+  assert.match(handler, /fetchExactShopifyOrders\(requestInput\.shopifyOrderIds\)/);
+  assert.match(handler, /const syncDays = exactOrders\s*\? 0/);
+  assert.match(handler, /if \(exactOrders\) \{[\s\S]*?sync_mode: "exact_orders_by_id"/);
+  assert.match(handler, /Exact-ID runs are deliberately not recorded as coverage-bearing sync runs/);
+  assert.match(source, /query VaultExactOrders\(\$orderIds: \[ID!\]!\)/);
+  assert.match(source, /nodes\(ids: \$orderIds\)/);
+  assert.doesNotMatch(source.match(/export async function fetchExactShopifyOrders[\s\S]*?\n}\n\nasync function fetchShopifyOrders/)?.[0] ?? "", /orders\s*\(/);
+});
+
 test("historical mode accepts a complete ISO-8601 range", () => {
   assert.deepEqual(parseOrderSyncRequest({
     created_from: "2026-07-01T00:00:00Z",
@@ -99,6 +130,9 @@ function loadOrders(graphql, scopes = ["read_orders", "read_all_orders"], financ
         buildFinancialEvidence: (_order, _observedAt, mode) => ({ capture_mode: mode, applications: [], allocations: [], refunds: [], refund_lines: [], refund_transactions: [] }),
         persistFinancialEvidence: financialEvidence.persist ?? (async () => {}),
       };
+      if (specifier.includes("fulfillment-tracking-evidence")) return {
+        persistFulfillmentTrackingEvidence: async () => {},
+      };
       return { shopifyGraphQL: (query, ...args) => query.includes("VaultHistoricalAccess")
         ? Promise.resolve({ currentAppInstallation: { accessScopes: scopes.map((handle) => ({ handle })) } })
         : graphql(query, ...args) };
@@ -141,6 +175,26 @@ test("historical reads fail closed if the active cached token lacks full order-h
   const orders = await loadOrders(async () => { orderRequests += 1; }, ["read_orders"]);
   await assert.rejects(orders.fetchHistoricalShopifyOrders("2026-05-01T00:00:00Z", "2026-05-08T00:00:00Z"), /read_all_orders on the active token/);
   assert.equal(orderRequests, 0);
+});
+
+test("exact Shopify fetch returns only every requested order in request order and fails closed on a missing node", async () => {
+  const requested = ["gid://shopify/Order/101", "gid://shopify/Order/102"];
+  const calls = [];
+  const orders = await loadOrders(async (query, variables) => {
+    calls.push({ query, variables });
+    const second = { ...fixture(), id: requested[1] };
+    const first = { ...fixture(), id: requested[0] };
+    return { nodes: [second, first] };
+  });
+  const result = await orders.fetchExactShopifyOrders(requested);
+  assert.deepEqual(result.map((order) => order.id), requested);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].variables, { orderIds: requested });
+  assert.match(calls[0].query, /nodes\(ids: \$orderIds\)/);
+  assert.doesNotMatch(calls[0].query, /\borders\s*\(/);
+
+  const incomplete = await loadOrders(async () => ({ nodes: [{ ...fixture(), id: requested[0] }, null] }));
+  await assert.rejects(incomplete.fetchExactShopifyOrders(requested), /EXACT_SHOPIFY_ORDERS_INCOMPLETE/);
 });
 
 test("historical pages are small, follow cursors, preserve bounds and exclude customer selections", async () => {
@@ -196,9 +250,14 @@ test("replaying after a line-write failure updates canonical keys without duplic
     for (const row of rows) savedLines.set(row.shopify_line_item_id, row);
     return Promise.resolve({ error: null });
   } }; } };
-  await assert.rejects(orders.upsertShopifyOrder(client, fixture(), { omitCustomerData: true }), /line failure/);
-  await orders.upsertShopifyOrder(client, fixture(), { omitCustomerData: true });
-  await orders.upsertShopifyOrder(client, fixture(), { omitCustomerData: true });
+  const trackingEvidence = {
+    capture_mode: "prospective",
+    completeness: { shopify_order_id: "fixture-order" },
+    fulfillments: [],
+  };
+  await assert.rejects(orders.upsertShopifyOrder(client, fixture(), { omitCustomerData: true, trackingEvidence }), /line failure/);
+  await orders.upsertShopifyOrder(client, fixture(), { omitCustomerData: true, trackingEvidence });
+  await orders.upsertShopifyOrder(client, fixture(), { omitCustomerData: true, trackingEvidence });
   assert.equal(savedOrders.size, 1);
   assert.equal(savedLines.size, 1);
   const saved = [...savedOrders.values()][0];

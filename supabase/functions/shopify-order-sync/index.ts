@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import {
+  fetchExactShopifyOrders,
   fetchHistoricalShopifyOrders,
   fetchRecentShopifyOrders,
   upsertShopifyOrder,
@@ -94,6 +95,7 @@ Deno.serve(async (request: Request) => {
       }, 400);
     }
 
+    const exactOrders = requestInput.mode === "exact_orders";
     const reconciliationBefore = requestInput.mode === "reconciliation"
       ? startedAt
       : null;
@@ -110,7 +112,9 @@ Deno.serve(async (request: Request) => {
     const historicalWindow = requestInput.mode === "historical_backfill"
       ? { created_from: requestInput.createdFrom, created_before: requestInput.createdBefore }
       : maintenanceWindow;
-    const syncDays = historicalWindow
+    const syncDays = exactOrders
+      ? 0
+      : historicalWindow
       ? Math.ceil(
           (Date.parse(historicalWindow.created_before) - Date.parse(historicalWindow.created_from)) /
             (24 * 60 * 60 * 1000),
@@ -119,7 +123,9 @@ Deno.serve(async (request: Request) => {
     const updatedSince = reconciliationBefore
       ? new Date(Date.parse(reconciliationBefore) - syncDays * 24 * 60 * 60 * 1000).toISOString()
       : null;
-    const orders = historicalWindow
+    const orders = exactOrders
+      ? await fetchExactShopifyOrders(requestInput.shopifyOrderIds)
+      : historicalWindow
       ? await fetchHistoricalShopifyOrders(
           historicalWindow.created_from,
           historicalWindow.created_before,
@@ -143,6 +149,20 @@ Deno.serve(async (request: Request) => {
     }
 
     const completedAt = new Date().toISOString();
+    // Exact-ID runs are deliberately not recorded as coverage-bearing sync runs:
+    // they neither prove a created-at interval nor a recent updated-at interval.
+    // This keeps the existing coverage/freshness model fail-closed.
+    if (exactOrders) {
+      return respond({
+        success: true,
+        sync_mode: "exact_orders_by_id",
+        requested_order_ids: requestInput.shopifyOrderIds,
+        orders_synced: orders.length,
+        order_lines_synced: linesSynced,
+        completed_at: completedAt,
+      });
+    }
+
     const { data: syncRun, error: syncRunError } = await supabase
       .from("vault_shopify_order_sync_runs")
       .insert({
