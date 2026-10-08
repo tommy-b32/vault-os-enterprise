@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { type BackfillProposalOrder, type ProposalField, type ProposedWorkbookRow } from "./BackfillProposal";
 import { normalizeWorkbookOrderNumber, parseSalesWorkbook } from "./WorkbookParser";
 
-type CompleteProposal={targetOrderRange:string;sourceComplete:boolean;proposals:BackfillProposalOrder[]};
+type CompleteProposal={targetOrderRange:string;sourceComplete:boolean;proposals:BackfillProposalOrder[];excludedExistingOrderCount?:number};
 export class SalesWorkbookBackfillValidationError extends Error{}
 export type BackfillWritePreparation={bytes:Uint8Array;ordersWritten:number;rowsWritten:number;skippedExistingOrders:number;skippedReviewOrders:number;writtenOrderNumbers:string[]};
 
@@ -36,7 +36,7 @@ export function prepareSalesWorkbookBackfill(bytes:ArrayBuffer|Uint8Array,propos
  const existing=new Set(parsed.rows.map(row=>row.orderNumber).filter((value):value is string=>value!==null));
  const grouped=new Map<string,BackfillProposalOrder[]>();
  for(const candidate of proposal.proposals){const orderNumber=normalizeWorkbookOrderNumber(candidate.orderNumber);if(!orderNumber)continue;const current=grouped.get(orderNumber)??[];current.push(candidate);grouped.set(orderNumber,current);}
- const rows:unknown[][]=[],writtenOrderNumbers:string[]=[];let skippedExistingOrders=0,skippedReviewOrders=0;
+ const rows:unknown[][]=[],writtenOrderNumbers:string[]=[];let skippedExistingOrders=proposal.excludedExistingOrderCount??0,skippedReviewOrders=0;
  for(const[orderNumber,candidates]of[...grouped.entries()].sort(([left],[right])=>Number(left)-Number(right))){
   if(existing.has(orderNumber)){skippedExistingOrders++;continue;}
   if(candidates.length!==1||candidates[0].classification!=="ready"||!candidates[0].proposedRows.length||candidates[0].proposedRows.some(row=>!rowIsComplete(row))){skippedReviewOrders++;continue;}

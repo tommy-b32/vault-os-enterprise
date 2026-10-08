@@ -5,6 +5,7 @@ import { getBackfillProposal } from "@/lib/sales-workbook/BackfillProposalServic
 import { prepareSalesWorkbookBackfill, SalesWorkbookBackfillValidationError } from "@/lib/sales-workbook/BackfillWriter";
 import { SalesWorkbookRepository, sha256 } from "@/lib/sales-workbook/SalesWorkbookRepository";
 import { SalesWorkbookConflictError, SalesWorkbookOrphanedUploadError } from "@/lib/sales-workbook/types";
+import { parseSalesWorkbook } from "@/lib/sales-workbook/WorkbookParser";
 
 const validVersion=(value:unknown)=>typeof value==="number"&&Number.isInteger(value)&&value>0;
 const validChecksum=(value:unknown)=>typeof value==="string"&&/^[0-9a-f]{64}$/.test(value);
@@ -19,7 +20,9 @@ export async function POST(request:Request){
   if(current.current_version!==body.expectedWorkbookVersion||(body.expectedWorkbookChecksum!==undefined&&current.content_hash!==body.expectedWorkbookChecksum))throw new SalesWorkbookConflictError(current);
   const {workbook,bytes}=await SalesWorkbookRepository.readCurrentWorkbookBytes();
   if(workbook.id!==current.id||workbook.current_version!==current.current_version||workbook.content_hash!==current.content_hash||sha256(new Uint8Array(bytes))!==current.content_hash)throw new SalesWorkbookConflictError(current);
-  const proposal=await getBackfillProposal();
+  const parsed=parseSalesWorkbook(Uint8Array.from(new Uint8Array(bytes)).buffer);
+  if(!parsed.valid)throw new SalesWorkbookBackfillValidationError("Sales workbook layout is invalid");
+  const proposal=await getBackfillProposal({existingWorkbookOrderNumbers:parsed.rows.flatMap(row=>row.orderNumber?[row.orderNumber]:[])});
   const prepared=prepareSalesWorkbookBackfill(bytes,proposal);
   if(!prepared.ordersWritten)return NextResponse.json({sourceWorkbookVersion:current.current_version,newWorkbookVersion:current.current_version,ordersWritten:0,rowsWritten:0,skippedExistingOrders:prepared.skippedExistingOrders,skippedReviewOrders:prepared.skippedReviewOrders,writtenOrderNumbers:[]});
   const result=await SalesWorkbookRepository.writeBackfillWorkbook({bytes:prepared.bytes,operatorId:operator.id,current,metadata:{sourceWorkbookVersion:current.current_version,newWorkbookVersion:current.current_version+1,ordersWritten:prepared.ordersWritten,rowsWritten:prepared.rowsWritten,skippedExistingOrders:prepared.skippedExistingOrders,skippedReviewOrders:prepared.skippedReviewOrders,targetOrderRange:proposal.targetOrderRange}});
