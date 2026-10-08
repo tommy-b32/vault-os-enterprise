@@ -124,7 +124,13 @@ Deno.serve(async (request: Request) => {
       ? new Date(Date.parse(reconciliationBefore) - syncDays * 24 * 60 * 60 * 1000).toISOString()
       : null;
     const orders = exactOrders
-      ? await fetchExactShopifyOrders(requestInput.shopifyOrderIds)
+      ? await (async () => {
+          try {
+            return await fetchExactShopifyOrders(requestInput.shopifyOrderIds);
+          } catch (error) {
+            throw new Error(`exact_order_fetch: ${error instanceof Error ? error.message : "failed"}`);
+          }
+        })()
       : historicalWindow
       ? await fetchHistoricalShopifyOrders(
           historicalWindow.created_from,
@@ -134,7 +140,13 @@ Deno.serve(async (request: Request) => {
     const trackingMode = historicalWindow ? "historical" : "prospective";
     const trackingEvidence = new Map<string, FulfillmentTrackingEvidence>();
     for (const batch of fulfillmentTrackingBatches(orders.map((order) => order.id))) {
-      const evidence = await probeFulfillmentTrackingEvidence(batch, trackingMode, startedAt);
+      let evidence: Map<string, FulfillmentTrackingEvidence>;
+      try {
+        evidence = await probeFulfillmentTrackingEvidence(batch, trackingMode, startedAt);
+      } catch (error) {
+        if (!exactOrders) throw error;
+        throw new Error(`fulfillment_evidence_probe: ${error instanceof Error ? error.message : "failed"}`);
+      }
       for (const [orderId, payload] of evidence) trackingEvidence.set(orderId, payload);
     }
     let linesSynced = 0;

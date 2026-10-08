@@ -23,7 +23,32 @@ const EVENT_PAGE_QUERY = `query VaultFulfillmentEvidenceProbeEventPage($fulfillm
   node(id: $fulfillmentId) { ... on Fulfillment { events(first: $first, after: $after) { nodes { id status happenedAt createdAt } pageInfo { hasNextPage endCursor } } } }
 }`;
 
-function fulfillmentFields() { return `id status displayStatus createdAt updatedAt inTransitAt deliveredAt location { id } trackingInfo { number company url } fulfillmentLineItems(first: ${PAGE_SIZE}) { nodes { id createdAt quantity lineItem { id variant { id inventoryItem { id } } } pageInfo { hasNextPage endCursor } } events(first: ${PAGE_SIZE}) { nodes { id status happenedAt createdAt } pageInfo { hasNextPage endCursor } }`; }
+function fulfillmentFields() {
+  return `
+    id
+    status
+    displayStatus
+    createdAt
+    updatedAt
+    inTransitAt
+    deliveredAt
+    location { id }
+    trackingInfo { number company url }
+    fulfillmentLineItems(first: ${PAGE_SIZE}) {
+      nodes {
+        id
+        createdAt
+        quantity
+        lineItem { id variant { id inventoryItem { id } } }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+    events(first: ${PAGE_SIZE}) {
+      nodes { id status happenedAt createdAt }
+      pageInfo { hasNextPage endCursor }
+    }
+  `;
+}
 
 export function parseFulfillmentEvidenceProbeRequest(input: unknown): { orderIds: string[] } {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("INVALID_FULFILLMENT_PROBE_REQUEST");

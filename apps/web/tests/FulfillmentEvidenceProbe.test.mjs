@@ -5,6 +5,7 @@ import ts from "typescript";
 
 const root = new URL("../../../", import.meta.url);
 const helper = await readFile(new URL("supabase/functions/_shared/shopify/fulfillment-evidence-probe.ts", root), "utf8");
+const graphqlHelper = await readFile(new URL("supabase/functions/_shared/shopify/graphql.ts", root), "utf8");
 const edge = await readFile(new URL("supabase/functions/shopify-inventory-scope-diagnostic/index.ts", root), "utf8");
 const route = await readFile(new URL("apps/web/app/api/inventory/fulfillment-probe/route.ts", root), "utf8");
 const panel = await readFile(new URL("apps/web/components/inventory/InventorySyncPanel.tsx", root), "utf8");
@@ -18,6 +19,43 @@ function load() {
     throw new Error(name);
   }, exports);
   return exports;
+}
+
+function loadWithGraphql(graphql) {
+  const output = ts.transpileModule(helper, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exports = {};
+  new Function("require", "exports", output)((name) => {
+    if (name.includes("graphql")) return { shopifyGraphQL: graphql };
+    throw new Error(name);
+  }, exports);
+  return exports;
+}
+
+function loadGraphqlTransport() {
+  const executable = graphqlHelper
+    .replace(
+      /import \{ getShopifyAccessToken \} from "\.\/auth\.ts";/,
+      'const getShopifyAccessToken=async()=>({storeDomain:"shop.example",apiVersion:"2026-10",accessToken:"test-token"});',
+    )
+    .replace(
+      /import \{ boundedShopifyRead \} from "\.\/bounded-read\.ts";/,
+      "const boundedShopifyRead=async (operation)=>operation(undefined);",
+    );
+  const output = ts.transpileModule(executable, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exports = {};
+  new Function("exports", output)(exports);
+  return exports;
+}
+
+function assertBalancedGraphqlDocument(document) {
+  const pairs = { "{": "}", "(": ")", "[": "]" };
+  const closers = new Set(Object.values(pairs));
+  const stack = [];
+  for (const character of document) {
+    if (pairs[character]) stack.push(character);
+    else if (closers.has(character)) assert.equal(character, pairs[stack.pop()], `unexpected GraphQL delimiter ${character}`);
+  }
+  assert.deepEqual(stack, [], "GraphQL document must close every selection and variable definition");
 }
 
 const rawFulfillment = (id = "gid://shopify/Fulfillment/1") => ({
@@ -79,6 +117,33 @@ test("probe uses Shopify's non-paginated Order.fulfillments list and rejects dup
   assert.match(api.FULFILLMENT_EVIDENCE_PROBE_QUERY, /trackingInfo \{ number company url \}/);
   assert.match(api.FULFILLMENT_EVIDENCE_PROBE_QUERY, /fulfillmentLineItems\(first: 50\)/);
   await assert.rejects(api.runFulfillmentEvidenceProbe([gid], async () => ({ nodes: [{ id: gid, updatedAt: "2026-01-01T00:00:00Z", fulfillments: [rawFulfillment(), rawFulfillment()] }] })), /DUPLICATE_FULFILLMENT_IDENTITY/);
+});
+
+test("probe sends a complete fulfilment and tracking document at the final Shopify fetch boundary", async () => {
+  const transport = loadGraphqlTransport();
+  const api = loadWithGraphql(transport.shopifyGraphQL);
+  const originalFetch = globalThis.fetch;
+  let payload;
+  globalThis.fetch = async (_url, init) => {
+    payload = JSON.parse(init.body);
+    return Response.json({ data: { nodes: [{ id: gid, updatedAt: "2026-01-01T00:00:00Z", fulfillments: [rawFulfillment()] }] } });
+  };
+
+  try {
+    await api.runFulfillmentEvidenceProbe([gid]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(payload.variables, { orderIds: [gid] });
+  assert.match(payload.query, /^query VaultFulfillmentEvidenceProbe\(\$orderIds: \[ID!\]!\) \{/);
+  assert.match(payload.query, /nodes\(ids: \$orderIds\)/);
+  assert.match(payload.query, /\.\.\. on Order/);
+  assert.match(payload.query, /trackingInfo \{ number company url \}/);
+  assert.match(payload.query, /fulfillmentLineItems\(first: 50\)/);
+  assert.match(payload.query, /events\(first: 50\)/);
+  assert.match(payload.query, /\n\s*}\s*$/);
+  assertBalancedGraphqlDocument(payload.query);
 });
 
 test("edge remains server-only and route retains owner/operator authorization", () => {
