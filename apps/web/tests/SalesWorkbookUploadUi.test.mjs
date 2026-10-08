@@ -136,6 +136,13 @@ test("viewer source applies grouped search/filter, sort, then pagination and has
     "row.products, row.tracking, row.orderNumber",
     "[25, 50, 100]",
     "orders · {rows.length} underlying sales rows",
+    "sales-workbook-table-wrap{overflow-x:auto",
+    "min-width:1570px",
+    "sales-workbook-product{width:380px",
+    "sales-workbook-tracking{width:180px",
+    "sales-workbook-money{width:100px;text-align:right;font-variant-numeric:tabular-nums",
+    "text-overflow:ellipsis",
+    "index === 0 || index === 8 ? value : undefined",
   ]) assert.ok(ui.includes(text), `missing ${text}`);
 
   assert.doesNotMatch(ui, /storage\.from|createSignedUrl|contentEditable|\bsave\b|\bdelete\b|\bupdate\b/iu);

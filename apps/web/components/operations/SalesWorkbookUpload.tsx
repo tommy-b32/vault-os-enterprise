@@ -155,6 +155,41 @@ export const filterViewerRows = (rows: ViewerRow[], query: string, posted: strin
       .some((value) => String(value ?? "").toLowerCase().includes(query.toLowerCase()))),
   );
 
+const viewerColumnClasses = [
+  "sales-workbook-product",
+  "sales-workbook-money",
+  "sales-workbook-money",
+  "sales-workbook-money",
+  "sales-workbook-money",
+  "sales-workbook-money",
+  "sales-workbook-money",
+  "sales-workbook-posted",
+  "sales-workbook-tracking",
+  "sales-workbook-date",
+  "sales-workbook-order-number",
+];
+
+const viewerColumnLabels = [
+  "Product", "Sale Price", "Cost", "Unit COGS", "Postage fee", "Card Fee", "Profit", "Posted", "Tracking", "Date of sale", "Order number",
+];
+
+const salesWorkbookViewerStyles = `
+  .sales-workbook-viewer{margin-top:22px;padding:18px;border:1px solid rgba(255,255,255,.09);border-radius:10px;background:#0d100e}
+  .sales-workbook-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 14px}
+  .sales-workbook-toolbar input,.sales-workbook-toolbar select{height:38px;padding:0 11px;color:#eee;background:#101311;border:1px solid rgba(255,255,255,.12);border-radius:7px}
+  .sales-workbook-toolbar input{min-width:230px;flex:1 1 260px}.sales-workbook-toolbar select{min-width:112px}
+  .sales-workbook-count{margin-left:auto;color:#929994;font-size:12px;white-space:nowrap}
+  .sales-workbook-table-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.09);border-radius:9px;background:#0d100e}
+  .sales-workbook-table{width:100%;min-width:1570px;table-layout:fixed;border-collapse:collapse;font-size:13px}
+  .sales-workbook-table th,.sales-workbook-table td{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.07);vertical-align:middle}
+  .sales-workbook-table th{position:sticky;top:0;z-index:1;color:#9da49f;background:#101311;font-size:10px;font-weight:600;letter-spacing:.07em;text-align:left;text-transform:uppercase;white-space:nowrap}
+  .sales-workbook-table tbody tr:hover{background:rgba(255,255,255,.025)}
+  .sales-workbook-product{width:380px;text-align:left}.sales-workbook-money{width:100px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.sales-workbook-posted{width:100px;text-align:center;white-space:nowrap}.sales-workbook-tracking{width:180px;text-align:left}.sales-workbook-date{width:105px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}.sales-workbook-order-number{width:105px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .sales-workbook-product,.sales-workbook-tracking{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sales-workbook-pagination{display:flex;align-items:center;gap:10px;margin-top:14px;color:#929994;font-size:12px}.sales-workbook-pagination button{min-width:82px}
+  @media(max-width:700px){.sales-workbook-viewer{padding:14px}.sales-workbook-toolbar input{flex-basis:100%}.sales-workbook-count{margin-left:0;flex-basis:100%}}
+`;
+
 export function SalesWorkbookUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -253,25 +288,29 @@ export function SalesWorkbookUpload() {
       <input accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={busy} onChange={(event) => setFile(event.target.files?.[0] ?? null)} type="file" />
       <button disabled={busy} type="submit">{busy ? "Uploading…" : "Upload Workbook"}</button>
     </form>}
-    {rows ? <>
-      <p>
+    {rows ? <section className="sales-workbook-viewer">
+      <style>{salesWorkbookViewerStyles}</style>
+      <div className="sales-workbook-toolbar">
         <input onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search product, tracking or order" />
         <select onChange={(event) => { setPayout(event.target.value); setPage(1); }} value={payout}>{payouts.map((value) => <option key={value}>{value}</option>)}</select>
         <select onChange={(event) => { setSize(Number(event.target.value)); setPage(1); }} value={size}>{[25, 50, 100].map((value) => <option key={value}>{value}</option>)}</select>
-        {visibleRows.length} orders · {rows.length} underlying sales rows
-      </p>
-      <div style={{ overflowX: "auto" }}>
-        <table>
-          <thead><tr>{["Product", "Sale Price", "Cost", "Unit COGS", "Postage fee", "Card Fee", "Profit", "Posted", "Tracking", "Date of sale", "Order number"].map((value) => <th key={value}>{value}</th>)}</tr></thead>
+        <span className="sales-workbook-count">{visibleRows.length} orders · {rows.length} underlying sales rows</span>
+      </div>
+      <div className="sales-workbook-table-wrap">
+        <table className="sales-workbook-table">
+          <colgroup>{viewerColumnClasses.map((className, index) => <col className={className} key={index} />)}</colgroup>
+          <thead><tr>{viewerColumnLabels.map((value, index) => <th className={viewerColumnClasses[index]} key={value}>{value}</th>)}</tr></thead>
           <tbody>{shown.map((row) => <tr key={`${row.orderNumber ?? "manual"}-${row.rowNumber}`}>
-            {[row.products, row.salePrice, row.cost, row.unitCogs, row.postage, row.cardFee, row.profit, row.posted, row.tracking, row.date, row.orderNumber ?? ""].map((value, index) => <td key={index}>{value}</td>)}
+            {[row.products, row.salePrice, row.cost, row.unitCogs, row.postage, row.cardFee, row.profit, row.posted, row.tracking, row.date, row.orderNumber ?? ""].map((value, index) => <td className={viewerColumnClasses[index]} key={index} title={index === 0 || index === 8 ? value : undefined}>{value}</td>)}
           </tr>)}</tbody>
         </table>
       </div>
-      <button disabled={page <= 1} onClick={() => setPage(page - 1)} type="button">Previous</button>
-      {" "}Page {page} of {pages}{" "}
-      <button disabled={page >= pages} onClick={() => setPage(page + 1)} type="button">Next</button>
-    </> : null}
+      <div className="sales-workbook-pagination">
+        <button disabled={page <= 1} onClick={() => setPage(page - 1)} type="button">Previous</button>
+        <span>Page {page} of {pages}</span>
+        <button disabled={page >= pages} onClick={() => setPage(page + 1)} type="button">Next</button>
+      </div>
+    </section> : null}
     {message ? <p role="alert">{message}</p> : null}
   </section>;
 }
