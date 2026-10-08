@@ -6,6 +6,7 @@ import ts from "typescript";
 const root = new URL("../../../", import.meta.url);
 const source = await readFile(new URL("supabase/functions/_shared/shopify/fulfillment-tracking-evidence.ts", root), "utf8");
 const migration = await readFile(new URL("supabase/migrations/20261098000000_governed_shopify_fulfillment_tracking_evidence.sql", root), "utf8");
+const lockGrantMigration = await readFile(new URL("supabase/migrations/20261099000000_grant_tracking_capture_lock_privilege.sql", root), "utf8");
 const orders = await readFile(new URL("supabase/functions/_shared/shopify/orders.ts", root), "utf8");
 const orderSync = await readFile(new URL("supabase/functions/shopify-order-sync/index.ts", root), "utf8");
 const webhook = await readFile(new URL("supabase/functions/shopify-order-webhook/index.ts", root), "utf8");
@@ -66,6 +67,14 @@ test("schema is immutable, service-role-only, and its bounded reader accepts onl
   assert.match(migration, /cardinality\(p_order_ids\)<1 or cardinality\(p_order_ids\)>100/);
   assert.match(migration, /where o\.id = any\(p_order_ids\)/);
   assert.doesNotMatch(source, /sales-workbook|BackfillProposal|BackfillWriter/);
+});
+
+test("SECURITY INVOKER replay locking has only the service-role UPDATE privilege PostgreSQL requires", () => {
+  assert.match(migration, /record_shopify_fulfillment_tracking_evidence[\s\S]*?security invoker/i);
+  assert.match(migration, /vault_shopify_fulfillment_tracking_capture_observations[\s\S]*?for update/i);
+  assert.match(lockGrantMigration, /grant update on table public\.vault_shopify_fulfillment_tracking_capture_observations\s+to service_role/i);
+  assert.doesNotMatch(lockGrantMigration, /vault_shopify_fulfillment_tracking_observations/i);
+  assert.doesNotMatch(lockGrantMigration, /\bto\s+(?:public|anon|authenticated)\b/i);
 });
 
 test("tracking capture is a pre-canonical admission gate for every order-sync mode", () => {
