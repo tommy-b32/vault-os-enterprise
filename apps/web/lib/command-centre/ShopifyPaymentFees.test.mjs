@@ -12,6 +12,34 @@ new Function("exports", "shopifyGraphQL", ts.transpileModule(source.replace(/^im
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText)(mod, () => { throw new Error("not used"); });
 
+function loadPaymentFees(shopifyGraphQL) {
+  const result = {};
+  new Function("exports", "shopifyGraphQL", ts.transpileModule(source.replace(/^import .*;\r?\n/gm, ""), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText)(result, shopifyGraphQL);
+  return result;
+}
+
+function exactRecoverySupabase(orders) {
+  const calls = { writes: [] };
+  return {
+    calls,
+    from(table) {
+      assert.equal(table, "vault_shopify_orders");
+      return {
+        select() { return this; },
+        eq() { return this; },
+        async in(column, ids) {
+          assert.equal(column, "shopify_order_id");
+          assert.deepEqual(ids, orders.map(order => order.shopify_order_id));
+          return { data: orders, error: null };
+        },
+      };
+    },
+    async rpc(name, payload) { calls.writes.push({ name, payload }); return { error: null }; },
+  };
+}
+
 const at = "2026-09-06T12:00:00Z";
 const fee = (id = "fee-1", amount = "1.44", currencyCode = "GBP") => ({ id, type: "PROCESSING_FEE", amount: { amount, currencyCode }, taxAmount: { amount: "0.00", currencyCode } });
 const transaction = (overrides = {}) => ({ id: "txn-1", kind: "SALE", status: "SUCCESS", gateway: "shopify_payments", paymentId: "payment-1", processedAt: at, fees: [fee()], ...overrides });
@@ -63,4 +91,82 @@ test("migration keys exact fees idempotently and refuses a partial daily cohort"
     await save([{ ...record, fee_amount: "2.00", fetched_at: "2026-09-06T12:01:00Z" }], [{ ...coverage(1), fetched_at: "2026-09-06T12:01:00Z" }]);
     assert.equal(Number((await db.query("select * from get_shopify_daily_payment_fees('2026-09-06T12:02:00Z')")).rows[0].total_payment_fees_gbp), 2);
   } finally { await db.close(); }
+});
+
+test("payment-fee retry is five-minute, authenticated, and only selects unresolved recent coverage", async () => {
+  const [retry, migration, config, analyticsSchedule] = await Promise.all([
+    readFile(new URL("supabase/functions/shopify-payment-fee-retry/index.ts", root), "utf8"),
+    readFile(new URL("supabase/migrations/20261090000000_shopify_payment_fee_retry_schedule.sql", root), "utf8"),
+    readFile(new URL("supabase/config.toml", root), "utf8"),
+    readFile(new URL("supabase/migrations/20260904120000_shopify_analytics_daily.sql", root), "utf8"),
+  ]);
+  assert.match(retry, /refreshUnresolvedPaymentFees/);
+  assert.match(retry, /X-Vault-Sync-Secret/);
+  assert.match(config, /\[functions\.shopify-payment-fee-retry\]\s+verify_jwt = true/);
+  assert.match(migration, /'vault-shopify-payment-fee-retry'/);
+  assert.match(migration, /'\*\/5 \* \* \* \*'/);
+  assert.match(migration, /coverage_state is distinct from 'covered'/);
+  assert.match(migration, /cron\.unschedule\(existing_job_id\)/);
+  assert.doesNotMatch(migration, /jobid\s*:=\s*\d+|jobid\s*=\s*\d+/);
+  assert.match(analyticsSchedule, /'vault-shopify-analytics-refresh',\s*'\*\/15 \* \* \* \*'/);
+});
+
+test("exact payment-fee recovery accepts only 1-5 unique Shopify Order GIDs", () => {
+  const gid = number => `gid://shopify/Order/${number}`;
+  assert.deepEqual(mod.parseExactPaymentFeeOrderIds([gid(1306)]), [gid(1306)]);
+  assert.equal(mod.parseExactPaymentFeeOrderIds([1, 2, 3, 4, 5].map(gid)).length, 5);
+  assert.throws(() => mod.parseExactPaymentFeeOrderIds([]));
+  assert.throws(() => mod.parseExactPaymentFeeOrderIds([gid(1), gid(1)]));
+  assert.throws(() => mod.parseExactPaymentFeeOrderIds([1, 2, 3, 4, 5, 6].map(gid)));
+  assert.throws(() => mod.parseExactPaymentFeeOrderIds(["1306"]));
+});
+
+test("exact recovery persists an unresolved snapshot when Shopify returns no eligible fee", async () => {
+  const gid = "gid://shopify/Order/1306";
+  const supabase = exactRecoverySupabase([{ id: "canonical-1306", shopify_order_id: gid, shopify_created_at: at }]);
+  const exact = loadPaymentFees(async (_query, variables) => {
+    assert.deepEqual(variables, { ids: [gid] });
+    return { shop: { currencyCode: "GBP", ianaTimezone: "Europe/London" }, nodes: [{ id: gid, transactions: [transaction({ fees: [] })] }] };
+  });
+  const result = await exact.syncExactPaymentFeeOrders(supabase, [gid]);
+  assert.deepEqual(result, { processed: 1, covered: 0, requestedOrderIds: [gid] });
+  assert.equal(supabase.calls.writes.length, 1);
+  assert.equal(supabase.calls.writes[0].name, "record_shopify_payment_fees");
+  assert.equal(supabase.calls.writes[0].payload.fee_records.length, 0);
+  assert.equal(supabase.calls.writes[0].payload.coverage_snapshots[0].coverage_state, "unresolved_missing_fee");
+});
+
+test("exact recovery persists only exact governed Shopify fee evidence", async () => {
+  const gid = "gid://shopify/Order/1328";
+  const supabase = exactRecoverySupabase([{ id: "canonical-1328", shopify_order_id: gid, shopify_created_at: at }]);
+  const exact = loadPaymentFees(async () => ({ shop: { currencyCode: "GBP", ianaTimezone: "Europe/London" }, nodes: [{ id: gid, transactions: [transaction()] }] }));
+  const result = await exact.syncExactPaymentFeeOrders(supabase, [gid]);
+  assert.equal(result.covered, 1);
+  assert.equal(supabase.calls.writes[0].payload.coverage_snapshots[0].coverage_state, "covered");
+  assert.equal(supabase.calls.writes[0].payload.fee_records[0].fee_amount, "1.44");
+});
+
+test("a partial exact Shopify response fails closed before governed fee persistence", async () => {
+  const first = "gid://shopify/Order/1306", second = "gid://shopify/Order/1328";
+  const supabase = exactRecoverySupabase([{ id: "canonical-1306", shopify_order_id: first, shopify_created_at: at }, { id: "canonical-1328", shopify_order_id: second, shopify_created_at: at }]);
+  const exact = loadPaymentFees(async () => ({ shop: { currencyCode: "GBP", ianaTimezone: "Europe/London" }, nodes: [{ id: first, transactions: [transaction()] }, null] }));
+  await assert.rejects(() => exact.syncExactPaymentFeeOrders(supabase, [first, second]), /incomplete/);
+  assert.equal(supabase.calls.writes.length, 0);
+});
+
+test("an unsupported exact order mapping fails closed before Shopify or fee persistence", async () => {
+  const gid = "gid://shopify/Order/1306";
+  const calls = { writes: 0 };
+  const supabase = { from: () => ({ select() { return this; }, eq() { return this; }, async in() { return { data: [], error: null }; } }), async rpc() { calls.writes++; return { error: null }; } };
+  let fetched = false;
+  const exact = loadPaymentFees(async () => { fetched = true; throw new Error("must not fetch"); });
+  await assert.rejects(() => exact.syncExactPaymentFeeOrders(supabase, [gid]), /mapping is incomplete/);
+  assert.equal(fetched, false);
+  assert.equal(calls.writes, 0);
+});
+
+test("Sales Workbook recovery route is owner/operator-only, exact-order-only, and never accesses workbook storage", async () => {
+  const route = await readFile(new URL("apps/web/app/api/sales-workbook/payment-fee-recovery/route.ts", root), "utf8");
+  for (const text of ["requireOperatorRole(\"owner\", \"operator\")", "VAULT_ORDER_SYNC_SECRET", "shopify-payment-fee-retry", "X-Vault-Sync-Secret", "shopifyOrderIds", "MAX_EXACT_ORDERS = 5"]) assert.ok(route.includes(text));
+  assert.doesNotMatch(route, /storage|SalesWorkbookRepository|XLSX|backfill|tracking-repair/i);
 });

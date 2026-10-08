@@ -2,7 +2,9 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { shopifyGraphQL } from "./graphql.ts";
 
 export const PAYMENT_FEE_BATCH_SIZE = 50;
+export const MAX_EXACT_PAYMENT_FEE_ORDERS = 5;
 type Order = { id: string; shopify_order_id: string; shopify_created_at: string };
+type PaymentFeeRequest = ReturnType<typeof parsePaymentFeeRequest> & { unresolvedOnly?: boolean };
 type Money = { amount: string; currencyCode: string };
 type Fee = { id: string; type: string; amount: Money; taxAmount: Money | null };
 type Transaction = { id: string; kind: string; status: string; gateway: string; paymentId: string | null; processedAt: string | null; fees: Fee[] };
@@ -13,6 +15,17 @@ const successfulChargeKinds = new Set(["SALE", "CAPTURE"]);
 const reversalKinds = new Set(["REFUND", "VOID"]);
 const validMoney = (money: Money | null | undefined) => !!money && /^\d+(\.\d{1,2})?$/.test(money.amount) && /^[A-Z]{3}$/.test(money.currencyCode);
 const isGbp = (money: Money | null | undefined) => !!money && money.currencyCode === "GBP";
+const shopifyOrderGid = /^gid:\/\/shopify\/Order\/[1-9][0-9]*$/;
+
+/** Strictly bounded recovery input. Duplicates are rejected rather than silently
+ * changing an operator's requested evidence set. */
+export function parseExactPaymentFeeOrderIds(input: unknown): string[] {
+  if (!Array.isArray(input) || input.length < 1 || input.length > MAX_EXACT_PAYMENT_FEE_ORDERS ||
+      input.some(id => typeof id !== "string" || !shopifyOrderGid.test(id)) || new Set(input).size !== input.length) {
+    throw new Error("Exact payment-fee recovery requires 1-5 unique Shopify Order GIDs");
+  }
+  return input;
+}
 
 export function parsePaymentFeeRequest(input: unknown, now = new Date()) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid payment-fee request");
@@ -51,33 +64,75 @@ export function classifyPaymentFees(order: ShopifyOrder, canonicalOrderId: strin
   return { coverage: { order_id: canonicalOrderId, shopify_order_id: order.id, coverage_state: state, fetched_at: fetchedAt }, records };
 }
 
-export async function syncPaymentFeeBatch(supabase: SupabaseClient, input: ReturnType<typeof parsePaymentFeeRequest>) {
-  let selection = supabase.from("vault_shopify_orders").select("id,shopify_order_id,shopify_created_at").eq("source", "shopify")
-    .gte("shopify_created_at", input.createdFrom).lt("shopify_created_at", input.createdBefore).is("cancelled_at", null)
-    .eq("metadata->>test", false).order("id").limit(PAYMENT_FEE_BATCH_SIZE + 1);
-  if (input.after) selection = selection.gt("id", input.after);
-  const { data, error } = await selection;
-  if (error || !data) throw new Error("Unable to select payment-fee orders");
-  const orders = (data as Order[]).slice(0, PAYMENT_FEE_BATCH_SIZE);
-  const next = data.length > PAYMENT_FEE_BATCH_SIZE ? orders.at(-1)!.id : null;
-  if (!orders.length) return { processed: 0, covered: 0, next, ...input };
-  if (orders.some(order => !/^gid:\/\/shopify\/Order\/[1-9][0-9]*$/.test(order.shopify_order_id))) throw new Error("Invalid canonical order identity");
+async function capturePaymentFeesForOrders(supabase: SupabaseClient, orders: Order[]) {
+  if (orders.some(order => !shopifyOrderGid.test(order.shopify_order_id))) throw new Error("Invalid canonical order identity");
   const response = await shopifyGraphQL<{ shop: { currencyCode: string; ianaTimezone: string }; nodes: ShopifyOrder[] }>(
     `query VaultPaymentFees($ids: [ID!]!) { shop { currencyCode ianaTimezone } nodes(ids: $ids) { ... on Order { id transactions { id kind status gateway paymentId processedAt fees { id type amount { amount currencyCode } taxAmount { amount currencyCode } } } } } }`,
     { ids: orders.map(order => order.shopify_order_id) }, Date.now() + 25000);
   if (response.shop.currencyCode !== "GBP" || response.shop.ianaTimezone !== "Europe/London" || response.nodes.length !== orders.length) throw new Error("Payment-fee source unavailable or incompatible currency/timezone");
   const byId = new Map(response.nodes.filter((order): order is Exclude<ShopifyOrder, null> => order !== null).map(order => [order.id, order]));
+  if (byId.size !== orders.length || orders.some(order => !byId.has(order.shopify_order_id))) throw new Error("Payment-fee source response is incomplete");
   const fetchedAt = new Date().toISOString();
-  const snapshots = orders.map(order => classifyPaymentFees(byId.get(order.shopify_order_id) ?? null, order.id, fetchedAt));
+  const snapshots = orders.map(order => classifyPaymentFees(byId.get(order.shopify_order_id)!, order.id, fetchedAt));
   const records = snapshots.flatMap(snapshot => snapshot.records);
   if (new Set(records.map(record => `${record.shopify_order_transaction_id}:${record.fee_id}`)).size !== records.length) throw new Error("Duplicate Shopify transaction fee batch");
   const { error: writeError } = await supabase.rpc("record_shopify_payment_fees", { fee_records: records, coverage_snapshots: snapshots.map(snapshot => snapshot.coverage) });
   if (writeError) throw new Error("Unable to persist Shopify payment fees");
-  return { ...input, processed: orders.length, covered: snapshots.filter(snapshot => snapshot.coverage.coverage_state === "covered").length, next };
+  return { processed: orders.length, covered: snapshots.filter(snapshot => snapshot.coverage.coverage_state === "covered").length };
+}
+
+export async function syncExactPaymentFeeOrders(supabase: SupabaseClient, requestedOrderIds: unknown) {
+  const shopifyOrderIds = parseExactPaymentFeeOrderIds(requestedOrderIds);
+  const { data, error } = await supabase.from("vault_shopify_orders").select("id,shopify_order_id,shopify_created_at")
+    .eq("source", "shopify").in("shopify_order_id", shopifyOrderIds);
+  if (error || !data) throw new Error("Unable to select exact payment-fee orders");
+  const orders = data as Order[];
+  const canonicalIds = new Set(orders.map(order => order.shopify_order_id));
+  if (orders.length !== shopifyOrderIds.length || canonicalIds.size !== shopifyOrderIds.length || shopifyOrderIds.some(id => !canonicalIds.has(id))) {
+    throw new Error("Exact payment-fee recovery order mapping is incomplete");
+  }
+  return { ...await capturePaymentFeesForOrders(supabase, orders), requestedOrderIds: shopifyOrderIds };
+}
+
+export async function syncPaymentFeeBatch(supabase: SupabaseClient, input: PaymentFeeRequest) {
+  const selection = input.unresolvedOnly
+    ? supabase.rpc("get_unresolved_shopify_payment_fee_orders", {
+      p_created_from: input.createdFrom,
+      p_created_before: input.createdBefore,
+      p_after: input.after,
+      p_limit: PAYMENT_FEE_BATCH_SIZE + 1,
+    })
+    : (() => {
+      let query = supabase.from("vault_shopify_orders").select("id,shopify_order_id,shopify_created_at").eq("source", "shopify")
+        .gte("shopify_created_at", input.createdFrom).lt("shopify_created_at", input.createdBefore).is("cancelled_at", null)
+        .eq("metadata->>test", false).order("id").limit(PAYMENT_FEE_BATCH_SIZE + 1);
+      if (input.after) query = query.gt("id", input.after);
+      return query;
+    })();
+  const { data, error } = await selection;
+  if (error || !data) throw new Error("Unable to select payment-fee orders");
+  const orders = (data as Order[]).slice(0, PAYMENT_FEE_BATCH_SIZE);
+  const next = data.length > PAYMENT_FEE_BATCH_SIZE ? orders.at(-1)!.id : null;
+  if (!orders.length) return { processed: 0, covered: 0, next, ...input };
+  return { ...input, ...await capturePaymentFeesForOrders(supabase, orders), next };
 }
 
 export async function refreshPaymentFees(supabase: SupabaseClient) {
   let input = parsePaymentFeeRequest({});
   for (let page = 0; page < 4; page++) { const result = await syncPaymentFeeBatch(supabase, input); if (!result.next) return { complete: true }; input = { ...input, after: result.next }; }
   return { complete: false, ...input };
+}
+
+export async function refreshUnresolvedPaymentFees(supabase: SupabaseClient) {
+  let input: PaymentFeeRequest = { ...parsePaymentFeeRequest({}), unresolvedOnly: true };
+  let processed = 0;
+  let covered = 0;
+  for (let page = 0; page < 4; page++) {
+    const result = await syncPaymentFeeBatch(supabase, input);
+    processed += result.processed;
+    covered += result.covered;
+    if (!result.next) return { complete: true, processed, covered };
+    input = { ...input, after: result.next };
+  }
+  return { complete: false, processed, covered, ...input };
 }
