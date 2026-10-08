@@ -2,6 +2,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import { shopifyGraphQL } from "./graphql.ts";
 import { buildFinancialEvidence, persistFinancialEvidence } from "./financial-evidence.ts";
+import { persistFulfillmentTrackingEvidence, type FulfillmentTrackingEvidence } from "./fulfillment-tracking-evidence.ts";
 
 const ORDER_PAGE_SIZE = 50;
 const MAX_ORDER_PAGES = 50;
@@ -334,7 +335,7 @@ export async function fetchShopifyOrderById(
 export async function upsertShopifyOrder(
   supabase: SupabaseClient,
   order: ShopifyOrderNode,
-  options: { omitCustomerData?: boolean; demandEvidenceMode?: "prospective" | "legacy" } = {},
+  options: { omitCustomerData?: boolean; demandEvidenceMode?: "prospective" | "legacy"; trackingEvidence?: FulfillmentTrackingEvidence } = {},
 ): Promise<{ orderId: string; linesSynced: number }> {
   assertCompleteOrder(order);
 
@@ -346,6 +347,9 @@ export async function upsertShopifyOrder(
   // the fail-closed Stage 1 evidence it requires.
   const financialEvidence = buildFinancialEvidence(order, syncedAt, financialMode);
   await persistFinancialEvidence(supabase, financialEvidence);
+  if (!options.trackingEvidence || options.trackingEvidence.completeness.shopify_order_id !== order.id || options.trackingEvidence.capture_mode !== financialMode) throw new Error("FULFILLMENT_TRACKING_EVIDENCE_REQUIRED");
+  // Tracking follows the same pre-canonical admission rule as financial evidence.
+  await persistFulfillmentTrackingEvidence(supabase, options.trackingEvidence);
   const { data: savedOrder, error: orderError } = await supabase
     .from("vault_shopify_orders")
     .upsert(
@@ -432,7 +436,6 @@ export async function upsertShopifyOrder(
     }
   }
   await upsertShopifyDemandEvidence(supabase, order, options.demandEvidenceMode ?? "prospective", syncedAt);
-
   return {
     orderId: savedOrder.id,
     linesSynced: lineRows.length,

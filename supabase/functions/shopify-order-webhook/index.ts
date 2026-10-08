@@ -6,6 +6,7 @@ import {
 } from "../_shared/shopify/orders.ts";
 import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
 import { cleanShopDomain, SUPPORTED_ORDER_WEBHOOK_TOPICS, verifyShopifyWebhookHmac } from "../_shared/shopify/webhook-verification.ts";
+import { probeFulfillmentTrackingEvidence } from "../_shared/shopify/fulfillment-tracking-evidence.ts";
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
@@ -128,7 +129,8 @@ Deno.serve(async (request: Request) => {
       throw previousOrderError;
     }
 
-    await upsertShopifyOrder(supabase, order);
+    const trackingEvidence = await probeFulfillmentTrackingEvidence([order.id], "prospective");
+    await upsertShopifyOrder(supabase, order, { trackingEvidence: trackingEvidence.get(order.id) });
 
     const { error: completionError } = await supabase
       .from("vault_shopify_webhook_deliveries")

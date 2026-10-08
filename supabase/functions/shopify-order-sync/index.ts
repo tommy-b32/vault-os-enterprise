@@ -7,6 +7,7 @@ import {
 } from "../_shared/shopify/orders.ts";
 import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
 import { parseOrderSyncRequest } from "./request.ts";
+import { fulfillmentTrackingBatches, probeFulfillmentTrackingEvidence, type FulfillmentTrackingEvidence } from "../_shared/shopify/fulfillment-tracking-evidence.ts";
 
 const DEFAULT_SYNC_DAYS = 7;
 const MAX_SYNC_DAYS = 90;
@@ -124,12 +125,19 @@ Deno.serve(async (request: Request) => {
           historicalWindow.created_before,
         )
       : await fetchRecentShopifyOrders(updatedSince as string, reconciliationBefore as string);
+    const trackingMode = historicalWindow ? "historical" : "prospective";
+    const trackingEvidence = new Map<string, FulfillmentTrackingEvidence>();
+    for (const batch of fulfillmentTrackingBatches(orders.map((order) => order.id))) {
+      const evidence = await probeFulfillmentTrackingEvidence(batch, trackingMode, startedAt);
+      for (const [orderId, payload] of evidence) trackingEvidence.set(orderId, payload);
+    }
     let linesSynced = 0;
 
     for (const order of orders) {
       const result = await upsertShopifyOrder(supabase, order, {
         omitCustomerData: Boolean(historicalWindow),
         demandEvidenceMode: historicalWindow ? "legacy" : "prospective",
+        trackingEvidence: trackingEvidence.get(order.id),
       });
       linesSynced += result.linesSynced;
     }
