@@ -267,7 +267,13 @@ export async function fetchExactShopifyOrders(
 
   const data = await shopifyGraphQL<ExactOrderNodesResponse>(
     `query VaultExactOrders($orderIds: [ID!]!) {
-      nodes(ids: $orderIds) { ... on Order { ${ORDER_FIELDS} email customer { id displayName } } }
+      nodes(ids: $orderIds) {
+        ... on Order {
+          ${ORDER_FIELDS}
+          email
+          customer { id displayName }
+        }
+      }
     }`,
     { orderIds: shopifyOrderIds },
   );

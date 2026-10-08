@@ -13,6 +13,17 @@ import { parseOrderSyncRequest } from "../../../supabase/functions/shopify-order
 const functionUrl = new URL("../../../supabase/functions/shopify-order-sync/index.ts", import.meta.url);
 const ordersUrl = new URL("../../../supabase/functions/_shared/shopify/orders.ts", import.meta.url);
 
+function assertBalancedGraphqlDocument(document) {
+  const pairs = { "{": "}", "(": ")", "[": "]" };
+  const closers = new Set(Object.values(pairs));
+  const stack = [];
+  for (const character of document) {
+    if (pairs[character]) stack.push(character);
+    else if (closers.has(character)) assert.equal(character, pairs[stack.pop()], `unexpected GraphQL delimiter ${character}`);
+  }
+  assert.deepEqual(stack, [], "GraphQL document must close every selection and variable definition");
+}
+
 test("default reconciliation request remains unchanged", async () => {
   assert.deepEqual(parseOrderSyncRequest({}), { mode: "reconciliation" });
   const [handler, orders] = await Promise.all([
@@ -192,6 +203,9 @@ test("exact Shopify fetch returns only every requested order in request order an
   assert.deepEqual(calls[0].variables, { orderIds: requested });
   assert.match(calls[0].query, /nodes\(ids: \$orderIds\)/);
   assert.doesNotMatch(calls[0].query, /\borders\s*\(/);
+  assert.match(calls[0].query, /^query VaultExactOrders\(\$orderIds: \[ID!\]!\) \{/);
+  assert.match(calls[0].query, /\n\s*}\s*$/);
+  assertBalancedGraphqlDocument(calls[0].query);
 
   const incomplete = await loadOrders(async () => ({ nodes: [{ ...fixture(), id: requested[0] }, null] }));
   await assert.rejects(incomplete.fetchExactShopifyOrders(requested), /EXACT_SHOPIFY_ORDERS_INCOMPLETE/);
