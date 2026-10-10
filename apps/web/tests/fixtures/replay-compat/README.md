@@ -12,6 +12,10 @@ Apply the shim only after `20260904120000_shopify_analytics_daily.sql` and befor
 
 `20260721120000_historical_product_cost_currency_compat.sql` is a replay-only recovery of the schema evolution documented in `database/019_product_cost_currency.sql` (Sprint 021.2). It belongs after the replay legacy baseline and before forward migrations. It is not an authoritative Supabase migration and must never be copied into `supabase/migrations`.
 
+## Historical catalogue foundations
+
+`20260722000000_historical_catalogue_intelligence_foundation.sql` is a replay-only reconstruction of historically source-backed structural foundations. `20260722010000_compatibility_recovered_style_catalogue.sql` is a recovered compatibility view. Stage them, in that order, after `20260721000000` and before `20260803000000` by running `scripts/baseline-replay/Stage-ReplayHistoricalFoundations.ps1` against the isolated replay tree. Neither file is an authoritative production migration or may be repaired into production history.
+
 It adds the historical constrained `vault_product_costs.exchange_rate_to_gbp` field, rebuilds both commercial views with supplier-currency and GBP cost stages, and restores the two legacy-view fields required unchanged by `20260927000000_canonical_realised_shopify_asp.sql`: `exchange_rate_to_gbp` and `landed_cost_per_pack_gbp`.
 
 ## Inert Vault-secrets replay compatibility

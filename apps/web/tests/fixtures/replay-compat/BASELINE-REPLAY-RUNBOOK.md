@@ -34,6 +34,8 @@ The staged tree contains all authoritative migrations plus these staged-only com
 | --- | --- | --- | --- |
 | 20260714000000 | `vault_legacy_schema_baseline.sql` | Replay baseline, not forward production history | First |
 | 20260721120000 | historical product-cost currency compatibility | Recreates documented historical schema transition | After baseline, before forward migrations |
+| 20260722000000 | historical catalogue intelligence foundation | Reconstructed historical structural foundation | After `20260721000000`, before `20260803000000` |
+| 20260722010000 | recovered style catalogue compatibility | Recovered production-compatible view | After `20260722000000`, before `20260803000000` |
 | 20260807500000 | inert Vault secrets | Provides inert values required by historical schedules | Before schedule-dependent migrations |
 | 20260904130000 | analytics cron job-ID shim | Remaps the replay analytics job to historical ID 9 | After `20260904120000`; handled manually |
 | 20261003120000 | decision-memory scheduler-secret shim | Supplies the isolated inert scheduler secret | After `20261003000000`, before `20261004000000` |
@@ -43,6 +45,8 @@ The staged tree contains all authoritative migrations plus these staged-only com
 | 20261047500000 | Exclusive tee operational-profile fixture | Restores the verified profile and 15 settings | After `20261047400000`, before `20261048000000` |
 
 The five `202610...` entries described as fixtures and all three SQL shims are replay-only. They must never be deployed as authoritative migrations. The source copies live in `apps/web/tests/fixtures/replay-compat`; the staged copies are only in `.temp/supabase-baseline-replay/supabase/migrations`.
+
+`20260722000000_historical_catalogue_intelligence_foundation.sql` and `20260722010000_compatibility_recovered_style_catalogue.sql` are replay-only foundations. Stage them in that order after the normal `20260721000000` migration and before `20260803000000`; never add them to production migration history.
 
 `20260807500000_replay_inert_vault_secrets.sql` creates only local inert placeholder Vault values required by historical schedule validation. It contains no real production secrets and is safe only with this isolated replay's server-level `cron.launch_active_jobs = off` control. Never deploy it as an authoritative production migration.
 
@@ -80,6 +84,12 @@ docker exec vault-os-baseline-replay-db-replay psql -U postgres -d postgres -Atq
 Expected: `storage.buckets|storage.objects|storage.migrations`.
 
 ### 4. Run the CLI-managed replay
+
+Stage the two replay-only historical foundations exactly once before the forward migration command:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File "$wrapperScripts\Stage-ReplayHistoricalFoundations.ps1" -ReplayRoot $replay
+```
 
 ```powershell
 supabase.cmd migration up --include-all --db-url "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
