@@ -66,6 +66,13 @@ test("refunded/cancelled orders are conservative and older exceptions are exclud
   assert.equal(result.targetOrderRange, "1251-1329");
 });
 
+test("event-driven proposals accept only their explicit affected order scope", async () => {
+  const { buildBackfillProposal } = await moduleUnderTest();
+  const result = buildBackfillProposal([order({ orderNumber: "2001" }), order({ orderNumber: "2002" })], ["2002"]);
+  assert.deepEqual(result.proposals.map(proposal => proposal.orderNumber), ["2002"]);
+  assert.equal(result.targetOrderRange, "2002-2002");
+});
+
 test("backfill proposal route is read-only and uses bounded protected canonical evidence", async () => {
   const [source, service, route, migration] = await Promise.all([readFile(new URL("lib/sales-workbook/BackfillProposal.ts", root), "utf8"), readFile(new URL("lib/sales-workbook/BackfillProposalService.ts", root), "utf8"), readFile(new URL("app/api/sales-workbook/backfill-proposal/route.ts", root), "utf8"), readFile(new URL("../../supabase/migrations/20261095000000_sales_workbook_bounded_verified_allocation_query.sql", root), "utf8")]);
   for (const text of ["vault_shopify_order_lines", "vault_shopify_resolved_line_discount_evidence", "get_verified_product_profitability_allocations_for_orders", "requireOperatorRole(\"owner\", \"operator\")", "canonical_shopify_fulfilment_status"]) assert.ok(`${source}${service}${route}${migration}`.includes(text));

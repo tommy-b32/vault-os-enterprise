@@ -101,15 +101,16 @@ function proposalFor(order: BackfillProposalOrderInput): BackfillProposalOrder {
   return { orderNumber: normalizedOrderNumber ?? order.orderNumber, classification: issues.size ? "requires_review" : "ready", issues: [...issues].sort(), proposedRows: rows };
 }
 
-export function buildBackfillProposal(orders: BackfillProposalOrderInput[]) {
-  const proposals = orders.filter(order => inTargetRange(order.orderNumber)).map(proposalFor).sort((left, right) => Number(left.orderNumber) - Number(right.orderNumber));
+export function buildBackfillProposal(orders: BackfillProposalOrderInput[], allowedOrderNumbers?: Iterable<string>) {
+  const allowed = allowedOrderNumbers ? new Set([...allowedOrderNumbers].map(normalizeWorkbookOrderNumber).filter((value): value is string => value !== null)) : null;
+  const proposals = orders.filter(order => allowed ? allowed.has(normalizeWorkbookOrderNumber(order.orderNumber) ?? "") : inTargetRange(order.orderNumber)).map(proposalFor).sort((left, right) => Number(left.orderNumber) - Number(right.orderNumber));
   const unresolvedFieldCounts: Record<string, number> = {};
   for (const proposal of proposals) for (const row of proposal.proposedRows) for (const [field, value] of Object.entries(row)) {
     if ((value as ProposalField<unknown>).status === "unresolved") unresolvedFieldCounts[field] = (unresolvedFieldCounts[field] ?? 0) + 1;
   }
   return {
-    targetOrderRange: BACKFILL_TARGET_ORDER_RANGE,
-    targetOrderCount: BACKFILL_TARGET_ORDER_COUNT,
+    targetOrderRange: allowed?.size ? `${Math.min(...[...allowed].map(Number))}-${Math.max(...[...allowed].map(Number))}` : BACKFILL_TARGET_ORDER_RANGE,
+    targetOrderCount: allowed?.size ?? BACKFILL_TARGET_ORDER_COUNT,
     proposalOrderCount: proposals.length,
     proposalRowCount: proposals.reduce((total, proposal) => total + proposal.proposedRows.length, 0),
     readyOrderCount: proposals.filter(proposal => proposal.classification === "ready").length,

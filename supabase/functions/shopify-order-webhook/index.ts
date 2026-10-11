@@ -7,6 +7,7 @@ import {
 import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
 import { cleanShopDomain, SUPPORTED_ORDER_WEBHOOK_TOPICS, verifyShopifyWebhookHmac } from "../_shared/shopify/webhook-verification.ts";
 import { probeFulfillmentTrackingEvidence } from "../_shared/shopify/fulfillment-tracking-evidence.ts";
+import { triggerSalesWorkbookOrderReady } from "../_shared/shopify/sales-workbook-automation.ts";
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
@@ -131,6 +132,16 @@ Deno.serve(async (request: Request) => {
 
     const trackingEvidence = await probeFulfillmentTrackingEvidence([order.id], "prospective");
     await upsertShopifyOrder(supabase, order, { trackingEvidence: trackingEvidence.get(order.id) });
+
+    // The workbook worker evaluates only this canonical order and writes only
+    // a fully governed READY proposal. A failure never rolls back ingestion.
+    try {
+      await triggerSalesWorkbookOrderReady([order.number]);
+    } catch {
+      // Canonical ingestion is authoritative. A later bounded retry can
+      // safely retry this idempotent workbook projection.
+      console.error("[Vault Shopify Order Webhook] Sales workbook automation failed");
+    }
 
     const { error: completionError } = await supabase
       .from("vault_shopify_webhook_deliveries")

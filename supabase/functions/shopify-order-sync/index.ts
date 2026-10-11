@@ -9,6 +9,7 @@ import {
 import { emitCommandCentreRefreshEvent } from "../_shared/command-centre-refresh.ts";
 import { parseOrderSyncRequest } from "./request.ts";
 import { fulfillmentTrackingBatches, probeFulfillmentTrackingEvidence, type FulfillmentTrackingEvidence } from "../_shared/shopify/fulfillment-tracking-evidence.ts";
+import { triggerSalesWorkbookOrderReady } from "../_shared/shopify/sales-workbook-automation.ts";
 
 const DEFAULT_SYNC_DAYS = 7;
 const MAX_SYNC_DAYS = 90;
@@ -158,6 +159,17 @@ Deno.serve(async (request: Request) => {
         trackingEvidence: trackingEvidence.get(order.id),
       });
       linesSynced += result.linesSynced;
+    }
+    // Keep a reconciliation invocation bounded. Larger syncs are ingested
+    // safely and await their next bounded event instead of replaying history.
+    for (let index = 0; index < orders.length; index += 25) {
+      try {
+        await triggerSalesWorkbookOrderReady(orders.slice(index, index + 25).map(order => order.number));
+      } catch {
+        // Do not invalidate a completed canonical reconciliation because its
+        // idempotent workbook projection must be retried separately.
+        console.error("[Vault Shopify Order Sync] Sales workbook automation failed");
+      }
     }
 
     const completedAt = new Date().toISOString();

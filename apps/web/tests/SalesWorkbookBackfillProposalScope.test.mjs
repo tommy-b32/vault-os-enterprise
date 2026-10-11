@@ -32,3 +32,11 @@ test("scope normalizes workbook order display values without excluding unrelated
   assert.equal(result.candidateOrderNumbers.includes("1329"), false);
   assert.equal(result.candidateOrderNumbers.includes("1252"), true);
 });
+
+test("event-driven scope is limited to affected non-existing orders and rejects broad replay input", async () => {
+  const { affectedOrderCandidateScope } = await scopeModule();
+  const scoped = affectedOrderCandidateScope(["#2002", "002001", "2002"], ["2001"]);
+  assert.deepEqual(scoped.candidateOrderNumbers, ["2002"]);
+  assert.equal(scoped.excludedExistingOrderCount, 1);
+  assert.throws(() => affectedOrderCandidateScope(Array.from({ length: 26 }, (_, index) => String(index + 1))));
+});
