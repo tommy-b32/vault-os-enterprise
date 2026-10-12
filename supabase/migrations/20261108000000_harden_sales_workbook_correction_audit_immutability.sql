@@ -1,0 +1,6 @@
+revoke update, delete on public.vault_sales_workbook_order_corrections from service_role;
+revoke update, delete on public.vault_sales_workbook_order_correction_applications from service_role;
+
+create trigger vault_sales_workbook_order_correction_applications_immutable
+before update or delete on public.vault_sales_workbook_order_correction_applications
+for each row execute function public.reject_sales_workbook_order_correction_mutation();
