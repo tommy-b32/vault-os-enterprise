@@ -10,8 +10,14 @@ const same = (provided: string | null, configured: string | undefined) => {
 
 // This intentionally performs no recovery, database, Storage, or Shopify work.
 export async function GET(request: Request) {
-  if (!same(request.headers.get("x-vault-sales-workbook-automation-secret"), process.env.SALES_WORKBOOK_AUTOMATION_SECRET)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const configured = process.env.SALES_WORKBOOK_AUTOMATION_SECRET;
+  const provided = request.headers.get("x-vault-sales-workbook-automation-secret");
+  if (!same(provided, configured)) {
+    return NextResponse.json({
+      configured_secret_present: Boolean(configured),
+      configured_secret_length_matches_64: configured?.length === 64,
+      provided_secret_length_matches_64: provided?.length === 64,
+    }, { status: 401 });
   }
 
   return NextResponse.json({ status: "ok" });
