@@ -15,7 +15,7 @@ type BackfillAuditMetadata={sourceWorkbookVersion:number;newWorkbookVersion:numb
 export function createSalesWorkbookRepository(supabaseAdmin:typeof productionSupabaseAdmin){
 const audit=async(id:string,v:number,event:"download",operator:string,metadata:Record<string,unknown>={})=>{const {error}=await supabaseAdmin.from("vault_sales_workbook_audit_events").insert({workbook_id:id,version:v,event_type:event,operator_id:operator,metadata:auditMetadata(metadata)});if(error)throw new Error(error.message);};
 return {
- async recordAutomaticSyncOutcome(input:{orderNumbers:Iterable<string>;status:"published"|"deferred"|"failed";publishedOrderNumbers?:Iterable<string>;deferredReasons?:Record<string,string[]>;errorCode?:string}){
+  async recordAutomaticSyncOutcome(input:{orderNumbers:Iterable<string>;status:"published"|"deferred"|"failed";publishedOrderNumbers?:Iterable<string>;deferredReasons?:Record<string,string[]>;errorCode?:string;failureStage?:"WORKBOOK_READ"|"PROPOSAL_RPC"|"XLSX_PROCESSING"|"PENDING_WRITE"|"VERIFICATION"|"ACTIVATION"}){
   const orderNumbers=[...new Set([...input.orderNumbers].map(value=>String(value).trim()).filter(value=>/^\d+$/.test(value)))];
   const published=[...new Set([...(input.publishedOrderNumbers??[])].map(value=>String(value).trim()).filter(value=>/^\d+$/.test(value)))];
   const failure=input.status==="failed"&&input.errorCode&&/^[A-Z0-9_]{1,80}$/.test(input.errorCode)?input.errorCode:null;
@@ -27,7 +27,8 @@ return {
   const reasons=Object.fromEntries(Object.entries(input.deferredReasons??{}).filter(([order,values])=>/^\d+$/.test(order)&&Array.isArray(values)&&values.every(value=>/^[A-Z0-9_]{1,160}$/.test(value))).slice(0,25));
   if(input.status==="deferred"&&Object.keys(reasons).length){const rows=Object.entries(reasons).map(([order_number,reason_codes])=>({workbook_id:data.id,order_number,reason_codes,next_retry_at:new Date().toISOString()}));const{error:queueError}=await supabaseAdmin.from("vault_sales_workbook_deferred_orders").upsert(rows,{onConflict:"workbook_id,order_number"});if(queueError)throw new Error(queueError.message);}
   if(published.length){const{error:clearError}=await supabaseAdmin.from("vault_sales_workbook_deferred_orders").delete().eq("workbook_id",data.id).in("order_number",published);if(clearError)throw new Error(clearError.message);}
-  const{error:auditError}=await supabaseAdmin.from("vault_sales_workbook_audit_events").insert({workbook_id:data.id,version:data.current_version,event_type:"automatic_sync_outcome",operator_id:data.uploaded_by_operator_id,metadata:{status:input.status,orders:orderNumbers.length,published:published.length,deferred:Object.keys(reasons).length,failure_code:failure}});if(auditError)throw new Error(auditError.message);
+   const failureStage=input.status==="failed"&&input.failureStage&&["WORKBOOK_READ","PROPOSAL_RPC","XLSX_PROCESSING","PENDING_WRITE","VERIFICATION","ACTIVATION"].includes(input.failureStage)?input.failureStage:null;
+   const{error:auditError}=await supabaseAdmin.from("vault_sales_workbook_audit_events").insert({workbook_id:data.id,version:data.current_version,event_type:"automatic_sync_outcome",operator_id:data.uploaded_by_operator_id,metadata:{status:input.status,orders:orderNumbers.length,published:published.length,deferred:Object.keys(reasons).length,failure_code:failure,failure_stage:failureStage}});if(auditError)throw new Error(auditError.message);
   return data as SalesWorkbookMetadata;
  },
  async getCurrentWorkbook():Promise<SalesWorkbookMetadata|null>{const {data,error}=await supabaseAdmin.from("vault_sales_workbooks").select("*").order("last_modified_at",{ascending:false}).limit(1).maybeSingle();if(error)throw new Error(error.message);return data as SalesWorkbookMetadata|null;},
