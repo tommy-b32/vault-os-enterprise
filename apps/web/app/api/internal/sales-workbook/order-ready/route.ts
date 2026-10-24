@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
-import { runOrderReadyWorkbookWorker } from "@/lib/sales-workbook/OrderReadyWorkbookWorker";
+import { runOrderReadyWorkbookWorker, SalesWorkbookWorkerFailure } from "@/lib/sales-workbook/OrderReadyWorkbookWorker";
 import { SalesWorkbookRepository } from "@/lib/sales-workbook/SalesWorkbookRepository";
 import { SalesWorkbookConflictError } from "@/lib/sales-workbook/types";
 
@@ -23,7 +23,7 @@ export function createOrderReadyHandler(dependencies:OrderReadyDependencies=prod
     await dependencies.repository.recordAutomaticSyncOutcome({orderNumbers,status,publishedOrderNumbers:result.writtenOrderNumbers,deferredReasons:result.deferredReasons});
     return NextResponse.json({...result,status});
   } catch (error) {
-    try { await dependencies.repository.recordAutomaticSyncOutcome({orderNumbers:body.orderNumbers.map(String),status:"failed",errorCode:error instanceof SalesWorkbookConflictError?"WORKBOOK_CONFLICT":"WORKBOOK_WORKER_FAILED"}); } catch { console.error("Sales workbook outcome recording failed"); }
+    try { await dependencies.repository.recordAutomaticSyncOutcome({orderNumbers:body.orderNumbers.map(String),status:"failed",errorCode:error instanceof SalesWorkbookConflictError?"WORKBOOK_CONFLICT":"WORKBOOK_WORKER_FAILED",failureStage:error instanceof SalesWorkbookWorkerFailure?error.stage:undefined}); } catch { console.error("Sales workbook outcome recording failed"); }
     if (error instanceof SalesWorkbookConflictError) return NextResponse.json({ error: "Sales workbook changed; event may be retried" }, { status: 409 });
     console.error("Sales workbook order-ready worker failed", { name: error instanceof Error ? error.name : "Unknown" });
     return NextResponse.json({ error: "Sales workbook order-ready worker failed" }, { status: 500 });
