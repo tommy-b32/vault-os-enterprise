@@ -4,7 +4,7 @@ alter table public.vault_sales_workbooks
   drop constraint if exists vault_sales_workbooks_last_sync_status_check;
 alter table public.vault_sales_workbooks
   add constraint vault_sales_workbooks_last_sync_status_check
-  check (last_sync_status in ('never', 'published', 'deferred', 'failed'));
+  check (last_sync_status in ('never', 'success', 'published', 'deferred', 'failed'));
 
 create table public.vault_sales_workbook_deferred_orders (
   workbook_id uuid not null references public.vault_sales_workbooks(id) on delete cascade,
