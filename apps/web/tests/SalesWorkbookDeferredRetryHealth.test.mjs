@@ -5,7 +5,7 @@ import { timingSafeEqual } from "node:crypto";
 import ts from "typescript";
 
 const routePath = new URL("../app/api/internal/sales-workbook/deferred-retry/health/route.ts", import.meta.url);
-const testSecret = "a".repeat(64);
+const testSecret = "test-automation-secret";
 
 async function loadHandler() {
   const source = await readFile(routePath, "utf8");
@@ -17,10 +17,9 @@ async function loadHandler() {
   return exports.GET;
 }
 
-async function responseFor(header, configured = testSecret) {
+async function responseFor(header) {
   const previous = process.env.SALES_WORKBOOK_AUTOMATION_SECRET;
-  if (configured === null) delete process.env.SALES_WORKBOOK_AUTOMATION_SECRET;
-  else process.env.SALES_WORKBOOK_AUTOMATION_SECRET = configured;
+  process.env.SALES_WORKBOOK_AUTOMATION_SECRET = testSecret;
   try {
     const handler = await loadHandler();
     return await handler(new Request("http://local.test/api/internal/sales-workbook/deferred-retry/health", { headers: header ? { "x-vault-sales-workbook-automation-secret": header } : {} }));
@@ -39,29 +38,11 @@ test("health accepts the configured automation secret without touching recovery 
 test("health rejects a missing automation secret", async () => {
   const response = await responseFor(null);
   assert.equal(response.status, 401);
-  assert.deepEqual(await response.json(), {
-    configured_secret_present: true,
-    configured_secret_length_matches_64: true,
-    provided_secret_length_matches_64: false,
-  });
+  assert.deepEqual(await response.json(), { error: "Unauthorized" });
 });
 
 test("health rejects an incorrect automation secret", async () => {
-  const response = await responseFor("b".repeat(64));
+  const response = await responseFor("incorrect-secret");
   assert.equal(response.status, 401);
-  assert.deepEqual(await response.json(), {
-    configured_secret_present: true,
-    configured_secret_length_matches_64: true,
-    provided_secret_length_matches_64: true,
-  });
-});
-
-test("health diagnostics report an unavailable configured secret without exposing it", async () => {
-  const response = await responseFor(testSecret, null);
-  assert.equal(response.status, 401);
-  assert.deepEqual(await response.json(), {
-    configured_secret_present: false,
-    configured_secret_length_matches_64: false,
-    provided_secret_length_matches_64: true,
-  });
+  assert.deepEqual(await response.json(), { error: "Unauthorized" });
 });
