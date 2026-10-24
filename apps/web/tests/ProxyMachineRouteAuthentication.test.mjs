@@ -3,20 +3,30 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   GOVERNED_DECISION_MEMORY_CAPTURE_PATH,
+  SALES_WORKBOOK_DEFERRED_RETRY_HEALTH_PATH,
+  SALES_WORKBOOK_DEFERRED_RETRY_PATH,
   bypassesInteractiveAuthentication,
 } from "../lib/auth/machine-routes.ts";
 
-test("only the exact governed memory capture path bypasses interactive authentication", () => {
+test("only approved exact machine routes bypass interactive authentication", () => {
   assert.equal(
     GOVERNED_DECISION_MEMORY_CAPTURE_PATH,
     "/api/internal/governed-decision-memory/capture",
   );
   assert.equal(bypassesInteractiveAuthentication(GOVERNED_DECISION_MEMORY_CAPTURE_PATH), true);
+  assert.equal(SALES_WORKBOOK_DEFERRED_RETRY_PATH, "/api/internal/sales-workbook/deferred-retry");
+  assert.equal(SALES_WORKBOOK_DEFERRED_RETRY_HEALTH_PATH, "/api/internal/sales-workbook/deferred-retry/health");
+  assert.equal(bypassesInteractiveAuthentication(SALES_WORKBOOK_DEFERRED_RETRY_PATH), true);
+  assert.equal(bypassesInteractiveAuthentication(SALES_WORKBOOK_DEFERRED_RETRY_HEALTH_PATH), true);
 
   for (const pathname of [
     "/api/internal/governed-decision-memory",
     "/api/internal/governed-decision-memory/capture/",
     "/api/internal/governed-decision-memory/capture/test",
+    "/api/internal/sales-workbook/deferred-retry/",
+    "/api/internal/sales-workbook/deferred-retry/health/",
+    "/api/internal/sales-workbook/deferred-retry/health/test",
+    "/api/internal/sales-workbook/order-ready",
     "/api/internal/other",
     "/api/inventory/refresh",
   ]) {
