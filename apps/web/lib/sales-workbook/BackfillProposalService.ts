@@ -3,7 +3,7 @@ import "server-only";
 import { buildBackfillProposal, type BackfillProposalLineInput, type ProposalField } from "./BackfillProposal";
 import { affectedOrderCandidateScope, backfillCandidateScope } from "./BackfillProposalScope";
 import { governedTrackingFieldsByOrder, type GovernedFulfilmentTrackingEvidence } from "./GovernedTracking";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { supabaseAdmin as productionSupabaseAdmin } from "@/lib/supabase-admin";
 
 const unresolved=<T,>(source:string):ProposalField<T>=>({value:null,status:"unresolved",source});
 const proven=<T,>(value:T,source:string):ProposalField<T>=>({value,status:"proven",source});
@@ -16,7 +16,7 @@ const query=<T,>(response:{data:T[]|null;error:unknown})=>{const{data,error}=res
 
 export function resolveGovernedSaleTimeCogs(line:Pick<CanonicalLine,"total_cogs_gbp"|"unit_cogs_gbp"|"cogs_status"|"cogs_history_id"|"cogs_snapshotted_at"|"financial_treatment"|"financial_treatment_status"|"financial_treatment_history_id"|"financial_treatment_snapshotted_at"|"sale_time_direct_cogs_gbp">):{cost:ProposalField<number>;costAndShip:ProposalField<number>} {const trustedNoDirectCogs=line.financial_treatment==="no_direct_cogs_at_sale"&&line.financial_treatment_status==="trusted_no_direct_cogs_at_sale"&&line.financial_treatment_history_id!==null&&line.financial_treatment_snapshotted_at!==null&&Number(line.sale_time_direct_cogs_gbp)===0;if(trustedNoDirectCogs)return{cost:proven(0,"governed_trusted_no_direct_cogs_at_sale"),costAndShip:proven(0,"governed_trusted_no_direct_cogs_at_sale")};const directCogsProven=line.cogs_status==="trusted"&&line.cogs_history_id!==null&&line.cogs_snapshotted_at!==null&&Number.isFinite(Number(line.total_cogs_gbp))&&line.unit_cogs_gbp!==null&&Number.isFinite(Number(line.unit_cogs_gbp));return{cost:directCogsProven?money(line.total_cogs_gbp,"governed_sale_time_variant_cogs"):unresolved("governed_sale_time_variant_cogs_unavailable"),costAndShip:directCogsProven?money(line.unit_cogs_gbp,"governed_sale_time_unit_cogs"):unresolved("governed_sale_time_unit_cogs_unavailable")};}
 
-export async function getBackfillProposal({existingWorkbookOrderNumbers,affectedOrderNumbers}: {existingWorkbookOrderNumbers?: Iterable<string>;affectedOrderNumbers?: Iterable<string>} = {}){
+export async function getBackfillProposal({existingWorkbookOrderNumbers,affectedOrderNumbers}: {existingWorkbookOrderNumbers?: Iterable<string>;affectedOrderNumbers?: Iterable<string>} = {},supabaseAdmin:typeof productionSupabaseAdmin=productionSupabaseAdmin){
  const scopedExisting=existingWorkbookOrderNumbers??[];
  const affected=affectedOrderNumbers ? [...affectedOrderNumbers] : null;
  const scope=affected ? affectedOrderCandidateScope(affected,scopedExisting) : backfillCandidateScope(scopedExisting);
