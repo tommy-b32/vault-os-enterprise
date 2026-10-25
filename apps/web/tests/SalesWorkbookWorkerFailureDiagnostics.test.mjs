@@ -67,5 +67,6 @@ test("failed automatic outcomes retain the generic code and add only an allowlis
 test("success and deferred outcome contracts remain unchanged", async () => {
   const route = await read("app/api/internal/sales-workbook/order-ready/route.ts");
   assert.match(route, /status=result\.ordersWritten>0\?"published":"deferred"/);
-  assert.match(route, /return NextResponse\.json\(\{\.\.\.result,status\}\)/);
+  assert.match(route, /return NextResponse\.json\(compactWorkerResponse\(result,status\)\)/);
+  assert.doesNotMatch(route, /NextResponse\.json\(\{\.\.\.result,status\}\)/);
 });

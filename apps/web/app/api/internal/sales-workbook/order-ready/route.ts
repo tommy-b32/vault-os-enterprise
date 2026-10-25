@@ -13,6 +13,24 @@ const sameSecret = (provided: string | null, configured: string | undefined) => 
 
 type OrderReadyDependencies={runWorker:typeof runOrderReadyWorkbookWorker;repository:Pick<typeof SalesWorkbookRepository,"recordAutomaticSyncOutcome">};
 const productionDependencies:OrderReadyDependencies={runWorker:runOrderReadyWorkbookWorker,repository:SalesWorkbookRepository};
+type OrderReadyWorkerSummary={workbookAvailable:boolean;sourceWorkbookVersion?:number;newWorkbookVersion?:number;ordersWritten:number;rowsWritten:number;skippedExistingOrders?:number;skippedReviewOrders?:number;writtenOrderNumbers:string[];deferredOrderNumbers:string[];deferredReasons:Record<string,string[]>};
+
+function compactWorkerResponse(result:OrderReadyWorkerSummary,status:"published"|"deferred") {
+  return {
+    status,
+    workbookAvailable:result.workbookAvailable,
+    ...(result.sourceWorkbookVersion===undefined?{}:{sourceWorkbookVersion:result.sourceWorkbookVersion}),
+    ...(result.newWorkbookVersion===undefined?{}:{newWorkbookVersion:result.newWorkbookVersion}),
+    ordersWritten:result.ordersWritten,
+    rowsWritten:result.rowsWritten,
+    skippedExistingOrders:result.skippedExistingOrders??0,
+    skippedReviewOrders:result.skippedReviewOrders??0,
+    writtenOrderNumbers:result.writtenOrderNumbers,
+    deferredOrderNumbers:result.deferredOrderNumbers,
+    deferredReasons:result.deferredReasons,
+  };
+}
+
 export function createOrderReadyHandler(dependencies:OrderReadyDependencies=productionDependencies){return async function POST(request: Request) {
   if (!sameSecret(request.headers.get("x-vault-sales-workbook-automation-secret"), process.env.SALES_WORKBOOK_AUTOMATION_SECRET)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => null) as { orderNumbers?: unknown } | null;
@@ -21,7 +39,7 @@ export function createOrderReadyHandler(dependencies:OrderReadyDependencies=prod
     const orderNumbers=body.orderNumbers.map(String),result=await dependencies.runWorker(orderNumbers);
     const status=result.ordersWritten>0?"published":"deferred";
     await dependencies.repository.recordAutomaticSyncOutcome({orderNumbers,status,publishedOrderNumbers:result.writtenOrderNumbers,deferredReasons:result.deferredReasons});
-    return NextResponse.json({...result,status});
+    return NextResponse.json(compactWorkerResponse(result,status));
   } catch (error) {
     try { await dependencies.repository.recordAutomaticSyncOutcome({orderNumbers:body.orderNumbers.map(String),status:"failed",errorCode:error instanceof SalesWorkbookConflictError?"WORKBOOK_CONFLICT":"WORKBOOK_WORKER_FAILED",failureStage:error instanceof SalesWorkbookWorkerFailure?error.stage:undefined}); } catch { console.error("Sales workbook outcome recording failed"); }
     if (error instanceof SalesWorkbookConflictError) return NextResponse.json({ error: "Sales workbook changed; event may be retried" }, { status: 409 });
