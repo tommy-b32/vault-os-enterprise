@@ -18,6 +18,15 @@ export class HistoricalDeliveryService {
     catch (error) { if (error instanceof HistoricalDeliveryDuplicateSourceError) throw error; throw new HistoricalDeliveryRepositoryError("HISTORICAL_DELIVERY_PERSIST_FAILED"); }
   }
   async get(id: string): Promise<HistoricalDeliveryBatch> { const row = await this.repository.getById(id); if (!row) throw new HistoricalDeliveryRepositoryError("BATCH_NOT_FOUND"); row.corrections = await this.repository.listCorrectionHistory(id); const approvals = await this.repository.listApprovalHistory(id); row.approval = approvals.at(-1) ?? row.approval; return row; }
+  async list(limit: number, offset: number): Promise<HistoricalDeliveryBatch[]> {
+    const rows = await this.repository.list(limit, offset);
+    return Promise.all(rows.map(async (row) => {
+      row.corrections = await this.repository.listCorrectionHistory(row.id);
+      const approvals = await this.repository.listApprovalHistory(row.id);
+      row.approval = approvals.at(-1) ?? row.approval;
+      return row;
+    }));
+  }
   async correct(id: string, expectedRevision: number, field: keyof HistoricalDeliveryInput, value: unknown, reason: string, actor: string): Promise<HistoricalDeliveryPreview> {
     const row = await this.get(id); if (row.revision !== expectedRevision) throw new HistoricalDeliveryRepositoryError("STALE_HISTORICAL_DELIVERY_WRITE"); const previous = row.current[field]; const next = previewHistoricalDelivery({ ...row.current, [field]: value } as HistoricalDeliveryInput, this.classes, new Set());
     await this.repository.applyCorrection(id, expectedRevision, next, { field, previous, value, reason, actor, at: new Date().toISOString() });

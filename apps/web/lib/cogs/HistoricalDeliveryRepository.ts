@@ -9,6 +9,7 @@ export type WeightedAverageResult = { status: "CALCULATED" | "UNRESOLVED"; unitL
 export interface HistoricalDeliveryRepository {
   create(input: HistoricalDeliveryCreate): Promise<HistoricalDeliveryBatch>;
   getById(id: string): Promise<HistoricalDeliveryBatch | null>;
+  list(limit: number, offset: number): Promise<HistoricalDeliveryBatch[]>;
   findBySourceReference(supplierId: string, sourceReference: string): Promise<HistoricalDeliveryBatch | null>;
   updateCurrentNormalizedState(id: string, current: HistoricalDeliveryPreview): Promise<void>;
   appendCorrection(id: string, correction: HistoricalDeliveryCorrection): Promise<void>;
@@ -30,6 +31,7 @@ export class InMemoryHistoricalDeliveryRepository implements HistoricalDeliveryR
   #rows = new Map<string, HistoricalDeliveryBatch>();
   async create(input: HistoricalDeliveryCreate) { const id = crypto.randomUUID(); const row: HistoricalDeliveryBatch = { id, revision: 1, original: clone(input.original), current: clone(input.current), corrections: [], approval: null }; this.#rows.set(id, row); return clone(row); }
   async getById(id: string) { const row = this.#rows.get(id); return row ? clone(row) : null; }
+  async list(limit: number, offset: number) { return [...this.#rows.values()].sort((a,b)=>b.id.localeCompare(a.id)).slice(offset,offset+limit).map(clone); }
   async findBySourceReference(_supplierId: string, sourceReference: string) { return [...this.#rows.values()].find((row) => row.current.reference === sourceReference) ? clone([...this.#rows.values()].find((row) => row.current.reference === sourceReference)!) : null; }
   async updateCurrentNormalizedState(id: string, current: HistoricalDeliveryPreview) { const row = this.#rows.get(id); if (!row) throw new HistoricalDeliveryRepositoryError("BATCH_NOT_FOUND"); row.current = clone(current); }
   async appendCorrection(id: string, correction: HistoricalDeliveryCorrection) { const row = this.#rows.get(id); if (!row) throw new HistoricalDeliveryRepositoryError("BATCH_NOT_FOUND"); row.corrections.push(clone(correction)); }
@@ -43,7 +45,7 @@ export class InMemoryHistoricalDeliveryRepository implements HistoricalDeliveryR
 
 type SupabaseError = { message: string };
 type SupabaseResult<T> = { data: T | null; error: SupabaseError | null };
-type SupabaseFilter = { eq(column: string, value: unknown): SupabaseFilter; order(column: string): PromiseLike<SupabaseResult<unknown[]>>; maybeSingle(): PromiseLike<SupabaseResult<unknown>> };
+type SupabaseFilter = { eq(column: string, value: unknown): SupabaseFilter; order(column: string, options?: { ascending?: boolean }): SupabaseFilter & PromiseLike<SupabaseResult<unknown[]>>; range(from: number, to: number): PromiseLike<SupabaseResult<unknown[]>>; maybeSingle(): PromiseLike<SupabaseResult<unknown>> };
 type SupabaseTable = { select(columns: string): SupabaseFilter; update(values: Record<string, unknown>): { eq(column: string, value: unknown): Promise<SupabaseResult<unknown>> } };
 type HistoricalDeliveryBatchRow = { id: string; revision: number | string | null; original_import: HistoricalDeliveryInput; merchandise_class_id: string; supplier_order_date: string; received_at: string | null; received_quantity: number | string; goods_cost_gbp: number | string; inbound_shipping_gbp: number | string; stated_landed_total_gbp: number | string | null; unit_purchase_price_gbp: number | string | null; receipt_status: HistoricalDeliveryInput["status"]; source_reference: string; source_document_reference: string; note: string | null; validation_status: HistoricalDeliveryPreview["validation"]; validation_reasons: string[] | null; landed_cost_gbp: number | string; approval_status: string; approved_at: string | null; approved_by_operator_id: string | null };
 type HistoricalDeliveryCorrectionRow = { field_name: HistoricalDeliveryCorrection["field"]; previous_value: unknown; replacement_value: unknown; reason: string; corrected_by_operator_id: string; corrected_at: string };
@@ -65,6 +67,7 @@ export class SupabaseHistoricalDeliveryRepository implements HistoricalDeliveryR
   constructor(client: HistoricalDeliverySupabaseClient) { this.client = client as HistoricalDeliverySupabaseOperations; }
   async create(input: HistoricalDeliveryCreate) { const { data, error } = await this.client.rpc("stage_governed_historical_delivery_cost_batch", { p_supplier_id: input.supplierId, p_merchandise_class_id: input.merchandiseClassId, p_entered_by_operator_id: input.enteredByOperatorId, p_original_import: input.original, p_normalized: dbCurrent(input.current) }); if (error) { if (error.message?.includes("DUPLICATE")) throw new HistoricalDeliveryDuplicateSourceError(); fail(error, "HISTORICAL_DELIVERY_CREATE_FAILED"); } const batch = await this.getById(String(data)); if (!batch) throw new HistoricalDeliveryRepositoryError("HISTORICAL_DELIVERY_CREATE_FAILED"); return batch; }
   async getById(id: string) { const { data, error } = await this.client.from("vault_historical_delivery_cost_batches").select("*").eq("id", id).maybeSingle(); if (error) fail(error, "HISTORICAL_DELIVERY_READ_FAILED"); return data ? fromRow(data) : null; }
+  async list(limit: number, offset: number) { const { data, error } = await this.client.from("vault_historical_delivery_cost_batches").select("*").order("entered_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + limit - 1); if (error) fail(error, "HISTORICAL_DELIVERY_READ_FAILED"); return (data ?? []).map(fromRow); }
   async findBySourceReference(supplierId: string, sourceReference: string) { const { data, error } = await this.client.from("vault_historical_delivery_cost_batches").select("*").eq("supplier_id", supplierId).eq("source_reference", sourceReference).maybeSingle(); if (error) fail(error, "HISTORICAL_DELIVERY_READ_FAILED"); return data ? fromRow(data) : null; }
   async updateCurrentNormalizedState(id: string, current: HistoricalDeliveryPreview) { const { error } = await this.client.from("vault_historical_delivery_cost_batches").update(dbCurrent(current)).eq("id", id); if (error) fail(error, "HISTORICAL_DELIVERY_UPDATE_FAILED"); }
   async appendCorrection(_id: string, _correction: HistoricalDeliveryCorrection) { throw new HistoricalDeliveryRepositoryError("HISTORICAL_DELIVERY_CORRECTION_MUST_USE_TRANSACTION_RPC"); }

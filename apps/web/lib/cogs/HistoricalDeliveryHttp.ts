@@ -8,6 +8,12 @@ const own = (value: unknown): value is Record<string, unknown> => !!value && typ
 const exact = (value: Record<string, unknown>, allowed: readonly string[]) => Object.keys(value).every((key) => allowed.includes(key));
 const string = (value: unknown, min = 1, max = 2000) => typeof value === "string" && value.trim().length >= min && value.trim().length <= max ? value.trim() : null;
 const revision = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+const pageNumber = (value: string | null, fallback: number, minimum: number, maximum: number) => {
+  if (value === null) return fallback;
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : null;
+};
 
 type Dependencies = {
   requireOperator: () => Promise<{ id: string }>;
@@ -54,6 +60,38 @@ export function createHistoricalDeliveryHandler(dependencies: Dependencies) {
         return Response.json({ status: "approved", revision: expectedRevision + 1 });
       }
       return Response.json({ error: "Invalid historical receipt request" }, { status: 400 });
+    } catch (error) { return responseError(error, dependencies); }
+  };
+}
+
+const batchResponse = (batch: Awaited<ReturnType<HistoricalDeliveryService["get"]>>) => ({
+  id: batch.id,
+  revision: batch.revision,
+  original: batch.original,
+  current: batch.current,
+  approval: batch.approval,
+  corrections: batch.corrections,
+});
+
+/** Read-only owner/operator review endpoint. Pagination is deliberately bounded. */
+export function createHistoricalDeliveryReadHandler(dependencies: Dependencies) {
+  return async (request: Request): Promise<Response> => {
+    try {
+      await dependencies.requireOperator();
+      const url = new URL(request.url);
+      const id = url.searchParams.get("id");
+      if (id !== null) {
+        if (!uuid.test(id) || [...url.searchParams.keys()].some((key) => key !== "id")) return Response.json({ error: "Invalid historical receipt query" }, { status: 400 });
+        const service = dependencies.createService(await dependencies.loadClasses());
+        return Response.json({ item: batchResponse(await service.get(id)) });
+      }
+      if ([...url.searchParams.keys()].some((key) => key !== "limit" && key !== "offset")) return Response.json({ error: "Invalid historical receipt query" }, { status: 400 });
+      const limit = pageNumber(url.searchParams.get("limit"), 25, 1, 50);
+      const offset = pageNumber(url.searchParams.get("offset"), 0, 0, 5000);
+      if (limit === null || offset === null) return Response.json({ error: "Invalid historical receipt query" }, { status: 400 });
+      const service = dependencies.createService(await dependencies.loadClasses());
+      const items = await service.list(limit, offset);
+      return Response.json({ items: items.map(batchResponse), limit, offset });
     } catch (error) { return responseError(error, dependencies); }
   };
 }
