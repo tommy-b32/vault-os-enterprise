@@ -14,8 +14,8 @@ async function loadWorker() {
   const exports = {};
   class ConflictError extends Error {}
   new Function(
-    "exports", "getBackfillProposal", "prepareSalesWorkbookBackfill", "parseSalesWorkbook", "SalesWorkbookRepository", "sha256", "SalesWorkbookConflictError", compiled,
-  )(exports, async () => ({}), () => ({}), () => ({ valid: true, rows: [] }), {}, () => "hash", ConflictError);
+    "exports", "getBackfillProposal", "prepareSalesWorkbookBackfill", "parseSalesWorkbook", "SalesWorkbookRepository", "sha256", "SalesWorkbookConflictError", "SalesWorkbookSizeLimitError", compiled,
+  )(exports, async () => ({}), () => ({}), () => ({ valid: true, rows: [] }), {}, () => "hash", ConflictError, class SalesWorkbookSizeLimitError extends Error {});
   return exports.runOrderReadyWorkbookWorker;
 }
 
@@ -52,12 +52,12 @@ test("worker classifies only allowlisted non-sensitive failure stages", async ()
   assert.doesNotMatch(worker, /error\.message/);
 });
 
-test("failed automatic outcomes retain the generic code and add only an allowlisted stage", async () => {
+test("failed automatic outcomes retain allowlisted codes and stages only", async () => {
   const [route, repository] = await Promise.all([
     read("app/api/internal/sales-workbook/order-ready/route.ts"),
     read("lib/sales-workbook/SalesWorkbookRepository.ts"),
   ]);
-  assert.match(route, /errorCode:error instanceof SalesWorkbookConflictError\?"WORKBOOK_CONFLICT":"WORKBOOK_WORKER_FAILED"/);
+  assert.match(route, /errorCode:error instanceof SalesWorkbookConflictError\?"WORKBOOK_CONFLICT":error instanceof SalesWorkbookSizeLimitError\?"WORKBOOK_SIZE_LIMIT":"WORKBOOK_WORKER_FAILED"/);
   assert.match(route, /failureStage:error instanceof SalesWorkbookWorkerFailure\?error\.stage:undefined/);
   assert.match(repository, /failure_stage:failureStage/);
   assert.match(repository, /\["WORKBOOK_READ","PROPOSAL_RPC","XLSX_PROCESSING","PENDING_WRITE","VERIFICATION","ACTIVATION"\]/);

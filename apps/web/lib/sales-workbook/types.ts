@@ -5,3 +5,5 @@ export type WorkbookWriteResult={workbook:SalesWorkbookMetadata;version:SalesWor
 export type TrackingRepairAuditMetadata={sourceWorkbookVersion:number;newWorkbookVersion:number;ordersUpdated:number;rowsUpdated:number;skippedNoTracking:number;skippedAmbiguousTracking:number;skippedConflictTracking:number;source:"governed_shopify_fulfillment_tracking"};
 export class SalesWorkbookConflictError extends Error{constructor(public readonly current:SalesWorkbookMetadata){super("Sales workbook version conflict");}}
 export class SalesWorkbookOrphanedUploadError extends Error{constructor(public readonly orphanPath:string,cause:unknown){super("Workbook upload left an orphaned private object");this.cause=cause;}}
+export const SALES_WORKBOOK_MAX_BYTES=25*1024*1024;
+export class SalesWorkbookSizeLimitError extends Error{constructor(public readonly sizeBytes:number){super("Sales workbook exceeds the governed storage size limit");this.name="SalesWorkbookSizeLimitError";}}

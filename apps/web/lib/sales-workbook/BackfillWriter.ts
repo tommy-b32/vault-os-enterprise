@@ -3,6 +3,7 @@ import "server-only";
 import * as XLSX from "xlsx";
 import { type BackfillProposalOrder, type ProposalField, type ProposedWorkbookRow } from "./BackfillProposal";
 import { normalizeWorkbookOrderNumber, parseSalesWorkbook } from "./WorkbookParser";
+import { restoreOriginalSalesWorkbookTheme } from "./OoxmlThemePreservation";
 
 type CompleteProposal={targetOrderRange:string;sourceComplete:boolean;proposals:BackfillProposalOrder[];excludedExistingOrderCount?:number};
 export class SalesWorkbookBackfillValidationError extends Error{}
@@ -51,5 +52,5 @@ export function prepareSalesWorkbookBackfill(bytes:ArrayBuffer|Uint8Array,propos
  XLSX.utils.sheet_add_aoa(sales,rows,{origin:appendAt});
  copyAppendFormatting(sales,templateRow,appendAt,rows.length);
  const output=XLSX.write(workbook,{bookType:"xlsx",type:"array",compression:true});
- return {bytes:new Uint8Array(output),ordersWritten:writtenOrderNumbers.length,rowsWritten:rows.length,skippedExistingOrders,skippedReviewOrders,writtenOrderNumbers};
+ return {bytes:restoreOriginalSalesWorkbookTheme(sourceBytes,new Uint8Array(output)),ordersWritten:writtenOrderNumbers.length,rowsWritten:rows.length,skippedExistingOrders,skippedReviewOrders,writtenOrderNumbers};
 }
