@@ -89,6 +89,15 @@ test("late-cost recovery is idempotent and never fabricates an amount", async ()
   assert.equal(writes, 2);
 });
 
+test("malformed recovery evidence logs only structural diagnostics and does not write the candidate", async () => {
+  let captured;
+  try { mod.parseLabelCosts({ columns: [{ name: "order_id" }], rows: [] }, [order]); }
+  catch (error) { captured = mod.shippingValidationDiagnostic(error); }
+  assert.deepEqual(captured, {
+    candidateOrderIds: [], stage: "shopifyql_table_shape", columnNames: ["order_id"], rowCount: 0,
+  });
+});
+
 test("scheduled refresh processes the bounded backlog before its normal seven-day scan", async () => {
   const now = new Date(at);
   const late = { ...order, shopify_created_at: "2026-08-20T00:00:00Z" };
@@ -104,8 +113,38 @@ test("scheduled refresh processes the bounded backlog before its normal seven-da
   api = async () => ({ shop: { id: "shop", currencyCode: "GBP", ianaTimezone: "Europe/London" },
     nodes: [{ id: late.shopify_order_id, fulfillments: [{ shippingLabel: { id: "label" } }] }],
     shopifyqlQuery: { parseErrors: [], tableData: table([row]) } });
-  assert.deepEqual(await mod.refreshShippingCosts(db, now), { complete: true, recovery: { processed: 1, covered: 1 } });
+  assert.deepEqual(await mod.refreshShippingCosts(db, now), { complete: true, recovery: { processed: 1, covered: 1, failure: null } });
   assert.equal(writes, 1);
+});
+
+test("a malformed backlog response stays unresolved while the normal scan continues", async () => {
+  const now = new Date(at);
+  const backlog = { ...order, shopify_created_at: "2026-08-20T00:00:00Z" };
+  const recent = { ...order, id: "00000000-0000-0000-0000-000000000004", shopify_order_id: "gid://shopify/Order/4", shopify_created_at: "2026-09-01T00:00:00Z" };
+  const recoveryBuilder = new Proxy({}, { get: (_, key) => key === "then" ? (resolve) => resolve({
+    data: [{ order_id: backlog.id, vault_shopify_orders: backlog }], error: null,
+  }) : () => recoveryBuilder });
+  const recentBuilder = new Proxy({}, { get: (_, key) => key === "then" ? (resolve) => resolve({ data: [recent], error: null }) : () => recentBuilder });
+  const written = [];
+  const db = { from: tableName => tableName === "vault_shopify_shipping_costs" ? recoveryBuilder : recentBuilder, rpc: async (_, args) => {
+    written.push(...args.snapshots.map(snapshot => snapshot.order_id));
+    return { error: null };
+  } };
+  let requests = 0;
+  api = async () => {
+    requests++;
+    if (requests === 1) return { shop: { id: "shop", currencyCode: "GBP", ianaTimezone: "Europe/London" }, nodes: [],
+      shopifyqlQuery: { parseErrors: [], tableData: { columns: [{ name: "order_id" }], rows: [] } } };
+    return { shop: { id: "shop", currencyCode: "GBP", ianaTimezone: "Europe/London" }, nodes: [{ id: recent.shopify_order_id, fulfillments: [] }],
+      shopifyqlQuery: { parseErrors: [], tableData: table([["4", "7.54", "1"]]) } };
+  };
+  const result = await mod.refreshShippingCosts(db, now);
+  assert.equal(result.complete, true);
+  assert.equal(result.recovery.failure instanceof Error, true);
+  assert.deepEqual(mod.shippingValidationDiagnostic(result.recovery.failure), {
+    candidateOrderIds: [backlog.id], stage: "shopifyql_table_shape", columnNames: ["order_id"], rowCount: 0,
+  });
+  assert.deepEqual(written, [recent.id]);
 });
 
 test("sync writes explicit missing rows, replaces totals and refuses failed/truncated analytics", async () => {

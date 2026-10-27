@@ -9,6 +9,35 @@ type Table = { columns: { name: string }[]; rows: unknown };
 type LabelCost = { cost: string; count: number };
 type LabelNode = { id: string; fulfillments: Array<{ shippingLabel: { id: string } | null }> } | null;
 
+export type ShippingValidationDiagnostic = {
+  candidateOrderIds: string[];
+  stage: "shopifyql_table_shape" | "shopifyql_row_validation" | "fulfillment_node_validation";
+  columnNames: string[];
+  rowCount: number | null;
+};
+
+export class ShippingSourceIncompleteError extends Error {
+  constructor(readonly diagnostic: ShippingValidationDiagnostic) {
+    super("Shipping source incomplete");
+  }
+}
+
+function tableDiagnostic(table: unknown, stage: ShippingValidationDiagnostic["stage"]): ShippingValidationDiagnostic {
+  const value = table && typeof table === "object" && !Array.isArray(table) ? table as Record<string, unknown> : {};
+  const columns = Array.isArray(value.columns) ? value.columns : [];
+  const columnNames = [...new Set(columns.flatMap(column => column && typeof column === "object" && !Array.isArray(column) && typeof (column as Record<string, unknown>).name === "string"
+    ? [(column as Record<string, string>).name] : []))].slice(0, 20);
+  return { candidateOrderIds: [], stage, columnNames, rowCount: Array.isArray(value.rows) ? value.rows.length : null };
+}
+
+function incompleteShippingSource(table: unknown, stage: ShippingValidationDiagnostic["stage"]): never {
+  throw new ShippingSourceIncompleteError(tableDiagnostic(table, stage));
+}
+
+export function shippingValidationDiagnostic(error: unknown): ShippingValidationDiagnostic | null {
+  return error instanceof ShippingSourceIncompleteError ? error.diagnostic : null;
+}
+
 export function parseShippingRequest(input: unknown, now = new Date()) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid shipping request");
   const value = input as Record<string, unknown>;
@@ -91,21 +120,21 @@ export function shippingQuery(orders: Order[]) {
 export function parseLabelCosts(table: Table, orders: Order[]): Map<string, LabelCost> {
   const names = table.columns.map(column => column.name);
   if (!["order_id", "shipping_label_costs", "shipping_labels"].every(name => names.includes(name)) ||
-      !Array.isArray(table.rows) || table.rows.length > orders.length) throw new Error("Incomplete shipping table");
+      !Array.isArray(table.rows) || table.rows.length > orders.length) incompleteShippingSource(table, "shopifyql_table_shape");
   const expected = new Set(orders.map(order => order.shopify_order_id));
   const result = new Map<string, LabelCost>();
   for (const raw of table.rows) {
-    if (!raw || typeof raw !== "object") throw new Error("Invalid shipping row");
+    if (!raw || typeof raw !== "object") incompleteShippingSource(table, "shopifyql_row_validation");
     const row = Array.isArray(raw) ? Object.fromEntries(names.map((name, i) => [name, raw[i]])) : raw as Record<string, unknown>;
     // IDs remain strings throughout: never round a Shopify ID through Number.
-    if (typeof row.order_id !== "string" || !/^[1-9][0-9]*$/.test(row.order_id)) throw new Error("Invalid shipping order ID");
+    if (typeof row.order_id !== "string" || !/^[1-9][0-9]*$/.test(row.order_id)) incompleteShippingSource(table, "shopifyql_row_validation");
     const id = `gid://shopify/Order/${row.order_id}`;
     const cost = row.shipping_label_costs;
     const count = row.shipping_labels;
     if (!expected.has(id) || result.has(id) || typeof cost !== "string" || !/^\d+(\.\d{1,2})?$/.test(cost) ||
         !Number.isSafeInteger(Math.round(Number(cost) * 100)) ||
         (typeof count !== "string" && typeof count !== "number") || !/^[1-9][0-9]*$/.test(String(count)) ||
-        !Number.isSafeInteger(Number(count))) throw new Error("Invalid shipping cost or coverage");
+        !Number.isSafeInteger(Number(count))) incompleteShippingSource(table, "shopifyql_row_validation");
     result.set(id, { cost, count: Number(count) });
   }
   return result;
@@ -117,7 +146,9 @@ export function confirmedShippingLabels(nodes: LabelNode[], orders: Order[]): Se
   const seen = new Set<string>();
   for (const node of nodes) {
     if (node === null) continue;
-    if (!expected.has(node.id) || seen.has(node.id) || !Array.isArray(node.fulfillments)) throw new Error("Invalid shipping-label confirmation");
+    if (!expected.has(node.id) || seen.has(node.id) || !Array.isArray(node.fulfillments)) {
+      incompleteShippingSource(null, "fulfillment_node_validation");
+    }
     seen.add(node.id);
     if (node.fulfillments.some(fulfilment => fulfilment?.shippingLabel?.id)) confirmed.add(node.id);
   }
@@ -142,8 +173,16 @@ export async function syncShippingOrders(supabase: SupabaseClient, orders: Order
   }`, { query, orderIds: orders.map(order => order.shopify_order_id) }, Date.now() + 25000);
   if (!response.shopifyqlQuery || response.shopifyqlQuery.parseErrors.length || !response.shopifyqlQuery.tableData ||
       response.shop.currencyCode !== "GBP" || response.shop.ianaTimezone !== "Europe/London") throw new Error("Shipping analytics unavailable or incompatible currency/timezone");
-  const costs = parseLabelCosts(response.shopifyqlQuery.tableData, orders);
-  const labels = confirmedShippingLabels(response.nodes, orders);
+  let costs: Map<string, LabelCost>;
+  let labels: Set<string>;
+  try {
+    costs = parseLabelCosts(response.shopifyqlQuery.tableData, orders);
+    labels = confirmedShippingLabels(response.nodes, orders);
+  } catch (error) {
+    const diagnostic = shippingValidationDiagnostic(error);
+    if (diagnostic) throw new ShippingSourceIncompleteError({ ...diagnostic, candidateOrderIds: orders.map(order => order.id) });
+    throw error;
+  }
   const rows = orders.map(order => ({
     order_id: order.id, shopify_order_id: order.shopify_order_id, shop_id: response.shop.id,
     label_cost_gbp: costs.get(order.shopify_order_id)?.cost ?? null,
@@ -172,7 +211,11 @@ export async function syncShippingBatch(supabase: SupabaseClient, input: ReturnT
 
 export async function refreshShippingCosts(supabase: SupabaseClient, now = new Date()) {
   const recoveryOrders = await selectShippingRecoveryCandidates(supabase, now);
-  const recovery = recoveryOrders.length ? await syncShippingOrders(supabase, recoveryOrders) : { processed: 0, covered: 0 };
+  let recovery: { processed: number; covered: number; failure: unknown | null } = { processed: 0, covered: 0, failure: null };
+  if (recoveryOrders.length) {
+    try { recovery = { ...(await syncShippingOrders(supabase, recoveryOrders)), failure: null }; }
+    catch (error) { recovery = { processed: 0, covered: 0, failure: error }; }
+  }
   let input = parseShippingRequest({}, now);
   // At most 200 orders per scheduled run. Larger cohorts use the explicit cursor endpoint.
   for (let page = 0; page < 4; page++) {
