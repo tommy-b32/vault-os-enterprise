@@ -52,6 +52,62 @@ test("backfill requests are bounded, reproducible and cursor validated", () => {
   }
 });
 
+test("late missing and awaiting-cost orders are selected once from the bounded recovery window", async () => {
+  const now = new Date(at);
+  const window = mod.shippingRecoveryWindow(now);
+  assert.equal(window.createdFrom, "2026-08-07T12:00:00.000Z");
+  assert.equal(window.createdBefore, "2026-08-30T12:00:00.000Z");
+  const late = { ...order, shopify_created_at: "2026-08-20T00:00:00Z" };
+  const duplicate = { ...late };
+  const expired = { ...order, id: "00000000-0000-0000-0000-000000000003", shopify_order_id: "gid://shopify/Order/3", shopify_created_at: "2026-08-07T11:59:59Z" };
+  const recent = { ...order, id: "00000000-0000-0000-0000-000000000004", shopify_order_id: "gid://shopify/Order/4", shopify_created_at: "2026-09-01T00:00:00Z" };
+  const calls = [];
+  const builder = new Proxy({}, { get: (_, key) => key === "then" ? (resolve) => resolve({ data: [
+    { order_id: late.id, vault_shopify_orders: late }, { order_id: late.id, vault_shopify_orders: duplicate },
+    { order_id: expired.id, vault_shopify_orders: expired }, { order_id: recent.id, vault_shopify_orders: recent },
+  ], error: null }) : (...args) => { calls.push([key, ...args]); return builder; } });
+  const selected = await mod.selectShippingRecoveryCandidates({ from: () => builder }, now);
+  assert.deepEqual(selected, [late]);
+  assert.ok(calls.some(call => call[0] === "in" && call[1] === "source_state"));
+  assert.ok(calls.some(call => call[0] === "limit" && call[1] === 50));
+});
+
+test("late-cost recovery is idempotent and never fabricates an amount", async () => {
+  const late = { ...order, shopify_created_at: "2026-08-20T00:00:00Z" };
+  let writes = 0;
+  const db = { rpc: async (name, args) => {
+    writes++;
+    assert.equal(name, "record_shopify_shipping_costs");
+    assert.deepEqual(args.snapshots.map(snapshot => ({ cost: snapshot.label_cost_gbp, state: snapshot.source_state })), [{ cost: "7.54", state: "covered" }]);
+    return { error: null };
+  } };
+  api = async () => ({ shop: { id: "shop", currencyCode: "GBP", ianaTimezone: "Europe/London" },
+    nodes: [{ id: late.shopify_order_id, fulfillments: [{ shippingLabel: { id: "label" } }] }],
+    shopifyqlQuery: { parseErrors: [], tableData: table([row]) } });
+  await mod.syncShippingOrders(db, [late]);
+  await mod.syncShippingOrders(db, [late]);
+  assert.equal(writes, 2);
+});
+
+test("scheduled refresh processes the bounded backlog before its normal seven-day scan", async () => {
+  const now = new Date(at);
+  const late = { ...order, shopify_created_at: "2026-08-20T00:00:00Z" };
+  const recoveryBuilder = new Proxy({}, { get: (_, key) => key === "then" ? (resolve) => resolve({
+    data: [{ order_id: late.id, vault_shopify_orders: late }], error: null,
+  }) : () => recoveryBuilder });
+  const recentBuilder = new Proxy({}, { get: (_, key) => key === "then" ? (resolve) => resolve({ data: [], error: null }) : () => recentBuilder });
+  let writes = 0;
+  const db = { from: tableName => tableName === "vault_shopify_shipping_costs" ? recoveryBuilder : recentBuilder, rpc: async () => {
+    writes++;
+    return { error: null };
+  } };
+  api = async () => ({ shop: { id: "shop", currencyCode: "GBP", ianaTimezone: "Europe/London" },
+    nodes: [{ id: late.shopify_order_id, fulfillments: [{ shippingLabel: { id: "label" } }] }],
+    shopifyqlQuery: { parseErrors: [], tableData: table([row]) } });
+  assert.deepEqual(await mod.refreshShippingCosts(db, now), { complete: true, recovery: { processed: 1, covered: 1 } });
+  assert.equal(writes, 1);
+});
+
 test("sync writes explicit missing rows, replaces totals and refuses failed/truncated analytics", async () => {
   const calls = [];
   let writeCount = 0;
