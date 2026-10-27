@@ -4,7 +4,7 @@ import { getBackfillProposal } from "./BackfillProposalService";
 import { prepareSalesWorkbookBackfill } from "./BackfillWriter";
 import { parseSalesWorkbook } from "./WorkbookParser";
 import { SalesWorkbookRepository, sha256 } from "./SalesWorkbookRepository";
-import { SalesWorkbookConflictError } from "./types";
+import { SalesWorkbookConflictError, SalesWorkbookSizeLimitError } from "./types";
 
 const MAX_AFFECTED_ORDERS = 25;
 
@@ -21,7 +21,7 @@ async function atStage<T>(stage: SalesWorkbookWorkerFailureStage, operation: () 
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof SalesWorkbookConflictError || error instanceof SalesWorkbookWorkerFailure) throw error;
+    if (error instanceof SalesWorkbookConflictError || error instanceof SalesWorkbookSizeLimitError || error instanceof SalesWorkbookWorkerFailure) throw error;
     throw new SalesWorkbookWorkerFailure(stage);
   }
 }
@@ -30,7 +30,7 @@ function processAtStage<T>(stage: SalesWorkbookWorkerFailureStage, operation: ()
   try {
     return operation();
   } catch (error) {
-    if (error instanceof SalesWorkbookConflictError || error instanceof SalesWorkbookWorkerFailure) throw error;
+    if (error instanceof SalesWorkbookConflictError || error instanceof SalesWorkbookSizeLimitError || error instanceof SalesWorkbookWorkerFailure) throw error;
     throw new SalesWorkbookWorkerFailure(stage);
   }
 }
