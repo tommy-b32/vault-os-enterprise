@@ -25,6 +25,8 @@ test("shipping refresh retains its authenticated, fail-closed invocation contrac
   assert.match(refresh, /X-Vault-Sync-Secret/);
   assert.match(refresh, /VAULT_ORDER_SYNC_SECRET/);
   assert.match(refresh, /refreshShippingCosts\(supabase\)/);
+  assert.match(refresh, /shippingValidationDiagnostic\(shipping\.recovery\.failure\)/);
+  assert.match(refresh, /Shipping recovery unavailable; normal refresh completed/);
   assert.match(refresh, /Shipping refresh unavailable; retry the same bounded window/);
   assert.doesNotMatch(refresh, /label_cost_gbp\s*:\s*0|coalesce\([^\n]*label_cost_gbp[^\n]*0/i);
 });
