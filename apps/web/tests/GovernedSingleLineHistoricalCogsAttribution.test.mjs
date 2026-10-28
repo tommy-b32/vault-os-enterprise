@@ -18,6 +18,9 @@ test("single-line historical COGS is pending, delivery-bound, and append-only", 
 
 test("single-line approval is one-way and resolves only when approved", () => {
   assert.match(sql, /v_status <> 'PENDING'/);
+  assert.match(sql, /v_actor_id uuid := auth\.uid\(\)/);
+  assert.match(sql, /GOVERNED_HISTORICAL_LINE_COGS_AUTHENTICATED_OWNER_REQUIRED/);
+  assert.doesNotMatch(sql, /p_actor_id/);
   assert.match(sql, /GOVERNED_HISTORICAL_LINE_COGS_ACTIVE_OPERATOR_REQUIRED/);
   assert.match(sql, /operator\.role = 'owner'/);
   assert.match(sql, /GOVERNED_HISTORICAL_LINE_COGS_OWNER_APPROVAL_REQUIRED/);
@@ -29,6 +32,9 @@ test("single-line approval is one-way and resolves only when approved", () => {
   assert.match(sql, /GOVERNED_HISTORICAL_LINE_COGS_DIRECT_CONFLICT/);
   assert.match(sql, /GOVERNED_HISTORICAL_LINE_COGS_RESOLVER_CONFLICT/);
   assert.match(sql, /not exists \(select 1 from single_line s where s\.order_line_id=p\.order_line_id\)/);
+  assert.match(sql, /grant execute on function public\.stage_governed_historical_line_cogs_proposal\(uuid,uuid,numeric,text\), public\.decide_governed_historical_line_cogs_proposal\(uuid,text,text\) to authenticated/);
+  assert.match(sql, /revoke all on public\.vault_stage1_sold_line_cogs_resolutions from public, anon, authenticated, service_role/);
+  assert.match(sql, /grant select on public\.vault_stage1_sold_line_cogs_resolutions to service_role/);
 });
 
 test("owner-confirmed Valentino preview is £41.31 without mutating production", () => {

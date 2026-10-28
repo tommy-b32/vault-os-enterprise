@@ -1,4 +1,8 @@
 create extension if not exists pgcrypto;
+create schema auth;
+create function auth.uid() returns uuid language sql stable as $$
+  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+$$;
 do $$ begin
   create role anon nologin;
 exception when duplicate_object then null; end $$;
@@ -8,6 +12,8 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   create role service_role nologin;
 exception when duplicate_object then null; end $$;
+grant usage on schema auth to authenticated;
+grant execute on function auth.uid() to authenticated;
 
 create table public.vault_operators (id uuid primary key, role text not null check (role in ('owner','operator','viewer')), is_active boolean not null default true);
 create table public.vault_shopify_orders (id uuid primary key, shopify_created_at timestamptz not null);

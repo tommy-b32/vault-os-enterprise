@@ -45,18 +45,21 @@ create function public.stage_governed_historical_line_cogs_proposal(
   p_order_line_id uuid,
   p_delivery_batch_id uuid,
   p_unit_landed_cogs_gbp numeric,
-  p_owner_attestation text,
-  p_actor_id uuid
+  p_owner_attestation text
 ) returns uuid
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
+  v_actor_id uuid := auth.uid();
   v_line public.vault_shopify_order_lines%rowtype;
   v_sale_at timestamptz;
   v_batch public.vault_historical_delivery_cost_batches%rowtype;
   v_expected_unit numeric(14,4);
   v_proposal_id uuid;
 begin
-  if not exists (select 1 from public.vault_operators operator where operator.id = p_actor_id and operator.is_active) then
+  if v_actor_id is null then
+    raise exception 'GOVERNED_HISTORICAL_LINE_COGS_AUTHENTICATED_OPERATOR_REQUIRED';
+  end if;
+  if not exists (select 1 from public.vault_operators operator where operator.id = v_actor_id and operator.is_active) then
     raise exception 'GOVERNED_HISTORICAL_LINE_COGS_ACTIVE_OPERATOR_REQUIRED';
   end if;
   select l.* into v_line
@@ -99,27 +102,31 @@ begin
     owner_attestation, proposed_by_operator_id
   ) values (
     p_order_line_id, p_delivery_batch_id, v_expected_unit, v_line.cogs_quantity,
-    round(v_expected_unit * v_line.cogs_quantity, 4), trim(p_owner_attestation), p_actor_id
+    round(v_expected_unit * v_line.cogs_quantity, 4), trim(p_owner_attestation), v_actor_id
   ) returning id into v_proposal_id;
   insert into public.vault_governed_historical_line_cogs_proposal_audit(
     proposal_id, event_type, actor_operator_id, note
-  ) values (v_proposal_id, 'PROPOSED', p_actor_id, trim(p_owner_attestation));
+  ) values (v_proposal_id, 'PROPOSED', v_actor_id, trim(p_owner_attestation));
   return v_proposal_id;
 end $$;
 
 create function public.decide_governed_historical_line_cogs_proposal(
   p_proposal_id uuid,
   p_decision text,
-  p_approval_note text,
-  p_actor_id uuid
+  p_approval_note text
 ) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_status text;
+declare
+  v_status text;
+  v_actor_id uuid := auth.uid();
 begin
   if p_decision not in ('APPROVED','REJECTED') or nullif(trim(p_approval_note),'') is null then
     raise exception 'GOVERNED_HISTORICAL_LINE_COGS_INVALID_DECISION';
   end if;
-  if not exists (select 1 from public.vault_operators operator where operator.id = p_actor_id and operator.is_active and operator.role = 'owner') then
+  if v_actor_id is null then
+    raise exception 'GOVERNED_HISTORICAL_LINE_COGS_AUTHENTICATED_OWNER_REQUIRED';
+  end if;
+  if not exists (select 1 from public.vault_operators operator where operator.id = v_actor_id and operator.is_active and operator.role = 'owner') then
     raise exception 'GOVERNED_HISTORICAL_LINE_COGS_OWNER_APPROVAL_REQUIRED';
   end if;
   select approval_status into v_status from public.vault_governed_historical_line_cogs_proposals
@@ -127,10 +134,10 @@ begin
   if not found then raise exception 'GOVERNED_HISTORICAL_LINE_COGS_PROPOSAL_NOT_FOUND'; end if;
   if v_status <> 'PENDING' then raise exception 'GOVERNED_HISTORICAL_LINE_COGS_PROPOSAL_ALREADY_DECIDED'; end if;
   update public.vault_governed_historical_line_cogs_proposals
-  set approval_status = p_decision, approved_by_operator_id = p_actor_id, approved_at = clock_timestamp()
+  set approval_status = p_decision, approved_by_operator_id = v_actor_id, approved_at = clock_timestamp()
   where id = p_proposal_id;
   insert into public.vault_governed_historical_line_cogs_proposal_audit(proposal_id,event_type,actor_operator_id,note)
-  values (p_proposal_id,p_decision,p_actor_id,trim(p_approval_note));
+  values (p_proposal_id,p_decision,v_actor_id,trim(p_approval_note));
 end $$;
 
 create view public.vault_governed_approved_historical_line_cogs_attributions
@@ -192,8 +199,10 @@ alter table public.vault_governed_historical_line_cogs_proposal_audit enable row
 revoke all on public.vault_governed_historical_line_cogs_proposals, public.vault_governed_historical_line_cogs_proposal_audit from public, anon, authenticated, service_role;
 revoke all on public.vault_governed_approved_historical_line_cogs_attributions from public, anon, authenticated;
 grant select on public.vault_governed_historical_line_cogs_proposals, public.vault_governed_historical_line_cogs_proposal_audit, public.vault_governed_approved_historical_line_cogs_attributions to service_role;
-revoke all on function public.stage_governed_historical_line_cogs_proposal(uuid,uuid,numeric,text,uuid), public.decide_governed_historical_line_cogs_proposal(uuid,text,text,uuid) from public, anon, authenticated;
-grant execute on function public.stage_governed_historical_line_cogs_proposal(uuid,uuid,numeric,text,uuid), public.decide_governed_historical_line_cogs_proposal(uuid,text,text,uuid) to service_role;
+revoke all on public.vault_stage1_sold_line_cogs_resolutions from public, anon, authenticated, service_role;
+grant select on public.vault_stage1_sold_line_cogs_resolutions to service_role;
+revoke all on function public.stage_governed_historical_line_cogs_proposal(uuid,uuid,numeric,text), public.decide_governed_historical_line_cogs_proposal(uuid,text,text) from public, anon, authenticated, service_role;
+grant execute on function public.stage_governed_historical_line_cogs_proposal(uuid,uuid,numeric,text), public.decide_governed_historical_line_cogs_proposal(uuid,text,text) to authenticated;
 revoke all on function public.reject_governed_historical_line_cogs_audit_mutation() from public, anon, authenticated, service_role;
 notify pgrst, 'reload schema';
 commit;
