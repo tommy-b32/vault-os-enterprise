@@ -22,8 +22,8 @@ test("deferred recovery is capped, authenticated, and reuses the immutable write
   const [retryRoute, retryFunction, migration, schemaMigration, writer] = await Promise.all([
     read("app/api/internal/sales-workbook/deferred-retry/route.ts"),
     read("../../supabase/functions/sales-workbook-deferred-retry/index.ts"),
-    read("../../supabase/migrations/20261023201650_provision_sales_workbook_deferred_retry_cron.sql"),
-    read("../../supabase/migrations/20261023200440_sales_workbook_deferred_order_recovery.sql"),
+    read("../../supabase/migrations/20261124000000_provision_sales_workbook_deferred_retry_scheduler.sql"),
+    read("../../supabase/migrations/20261024141233_sales_workbook_deferred_order_recovery.sql"),
     read("lib/sales-workbook/BackfillWriter.ts"),
   ]);
   for (const source of [retryRoute, retryFunction]) assert.match(source, /SALES_WORKBOOK_AUTOMATION_SECRET|x-vault-sync-secret/);
