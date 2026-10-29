@@ -22,6 +22,46 @@ export class ShippingSourceIncompleteError extends Error {
   }
 }
 
+export type ShippingPersistenceDiagnostic = {
+  failure_stage: "record_shopify_shipping_costs";
+  batch_correlation_id: string;
+  snapshot_count: number;
+  postgrest_code: string | null;
+  postgrest_message_category: "shipping_batch_invalid" | "shipping_snapshot_validation_failed" | "constraint_violation" | "foreign_key_violation" | "unique_violation" | "other_database_error";
+  postgrest_details_present: boolean;
+};
+
+const safePostgrestCode = (value: unknown): string | null =>
+  typeof value === "string" && /^[A-Z0-9]{5,12}$/.test(value) ? value : null;
+
+const persistenceMessageCategory = (code: string | null, message: unknown): ShippingPersistenceDiagnostic["postgrest_message_category"] => {
+  if (message === "Invalid shipping batch") return "shipping_batch_invalid";
+  if (message === "Shipping order identity, source state or source bounds mismatch") return "shipping_snapshot_validation_failed";
+  if (code === "23514") return "constraint_violation";
+  if (code === "23503") return "foreign_key_violation";
+  if (code === "23505") return "unique_violation";
+  return "other_database_error";
+};
+
+export class ShippingPersistenceError extends Error {
+  readonly diagnostic: ShippingPersistenceDiagnostic;
+
+  constructor(error: unknown, batchCorrelationId: string, snapshotCount: number) {
+    super("Unable to persist shipping costs");
+    this.name = "ShippingPersistenceError";
+    const source = error && typeof error === "object" ? error as Record<string, unknown> : {};
+    const code = safePostgrestCode(source.code);
+    this.diagnostic = {
+      failure_stage: "record_shopify_shipping_costs",
+      batch_correlation_id: batchCorrelationId,
+      snapshot_count: snapshotCount,
+      postgrest_code: code,
+      postgrest_message_category: persistenceMessageCategory(code, source.message),
+      postgrest_details_present: typeof source.details === "string" && source.details.length > 0,
+    };
+  }
+}
+
 function tableDiagnostic(table: unknown, stage: ShippingValidationDiagnostic["stage"]): ShippingValidationDiagnostic {
   const value = table && typeof table === "object" && !Array.isArray(table) ? table as Record<string, unknown> : {};
   const columns = Array.isArray(value.columns) ? value.columns : [];
@@ -36,6 +76,10 @@ function incompleteShippingSource(table: unknown, stage: ShippingValidationDiagn
 
 export function shippingValidationDiagnostic(error: unknown): ShippingValidationDiagnostic | null {
   return error instanceof ShippingSourceIncompleteError ? error.diagnostic : null;
+}
+
+export function shippingPersistenceDiagnostic(error: unknown): ShippingPersistenceDiagnostic | null {
+  return error instanceof ShippingPersistenceError ? error.diagnostic : null;
 }
 
 export function parseShippingRequest(input: unknown, now = new Date()) {
@@ -191,8 +235,9 @@ export async function syncShippingOrders(supabase: SupabaseClient, orders: Order
     fetched_at: fetchedAt, query_from: from,
   }));
   // One atomic replace per order, including explicit missing snapshots; never add totals.
+  const batchCorrelationId = crypto.randomUUID();
   const { error: writeError } = await supabase.rpc("record_shopify_shipping_costs", { snapshots: rows });
-  if (writeError) throw new Error("Unable to persist shipping costs");
+  if (writeError) throw new ShippingPersistenceError(writeError, batchCorrelationId, rows.length);
   return { processed: orders.length, covered: costs.size };
 }
 

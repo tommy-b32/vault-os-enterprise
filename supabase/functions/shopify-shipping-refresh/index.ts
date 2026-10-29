@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { refreshShippingCosts, shippingValidationDiagnostic } from "../_shared/shopify/shipping-labels.ts";
+import { refreshShippingCosts, shippingPersistenceDiagnostic, shippingValidationDiagnostic } from "../_shared/shopify/shipping-labels.ts";
 import { recordShippingSyncOutcome, shippingSyncFailureCode } from "../_shared/shopify/shipping-sync-observability.ts";
 
 const respond = (body: unknown, status = 200) => Response.json(body, { status });
@@ -20,7 +20,7 @@ Deno.serve(async (request) => {
       const failure_code = shippingSyncFailureCode(shipping.recovery.failure);
       console.error("[Vault Shopify Shipping Refresh] Recovery failed", {
         failureCode: failure_code,
-        diagnostic: shippingValidationDiagnostic(shipping.recovery.failure),
+        diagnostic: shippingPersistenceDiagnostic(shipping.recovery.failure) ?? shippingValidationDiagnostic(shipping.recovery.failure),
       });
       try { await recordShippingSyncOutcome(supabase, { status: "unavailable", failureCode: failure_code }); }
       catch { console.error("[Vault Shopify Shipping Refresh] Telemetry recording failed"); }
@@ -31,7 +31,10 @@ Deno.serve(async (request) => {
     return respond({ success: true, shipping });
   } catch (error) {
     const failure_code = shippingSyncFailureCode(error);
-    console.error("[Vault Shopify Shipping Refresh] Failed", { failureCode: failure_code });
+    console.error("[Vault Shopify Shipping Refresh] Failed", {
+      failureCode: failure_code,
+      diagnostic: shippingPersistenceDiagnostic(error) ?? shippingValidationDiagnostic(error),
+    });
     try { await recordShippingSyncOutcome(supabase, { status: "unavailable", failureCode: failure_code }); }
     catch { console.error("[Vault Shopify Shipping Refresh] Telemetry recording failed"); }
     return respond({ success: false, error: "Shipping refresh unavailable; retry the same bounded window", failure_code }, 502);
