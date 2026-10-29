@@ -15,6 +15,15 @@ async function observabilityModule() {
   return mod;
 }
 
+async function shippingLabelsModule() {
+  const source = await read("supabase/functions/_shared/shopify/shipping-labels.ts");
+  const mod = {};
+  new Function("exports", "shopifyGraphQL", ts.transpileModule(source.replace(/^import .*;\r?\n/gm, ""), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText)(mod, () => { throw new Error("not called"); });
+  return mod;
+}
+
 test("shipping refresh retains its authenticated, fail-closed invocation contract", async () => {
   const [refresh, config] = await Promise.all([
     read("supabase/functions/shopify-shipping-refresh/index.ts"),
@@ -26,9 +35,29 @@ test("shipping refresh retains its authenticated, fail-closed invocation contrac
   assert.match(refresh, /VAULT_ORDER_SYNC_SECRET/);
   assert.match(refresh, /refreshShippingCosts\(supabase\)/);
   assert.match(refresh, /shippingValidationDiagnostic\(shipping\.recovery\.failure\)/);
+  assert.match(refresh, /shippingPersistenceDiagnostic\(shipping\.recovery\.failure\)/);
   assert.match(refresh, /Shipping recovery unavailable; normal refresh completed/);
   assert.match(refresh, /Shipping refresh unavailable; retry the same bounded window/);
   assert.doesNotMatch(refresh, /label_cost_gbp\s*:\s*0|coalesce\([^\n]*label_cost_gbp[^\n]*0/i);
+});
+
+test("shipping persistence diagnostics use an allowlist and never retain raw PostgREST text", async () => {
+  const mod = await shippingLabelsModule();
+  const diagnostic = new mod.ShippingPersistenceError({
+    code: "23514",
+    message: "row for gid://shopify/Order/123 violates constraint",
+    details: "order 00000000-0000-0000-0000-000000000001 for person@example.com with Bearer secret",
+  }, "11111111-1111-1111-1111-111111111111", 2).diagnostic;
+  assert.deepEqual(diagnostic, {
+    failure_stage: "record_shopify_shipping_costs",
+    batch_correlation_id: "11111111-1111-1111-1111-111111111111",
+    snapshot_count: 2,
+    postgrest_code: "23514",
+    postgrest_message_category: "constraint_violation",
+    postgrest_details_present: true,
+  });
+  assert.doesNotMatch(JSON.stringify(diagnostic), /person@example|Bearer|00000000/i);
+  assert.equal(mod.shippingPersistenceDiagnostic(new Error("other")), null);
 });
 
 test("shipping refresh preserves stable, non-sensitive outcome telemetry", async () => {
