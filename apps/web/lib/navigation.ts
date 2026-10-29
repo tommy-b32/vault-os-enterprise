@@ -36,6 +36,10 @@ export type VaultSubNavigationItem = {
 };
 
 const VAULT_SUB_NAVIGATION: Readonly<Record<string, readonly VaultSubNavigationItem[]>> = {
+  "/operations": [
+    { label: "Sales Workbook", href: "/operations/sales-workbook" },
+    { label: "Historical COGS", href: "/operations/historical-cogs" },
+  ],
   "/catalogue": [
     { label: "Products", href: "/catalogue" },
     { label: "Import", href: "/catalogue/import" },
