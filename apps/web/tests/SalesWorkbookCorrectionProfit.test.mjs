@@ -20,12 +20,21 @@ function load(name) {
   runInNewContext(`(function(require,module,exports){${js}\n})`, { Array, ArrayBuffer, Buffer, Date, JSON, Map, Number, Object, Set, Uint8Array, XLSX })(localRequire, module, module.exports);
   return module.exports;
 }
-const { prepareSalesOrderCorrection } = load("SalesOrderCorrectionWriter.ts");
-const { validateSalesOrderCorrection } = load("SalesOrderCorrection.ts");
+const { prepareSalesOrderCorrection, prepareSalesOrderCorrectionBatch } = load("SalesOrderCorrectionWriter.ts");
+const { validateSalesOrderCorrection, validateSalesOrderCorrectionBatch } = load("SalesOrderCorrection.ts");
 const headers = ["Product", "Sale Price", "Cost", "Unit COGS", "Postage fee", "Card Fee", "Profit", "Posted", "Tracking", "", "date of sale", "order number"];
 function workbook(cardFee = 1) {
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["SALES"], headers, ["Product", 40, 10, 12, 3, cardFee, 24, "Complete", "", "", "13/10/26", "1251"]]), "Sales");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["Costings"]]), "Costings");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["Dashboard"]]), "Dashboard");
+  return new Uint8Array(XLSX.write(book, { bookType: "xlsx", type: "array" }));
+}
+function multiOrderWorkbook() {
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["SALES"], headers,
+    ["One", 100, 10, 20, 5, 5, 70, "Complete", "", "", "13/10/26", "1251"],
+    ["Two", 80, 10, 30, 4, 2, 44, "Complete", "", "", "14/10/26", "1252"]]), "Sales");
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["Costings"]]), "Costings");
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["Dashboard"]]), "Dashboard");
   return new Uint8Array(XLSX.write(book, { bookType: "xlsx", type: "array" }));
@@ -79,4 +88,29 @@ test("single-cell OOXML patches remain bounded and preserve non-Sales package pa
   const compressedBefore = compressedZipEntries(source), compressedAfter = compressedZipEntries(current);
   assert.equal(compressedAfter.size, compressedBefore.size, "no ZIP members added or removed");
   for (const [path, compressed] of compressedBefore) if (path !== "xl/worksheets/sheet1.xml") assert.deepEqual(compressedAfter.get(path), compressed, `${path} compressed bytes`);
+});
+test("batch corrections compose financial cells before deriving each affected order profit", () => {
+  const result = prepareSalesOrderCorrectionBatch(multiOrderWorkbook(), [
+    { orderNumber: "1251", type: "sale_price", value: 110, reason: "verified", mappedRowNumber: 3 },
+    { orderNumber: "1251", type: "cogs", value: 25, reason: "verified", mappedRowNumber: 3 },
+    { orderNumber: "1252", type: "postage", value: 7, reason: "verified", mappedRowNumber: 4 },
+  ]);
+  const rows = XLSX.utils.sheet_to_json(XLSX.read(result.bytes, { type: "array" }).Sheets.Sales, { header: 1, defval: "" });
+  assert.equal(rows[2][6], 75); // 110 - 25 - 5 - 5
+  assert.equal(rows[3][6], 41); // 80 - 30 - 7 - 2
+  assert.equal(result.previews.length, 3);
+});
+test("batch validation rejects duplicate financial cells and preserves intentional zero", () => {
+  assert.throws(() => validateSalesOrderCorrectionBatch({ corrections: [
+    { orderNumber: "1251", type: "cogs", value: 1, reason: "a" },
+    { orderNumber: "1251", type: "cogs", value: 2, reason: "b" },
+  ] }), /duplicate/);
+  assert.equal(validateSalesOrderCorrectionBatch({ corrections: [{ orderNumber: "1251", type: "cogs", value: "0", reason: "verified" }] }).corrections[0].value, 0);
+});
+test("batch OOXML patch preserves unrelated compressed ZIP entries", () => {
+  const source = multiOrderWorkbook();
+  const output = prepareSalesOrderCorrectionBatch(source, [{ orderNumber: "1251", type: "cogs", value: 34.82, reason: "verified", mappedRowNumber: 3 }]).bytes;
+  const before = compressedZipEntries(source), after = compressedZipEntries(output);
+  assert.equal(after.size, before.size);
+  for (const [path, compressed] of before) if (path !== "xl/worksheets/sheet1.xml") assert.deepEqual(after.get(path), compressed, path);
 });
