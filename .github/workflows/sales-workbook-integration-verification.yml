@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - integration/sales-workbook-batch-main-20261102
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 jobs:
   verify:
