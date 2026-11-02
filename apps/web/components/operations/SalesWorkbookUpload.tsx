@@ -408,7 +408,7 @@ export function SalesWorkbookUpload() {
               if (index === 8 && trustedTracking.length) return <td className={viewerColumnClasses[index]} key={index} title={value}>{trustedTracking.map((tracking, trackingIndex) => tracking.url ? <span key={`${tracking.number}-${trackingIndex}`}><a href={tracking.url} target="_blank" rel="noopener noreferrer">{tracking.number}</a>{trackingIndex < trustedTracking.length - 1 ? " / " : ""}</span> : <span key={`${tracking.number}-${trackingIndex}`}>{tracking.number}{trackingIndex < trustedTracking.length - 1 ? " / " : ""}</span>)}</td>;
               return <td className={viewerColumnClasses[index]} key={index} title={index === 0 || index === 8 ? value : undefined}>{value}</td>;
             })}
-            <td className="sales-workbook-actions">{row.orderNumber && canonical[row.orderNumber]?.shopifyAdminUrl ? <a href={canonical[row.orderNumber].shopifyAdminUrl ?? undefined} target="_blank" rel="noopener noreferrer">View in Shopify ↗</a> : null}{canonical[row.orderNumber ?? ""]?.tracking.map((tracking) => tracking.url ? <a href={tracking.url} key={tracking.number} target="_blank" rel="noopener noreferrer">{tracking.number} ↗</a> : <span key={tracking.number}>{tracking.number}</span>)}</td>
+            <td className="sales-workbook-actions">{row.orderNumber && canonical[row.orderNumber]?.shopifyAdminUrl ? <a href={canonical[row.orderNumber].shopifyAdminUrl ?? undefined} target="_blank" rel="noopener noreferrer">View in Shopify ↗</a> : null}</td>
           </tr>)}</tbody>
         </table>
       </div>
