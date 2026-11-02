@@ -18,9 +18,9 @@ function safeTrackingUrl(value: string | null): string | null {
 
 function shopifyAdminUrl(gid: string): string | null {
   const match = /^gid:\/\/shopify\/Order\/(\d+)$/.exec(gid);
-  const domain = process.env.SHOPIFY_SHOP_DOMAIN ?? process.env.SHOPIFY_STORE_DOMAIN;
-  if (!match || !domain || !/^[a-z0-9][a-z0-9.-]*\.myshopify\.com$/i.test(domain)) return null;
-  return `https://admin.shopify.com/store/${domain.slice(0, -".myshopify.com".length)}/orders/${match[1]}`;
+  if (!match) return null;
+  // Store handle confirmed by the Vault OS owner; not a customer-facing domain.
+  return `https://admin.shopify.com/store/vgjszm-2t/orders/${match[1]}`;
 }
 
 export async function GET() {
