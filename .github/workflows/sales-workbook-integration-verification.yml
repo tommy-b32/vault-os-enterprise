@@ -1,0 +1,27 @@
+name: Sales Workbook integration verification
+on:
+  push:
+    branches:
+      - integration/sales-workbook-batch-main-20261102
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Focused workbook regression tests
+        run: node --test tests/SalesOrderCorrection.test.mjs tests/SalesWorkbookCorrectionProfit.test.mjs tests/SalesWorkbookCorrectionRoute.test.mjs tests/SalesWorkbookUploadUi.test.mjs tests/SalesWorkbookDeferredRecovery.test.mjs tests/SalesWorkbookThemePreservation.test.mjs
