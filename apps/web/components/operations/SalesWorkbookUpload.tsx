@@ -319,6 +319,7 @@ export function SalesWorkbookUpload() {
 
   async function createCorrectionProposal(row: ViewerRow, type: string, value: string, reason: string) {
     if (!row.orderNumber || !reason.trim()) { setMessage("A correction reason is required."); return; }
+    if ((["sale_price", "cogs", "postage", "card_fee"] as string[]).includes(type) && !value.trim()) { setMessage("A financial value is required."); return; }
     setBusy(true); setMessage(null);
     try {
       const response = await fetch("/api/sales-workbook/corrections", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderNumber: row.orderNumber, type, value, reason }) });

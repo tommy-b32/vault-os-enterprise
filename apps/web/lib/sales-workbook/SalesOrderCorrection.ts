@@ -8,7 +8,7 @@ export const validateSalesOrderCorrection=(value:unknown):SalesOrderCorrection=>
  if(!x||typeof x.orderNumber!=="string"||!/^\d+$/.test(x.orderNumber)||!SALES_ORDER_CORRECTION_TYPES.includes(x.type as SalesOrderCorrectionType)||typeof x.reason!=="string"||!x.reason.trim())throw new Error("Invalid Sales order correction; order number, type, and reason are required");
  const type=x.type as SalesOrderCorrectionType;
  let corrected:unknown=x.value;
- if(["sale_price","postage","card_fee","cogs"].includes(type)){const amount=typeof x.value==="number"?x.value:typeof x.value==="string"?Number(x.value.trim()):NaN;if(!Number.isFinite(amount)||amount<0)throw new Error("Financial corrections require a non-negative numeric value");corrected=amount;}
+ if(["sale_price","postage","card_fee","cogs"].includes(type)){const source=typeof x.value==="string"?x.value.trim():x.value;if(source==="")throw new Error("Financial corrections require a value");const amount=typeof source==="number"?source:typeof source==="string"?Number(source):NaN;if(!Number.isFinite(amount)||amount<0)throw new Error("Financial corrections require a non-negative numeric value");corrected=amount;}
  if(type==="order_date"){if(typeof x.value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(x.value))throw new Error("Order-date corrections require an ISO date");corrected=x.value;}
  if(type==="tracking"){if(typeof x.value!=="string"||!x.value.trim())throw new Error("Tracking corrections require a reference");corrected=x.value.trim();}
  if(type==="manual_non_shopify"||type==="exchange_partial_payment"){if(x.value!==true)throw new Error("Treatment correction must be explicitly confirmed");corrected=true;}
