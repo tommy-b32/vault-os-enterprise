@@ -394,10 +394,11 @@ export function SalesWorkbookUpload() {
       </div>
       <div className="sales-workbook-table-wrap">
         <table className="sales-workbook-table">
-          <colgroup>{viewerColumnClasses.map((className, index) => <col className={className} key={index} />)}</colgroup>
-          <thead><tr>{viewerColumnLabels.map((value, index) => <th className={viewerColumnClasses[index]} key={value}>{value}</th>)}<th className="sales-workbook-actions">Actions</th></tr></thead>
+          <colgroup>{viewerColumnClasses.map((className, index) => index === 2 ? null : <col className={className} key={index} />)}</colgroup>
+          <thead><tr>{viewerColumnLabels.map((value, index) => index === 2 ? null : <th className={viewerColumnClasses[index]} key={value}>{value}</th>)}<th className="sales-workbook-actions">Actions</th></tr></thead>
           <tbody>{shown.map((row) => <tr key={`${row.orderNumber ?? "manual"}-${row.rowNumber}`}>
             {[row.products, row.salePrice, row.cost, row.unitCogs, row.postage, row.cardFee, row.profit, row.posted, row.tracking, row.date, row.orderNumber ?? ""].map((value, index) => {
+              if (index === 2) return null;
               const financialType = inlineFinancialTypes[index];
               const trustedTracking = index === 8 && row.orderNumber ? canonical[row.orderNumber]?.tracking ?? [] : [];
               if (financialType) {
