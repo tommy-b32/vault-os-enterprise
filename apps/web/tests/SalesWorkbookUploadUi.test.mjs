@@ -123,7 +123,7 @@ test("search finds any product, tracking value, or grouped order number", async 
   assert.deepEqual(filterViewerRows(grouped, "1326", "All").map((item) => item.orderNumber), ["1326"]);
 });
 
-test("viewer source applies grouped search/filter, sort, then pagination and has no workbook mutation controls", async () => {
+test("viewer source applies grouped search/filter, sort, pagination, governed actions, and correction confirmation", async () => {
   const ui = await readFile(componentUrl, "utf8");
   for (const text of [
     "fetch(\"/api/sales-workbook\")",
@@ -137,13 +137,79 @@ test("viewer source applies grouped search/filter, sort, then pagination and has
     "[25, 50, 100]",
     "orders · {rows.length} underlying sales rows",
     "sales-workbook-table-wrap{overflow-x:auto",
-    "min-width:1570px",
+    "min-width:1760px",
     "sales-workbook-product{width:380px",
     "sales-workbook-tracking{width:180px",
     "sales-workbook-money{width:100px;text-align:right;font-variant-numeric:tabular-nums",
     "text-overflow:ellipsis",
     "index === 0 || index === 8 ? value : undefined",
+    "PROFIT THIS",
+    "Europe/London",
+    "View in Shopify ↗",
+    "Confirm & Save",
+    "fetch(\"/api/sales-workbook/corrections\"",
+    "setInterval(() => { void view(true); }, 30_000)",
   ]) assert.ok(ui.includes(text), `missing ${text}`);
 
-  assert.doesNotMatch(ui, /storage\.from|createSignedUrl|contentEditable|\bsave\b|\bdelete\b|\bupdate\b/iu);
+  assert.doesNotMatch(ui, /storage\.from|createSignedUrl|contentEditable|\bdelete\b|\bupdate\b/iu);
+});
+
+test("profit summaries retain an explicit incomplete-order count", async () => {
+  const { groupSalesRows, profitSummary } = await viewerHelpers();
+  const rows = groupSalesRows([row({ orderNumber: "1325", rowNumber: 1, profit: "£20", date: "13/10/26" }), row({ orderNumber: "1326", rowNumber: 2, profit: "", date: "13/10/26" })]);
+  const result = profitSummary(rows, "week", new Date("2026-10-13T12:00:00Z"));
+  assert.equal(result.total, 20);
+  assert.equal(result.incomplete, 1);
+});
+
+test("financial cells use the existing correction proposal flow and tracking cells retain trusted new-tab links", async () => {
+  const ui = await readFile(componentUrl, "utf8");
+  for (const type of ["sale_price", "cogs", "postage", "card_fee"]) assert.match(ui, new RegExp(`inlineFinancialTypes[\\s\\S]*${type}`));
+  assert.match(ui, /event\.key==="Enter"/);
+  assert.match(ui, /event\.key==="Escape"/);
+  assert.match(ui, /One reason for this order/);
+  assert.match(ui, /reviewBatch/);
+  assert.match(ui, /trustedTracking\.map/);
+  assert.match(ui, /target="_blank" rel="noopener noreferrer"/);
+  assert.match(ui, /sales-workbook-inline-cell--missing/);
+  assert.doesNotMatch(ui, /contentEditable/);
+});
+
+test("inline financial editing uses a spinner-free text field with normal keyboard controls", async () => {
+  const ui = await readFile(componentUrl, "utf8");
+  assert.match(ui, /className="sales-workbook-inline-value"/);
+  assert.match(ui, /type="text" value=\{staged\?\.value/);
+  assert.match(ui, /inputMode="decimal"/);
+  assert.match(ui, /event\.currentTarget\.select\(\)/);
+  assert.match(ui, /appearance:textfield/);
+  assert.match(ui, /::-webkit-inner-spin-button/);
+  assert.match(ui, /Changes are staged until Review Changes/);
+});
+
+test("inline batch review keeps governed proposal and application workflow visible", async () => {
+  const ui = await readFile(componentUrl, "utf8");
+  assert.match(ui, /Review Changes/);
+  assert.match(ui, /Confirm & Save/);
+  assert.match(ui, /action:"review-batch"/);
+  assert.match(ui, /action:"apply-batch"/);
+  assert.match(ui, /Discard Changes/);
+  assert.match(ui, /beforeunload/);
+});
+
+test("inline review controls are a scroll-safe popover anchored to the active cell", async () => {
+  const ui = await readFile(componentUrl, "utf8");
+  assert.match(ui, /className="sales-workbook-inline-popover"/);
+  assert.match(ui, /position:fixed/);
+  assert.match(ui, /ref=\{activeCellRef\}/);
+  assert.match(ui, /getBoundingClientRect\(\)/);
+  assert.match(ui, /addEventListener\("scroll", updatePopoverPosition, true\)/);
+  assert.doesNotMatch(ui, /sales-workbook-inline-edit/);
+});
+
+test("staged financial edits use a visible persistent cell-highlight class", async () => {
+  const ui = await readFile(componentUrl, "utf8");
+  assert.match(ui, /sales-workbook-inline-cell--changed/);
+  assert.match(ui, /background:rgba\(214,189,119,\.18\)/);
+  assert.match(ui, /stagedEdits\[key\]/);
+  assert.match(ui, /setStagedEdits\(\{\}\)/);
 });
