@@ -196,3 +196,13 @@ test("inline review keeps the governed proposal and application workflow visible
   assert.doesNotMatch(ui, /setInlineEdit\(null\);\s*}\s*async function applyCorrection/);
   assert.doesNotMatch(ui, /className="sales-workbook-edit"/);
 });
+
+test("inline review controls are a scroll-safe popover anchored to the active cell", async () => {
+  const ui = await readFile(componentUrl, "utf8");
+  assert.match(ui, /className="sales-workbook-inline-popover"/);
+  assert.match(ui, /position:fixed/);
+  assert.match(ui, /ref=\{activeCellRef\}/);
+  assert.match(ui, /getBoundingClientRect\(\)/);
+  assert.match(ui, /addEventListener\("scroll", updatePopoverPosition, true\)/);
+  assert.doesNotMatch(ui, /sales-workbook-inline-edit/);
+});

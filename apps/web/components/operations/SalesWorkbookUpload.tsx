@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Stored = {
   id: string;
@@ -209,7 +209,7 @@ const salesWorkbookViewerStyles = `
   .sales-workbook-table tbody tr:hover{background:rgba(255,255,255,.025)}
   .sales-workbook-product{width:380px;text-align:left}.sales-workbook-money{width:100px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.sales-workbook-posted{width:100px;text-align:center;white-space:nowrap}.sales-workbook-tracking{width:180px;text-align:left}.sales-workbook-date{width:105px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}.sales-workbook-order-number{width:105px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   .sales-workbook-product,.sales-workbook-tracking{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .sales-workbook-inline-cell{width:100%;padding:3px 5px;color:inherit;background:transparent;border:1px solid transparent;border-radius:4px;font:inherit;text-align:right;cursor:pointer}.sales-workbook-inline-cell:hover,.sales-workbook-inline-cell:focus-visible{border-color:rgba(214,189,119,.7);background:rgba(214,189,119,.08);outline:none}.sales-workbook-inline-cell--missing{color:#caa65b;font-style:italic}.sales-workbook-inline-value{width:100%;box-sizing:border-box;padding:3px 5px;color:#eee;background:#090b09;border:1px solid rgba(214,189,119,.7);border-radius:4px;font:inherit;text-align:right;outline:none;appearance:textfield}.sales-workbook-inline-value::-webkit-outer-spin-button,.sales-workbook-inline-value::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.sales-workbook-tracking a{color:#d6bd77;text-decoration:underline;text-underline-offset:2px}.sales-workbook-inline-edit{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;padding:12px;border:1px solid rgba(214,189,119,.4);border-radius:8px;background:#101311}.sales-workbook-inline-edit strong{font-size:12px}.sales-workbook-inline-edit input{height:34px;max-width:240px;padding:0 8px;background:#090b09;color:#eee;border:1px solid rgba(255,255,255,.18);border-radius:5px}.sales-workbook-inline-edit span{color:#929994;font-size:12px}.sales-workbook-inline-edit button{padding:7px 10px}.sales-workbook-inline-feedback{flex-basis:100%;margin:0;color:#c7ccc8;font-size:12px}
+  .sales-workbook-inline-cell{width:100%;padding:3px 5px;color:inherit;background:transparent;border:1px solid transparent;border-radius:4px;font:inherit;text-align:right;cursor:pointer}.sales-workbook-inline-cell:hover,.sales-workbook-inline-cell:focus-visible{border-color:rgba(214,189,119,.7);background:rgba(214,189,119,.08);outline:none}.sales-workbook-inline-cell--missing{color:#caa65b;font-style:italic}.sales-workbook-inline-value{width:100%;box-sizing:border-box;padding:3px 5px;color:#eee;background:#090b09;border:1px solid rgba(214,189,119,.7);border-radius:4px;font:inherit;text-align:right;outline:none;appearance:textfield}.sales-workbook-inline-value::-webkit-outer-spin-button,.sales-workbook-inline-value::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.sales-workbook-tracking a{color:#d6bd77;text-decoration:underline;text-underline-offset:2px}.sales-workbook-inline-popover{position:fixed;z-index:30;width:min(340px,calc(100vw - 16px));padding:12px;border:1px solid rgba(214,189,119,.55);border-radius:8px;background:#101311;box-shadow:0 12px 30px rgba(0,0,0,.45)}.sales-workbook-inline-popover strong{display:block;margin-bottom:8px;font-size:12px}.sales-workbook-inline-popover input{width:100%;box-sizing:border-box;height:34px;padding:0 8px;background:#090b09;color:#eee;border:1px solid rgba(255,255,255,.18);border-radius:5px}.sales-workbook-inline-popover-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.sales-workbook-inline-popover button{padding:7px 10px}.sales-workbook-inline-popover span{display:block;margin-top:8px;color:#929994;font-size:12px}.sales-workbook-inline-feedback{margin:10px 0 0;color:#c7ccc8;font-size:12px}
   .sales-workbook-actions{width:210px;white-space:nowrap}.sales-workbook-actions a,.sales-workbook-actions button{margin:2px 5px 2px 0;color:#d6bd77;background:transparent;border:1px solid rgba(214,189,119,.45);border-radius:5px;padding:5px 7px;font:inherit;font-size:12px;text-decoration:none;cursor:pointer}.sales-workbook-actions button:disabled{opacity:.5;cursor:wait}.sales-workbook-profit-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 16px}.sales-workbook-profit-card{padding:14px;border:1px solid rgba(214,189,119,.35);border-radius:8px;background:#121510}.sales-workbook-profit-card span{display:block;color:#9da49f;font-size:10px;letter-spacing:.07em}.sales-workbook-profit-card strong{display:block;margin-top:6px;font-size:20px}.sales-workbook-profit-card small{display:block;margin-top:5px;color:#caa65b}.sales-workbook-edit{margin-top:14px;padding:14px;border:1px solid rgba(214,189,119,.4);border-radius:8px;background:#101311}.sales-workbook-edit label{display:grid;gap:5px;margin:8px 0;color:#c7ccc8;font-size:12px}.sales-workbook-edit input,.sales-workbook-edit select{height:36px;max-width:360px;padding:0 8px;background:#090b09;color:#eee;border:1px solid rgba(255,255,255,.18);border-radius:5px}.sales-workbook-edit-actions{display:flex;gap:8px;margin-top:10px}.sales-workbook-edit button{padding:7px 10px}
   .sales-workbook-pagination{display:flex;align-items:center;gap:10px;margin-top:14px;color:#929994;font-size:12px}.sales-workbook-pagination button{min-width:82px}
   @media(max-width:700px){.sales-workbook-viewer{padding:14px}.sales-workbook-toolbar input{flex-basis:100%}.sales-workbook-count{margin-left:0;flex-basis:100%}.sales-workbook-profit-cards{grid-template-columns:1fr}}
@@ -229,6 +229,8 @@ export function SalesWorkbookUpload() {
   const [page, setPage] = useState(1);
   const [correctionPreview, setCorrectionPreview] = useState<CorrectionPreview | null>(null);
   const [inlineEdit, setInlineEdit] = useState<InlineEdit | null>(null);
+  const activeCellRef = useRef<HTMLInputElement | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
     void fetch("/api/sales-workbook")
@@ -299,6 +301,22 @@ export function SalesWorkbookUpload() {
     return () => window.clearInterval(timer);
   }, [rows]);
 
+  useEffect(() => {
+    if (!inlineEdit) { setPopoverPosition(null); return; }
+    const updatePopoverPosition = () => {
+      const rect = activeCellRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(340, window.innerWidth - 16);
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      const top = rect.bottom + 8 + 180 > window.innerHeight ? Math.max(8, rect.top - 180) : rect.bottom + 8;
+      setPopoverPosition({ top, left });
+    };
+    updatePopoverPosition();
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, true);
+    return () => { window.removeEventListener("resize", updatePopoverPosition); window.removeEventListener("scroll", updatePopoverPosition, true); };
+  }, [inlineEdit]);
+
   async function createCorrectionProposal(row: ViewerRow, type: string, value: string, reason: string) {
     if (!row.orderNumber || !reason.trim()) { setMessage("A correction reason is required."); return; }
     setBusy(true); setMessage(null);
@@ -321,7 +339,7 @@ export function SalesWorkbookUpload() {
       const response = await fetch("/api/sales-workbook/corrections", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "apply", proposalId: correctionPreview.proposalId }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Correction could not be applied");
-      setMessage(`Correction activated in workbook version ${payload.newWorkbookVersion}.`); setCorrectionPreview(null); await view(true);
+      const successMessage = `Correction activated in workbook version ${payload.newWorkbookVersion}.`; setCorrectionPreview(null); await view(true); setMessage(successMessage);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Correction could not be applied."); } finally { setBusy(false); }
   }
 
@@ -373,7 +391,7 @@ export function SalesWorkbookUpload() {
               const trustedTracking = index === 8 && row.orderNumber ? canonical[row.orderNumber]?.tracking ?? [] : [];
               if (financialType) {
                 const isEditingCell = inlineEdit?.row.rowNumber === row.rowNumber && inlineEdit.type === financialType;
-                return <td className={viewerColumnClasses[index]} key={index} title={row.rawRows.length === 1 ? "Click to edit" : "Use Edit for grouped orders"}>{isEditingCell ? <input aria-label={`Corrected ${financialType.replace("_", " ")}`} autoFocus className="sales-workbook-inline-value" inputMode="decimal" onChange={(event) => { setCorrectionPreview(null); setInlineEdit({ ...inlineEdit, value: event.target.value }); }} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setInlineEdit(null); setCorrectionPreview(null); } if (event.key === "Enter") { event.preventDefault(); void proposeInlineCorrection(); } }} type="text" value={inlineEdit.value} /> : <button className={`sales-workbook-inline-cell${value === "" ? " sales-workbook-inline-cell--missing" : ""}`} onClick={() => startInlineEdit(row, financialType, value)} type="button">{value === "" ? "Missing" : value}</button>}</td>;
+                return <td className={viewerColumnClasses[index]} key={index} title={row.rawRows.length === 1 ? "Click to edit" : "Use Edit for grouped orders"}>{isEditingCell ? <input aria-label={`Corrected ${financialType.replace("_", " ")}`} autoFocus className="sales-workbook-inline-value" inputMode="decimal" onChange={(event) => { setCorrectionPreview(null); setInlineEdit({ ...inlineEdit, value: event.target.value }); }} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setInlineEdit(null); setCorrectionPreview(null); } if (event.key === "Enter") { event.preventDefault(); void proposeInlineCorrection(); } }} ref={activeCellRef} type="text" value={inlineEdit.value} /> : <button className={`sales-workbook-inline-cell${value === "" ? " sales-workbook-inline-cell--missing" : ""}`} onClick={() => startInlineEdit(row, financialType, value)} type="button">{value === "" ? "Missing" : value}</button>}</td>;
               }
               if (index === 8 && trustedTracking.length) return <td className={viewerColumnClasses[index]} key={index} title={value}>{trustedTracking.map((tracking, trackingIndex) => tracking.url ? <span key={`${tracking.number}-${trackingIndex}`}><a href={tracking.url} target="_blank" rel="noopener noreferrer">{tracking.number}</a>{trackingIndex < trustedTracking.length - 1 ? " / " : ""}</span> : <span key={`${tracking.number}-${trackingIndex}`}>{tracking.number}{trackingIndex < trustedTracking.length - 1 ? " / " : ""}</span>)}</td>;
               return <td className={viewerColumnClasses[index]} key={index} title={index === 0 || index === 8 ? value : undefined}>{value}</td>;
@@ -382,7 +400,7 @@ export function SalesWorkbookUpload() {
           </tr>)}</tbody>
         </table>
       </div>
-      {inlineEdit ? <section className="sales-workbook-inline-edit" aria-label="Inline financial correction"><strong>Edit {inlineEdit.type.replace("_", " ")} for order {inlineEdit.row.orderNumber}</strong><input aria-label="Correction reason" placeholder="Reason for correction (required)" value={inlineEdit.reason} onChange={(event) => { setCorrectionPreview(null); setInlineEdit({ ...inlineEdit, reason: event.target.value }); }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setInlineEdit(null); setCorrectionPreview(null); } if (event.key === "Enter") { event.preventDefault(); void proposeInlineCorrection(); } }} /><span>Tab moves between the value, reason and review controls. Escape cancels.</span>{correctionPreview ? <><p className="sales-workbook-inline-feedback" role="status">Confirm: {String(correctionPreview.original ?? "blank")} → {String(correctionPreview.corrected)}. This records an immutable audit entry.</p><button disabled={busy} onClick={() => { void applyCorrection(); }} type="button">{busy ? "Saving…" : "Confirm and save"}</button></> : <button disabled={busy} onClick={() => { void proposeInlineCorrection(); }} type="button">{busy ? "Reviewing change…" : "Review change"}</button>}<button disabled={busy} onClick={() => { setInlineEdit(null); setCorrectionPreview(null); }} type="button">Cancel</button>{message ? <p className="sales-workbook-inline-feedback" role="status">{message}</p> : null}</section> : null}
+      {inlineEdit && popoverPosition ? <section aria-label="Inline financial correction" className="sales-workbook-inline-popover" role="dialog" style={popoverPosition}><strong>Edit {inlineEdit.type.replace("_", " ")} for order {inlineEdit.row.orderNumber}</strong><input aria-label="Correction reason" placeholder="Reason for correction (required)" value={inlineEdit.reason} onChange={(event) => { setCorrectionPreview(null); setInlineEdit({ ...inlineEdit, reason: event.target.value }); }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setInlineEdit(null); setCorrectionPreview(null); } if (event.key === "Enter") { event.preventDefault(); void proposeInlineCorrection(); } }} /><span>Tab moves between the value, reason and review controls. Escape cancels.</span>{correctionPreview ? <><p className="sales-workbook-inline-feedback" role="status">Confirm: {String(correctionPreview.original ?? "blank")} → {String(correctionPreview.corrected)}. This records an immutable audit entry.</p><div className="sales-workbook-inline-popover-actions"><button disabled={busy} onClick={() => { void applyCorrection(); }} type="button">{busy ? "Saving…" : "Confirm and save"}</button><button disabled={busy} onClick={() => { setInlineEdit(null); setCorrectionPreview(null); }} type="button">Cancel</button></div></> : <div className="sales-workbook-inline-popover-actions"><button disabled={busy} onClick={() => { void proposeInlineCorrection(); }} type="button">{busy ? "Reviewing change…" : "Review change"}</button><button disabled={busy} onClick={() => { setInlineEdit(null); setCorrectionPreview(null); }} type="button">Cancel</button></div>}{message ? <p className="sales-workbook-inline-feedback" role="status">{message}</p> : null}</section> : null}
       <div className="sales-workbook-pagination">
         <button disabled={page <= 1} onClick={() => setPage(page - 1)} type="button">Previous</button>
         <span>Page {page} of {pages}</span>
