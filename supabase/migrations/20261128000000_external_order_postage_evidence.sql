@@ -109,7 +109,8 @@ left join public.vault_external_order_postage e on e.order_id = d.order_id;
 revoke all on public.vault_order_external_postage_effective from public, anon, authenticated;
 grant select on public.vault_order_external_postage_effective to service_role;
 
-create or replace view public.vault_shopify_verified_order_operational_contributions as
+create or replace view public.vault_shopify_verified_order_operational_contributions
+with (security_barrier = true, security_invoker = true) as
 select d.order_id, d.shopify_order_id, d.shopify_created_at, d.order_source_updated_at,
   d.canonical_net_revenue,
   d.resolved_sold_line_cogs_gbp as trusted_net_sold_line_cogs_gbp,
