@@ -33,6 +33,7 @@ export type ViewerRow = {
   rawRows: SalesWorkbookSourceRow[];
 };
 
+type PendingOrder = { orderNumber: string; date: string; products: string[]; reasons: string[] };
 type CanonicalOrderLinks = { shopifyAdminUrl: string | null; tracking: Array<{ number: string; url: string | null }> };
 type CorrectionPreview = { proposalId: string; original: unknown; corrected: unknown; readinessBefore: string; readinessAfter: string };
 type InlineFinancialType = "sale_price" | "cogs" | "postage" | "card_fee";
@@ -226,6 +227,8 @@ export function SalesWorkbookUpload() {
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [rows, setRows] = useState<SalesWorkbookSourceRow[] | null>(null);
   const [canonical, setCanonical] = useState<Record<string, CanonicalOrderLinks>>({});
+  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  const [pendingError, setPendingError] = useState(false);
   const [query, setQuery] = useState("");
   const [payout, setPayout] = useState("All");
   const [size, setSize] = useState(50);
@@ -288,6 +291,15 @@ export function SalesWorkbookUpload() {
       if (!response.ok) throw new Error();
       setRows(payload.sheet.rows);
       setCanonical(payload.canonical ?? {});
+      try {
+        const pendingResponse = await fetch("/api/sales-workbook/pending", { cache: "no-store" });
+        if (!pendingResponse.ok) throw new Error("Pending orders unavailable");
+        const pendingPayload = await pendingResponse.json();
+        setPendingOrders(Array.isArray(pendingPayload.orders) ? pendingPayload.orders : []);
+        setPendingError(false);
+      } catch {
+        setPendingError(true);
+      }
       setStored((current) => ({
         id: current?.id ?? "",
         filename: payload.workbook.filename,
@@ -356,6 +368,8 @@ export function SalesWorkbookUpload() {
   const discardChanges=()=>{ setSaveNotice(null); if(!Object.keys(stagedEdits).length||window.confirm("Discard all unsaved Sales Workbook changes?")){setStagedEdits({});setBatchPreview(null);setInlineEdit(null);setMessage(null);} };
 
   const groupedRows = useMemo(() => groupSalesRows(rows ?? []), [rows]);
+  const workbookOrderNumbers = new Set(groupedRows.map(row => row.orderNumber).filter(Boolean));
+  const pendingVisible = pendingOrders.filter(order => !workbookOrderNumbers.has(order.orderNumber));
   const visibleRows = sortViewerRows(filterViewerRows(groupedRows, query, payout));
   const pages = Math.max(1, Math.ceil(visibleRows.length / size));
   const shown = visibleRows.slice((page - 1) * size, page * size);
@@ -388,6 +402,11 @@ export function SalesWorkbookUpload() {
     {rows ? <section className="sales-workbook-viewer">
       <style>{salesWorkbookViewerStyles}</style>
       <div className="sales-workbook-profit-cards">{(["week", "month", "year"] as const).map((range) => { const summary = summaries[range]; return <article className="sales-workbook-profit-card" key={range}><span>PROFIT THIS {range.toUpperCase()}</span><strong>{new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(summary.total)}</strong><small>{summary.incomplete ? `${summary.incomplete} incomplete order${summary.incomplete === 1 ? "" : "s"} excluded from subtotal` : `${summary.count} order${summary.count === 1 ? "" : "s"} covered`}</small></article>; })}</div>
+      <section className="sales-workbook-pending" aria-label="Pending orders" style={{marginBottom:20,padding:14,border:"1px solid rgba(214,189,119,.35)",borderRadius:8}}>
+        <h3>Pending orders ({pendingVisible.length})</h3>
+        <p>These Shopify orders are awaiting verified financial evidence. They are not included in the workbook or profit totals.</p>
+        {pendingError ? <p role="alert">Pending orders could not be refreshed. Existing workbook figures are unaffected.</p> : pendingVisible.length ? <div className="sales-workbook-table-wrap"><table style={{width:"100%",borderCollapse:"collapse",textAlign:"left"}}><thead><tr><th scope="col">Order</th><th scope="col">Products</th><th scope="col">Sale date</th><th scope="col">Status</th></tr></thead><tbody>{pendingVisible.map(order => <tr key={order.orderNumber}><td>#{order.orderNumber}</td><td>{order.products.join(" / ") || "Product details unavailable"}</td><td>{Number.isFinite(Date.parse(order.date)) ? new Date(order.date).toLocaleDateString("en-GB",{timeZone:"Europe/London"}) : "Date unavailable"}</td><td title={order.reasons.join(", ")}>Pending financial evidence</td></tr>)}</tbody></table></div> : <p>No pending orders.</p>}
+      </section>
       <div className="sales-workbook-toolbar">
         <input onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search product, tracking or order" />
         <select onChange={(event) => { setPayout(event.target.value); setPage(1); }} value={payout}>{payouts.map((value) => <option key={value}>{value}</option>)}</select>
