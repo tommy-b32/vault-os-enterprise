@@ -180,6 +180,12 @@ export const profitSummary = (rows: ViewerRow[], range: "week" | "month" | "year
   return { total: resolved.filter((value): value is number => value !== null).reduce((sum, value) => sum + value, 0), incomplete: resolved.filter((value) => value === null).length, count: scoped.length };
 };
 
+/** Pending rows are display-only and must never enter workbook profit calculations. */
+export const excludeWorkbookOrdersFromPending = (pending: PendingOrder[], workbookRows: ViewerRow[]): PendingOrder[] => {
+  const existing = new Set(workbookRows.map(row => row.orderNumber).filter(Boolean));
+  return pending.filter(order => !existing.has(order.orderNumber));
+};
+
 const viewerColumnClasses = [
   "sales-workbook-product",
   "sales-workbook-money",
@@ -368,8 +374,7 @@ export function SalesWorkbookUpload() {
   const discardChanges=()=>{ setSaveNotice(null); if(!Object.keys(stagedEdits).length||window.confirm("Discard all unsaved Sales Workbook changes?")){setStagedEdits({});setBatchPreview(null);setInlineEdit(null);setMessage(null);} };
 
   const groupedRows = useMemo(() => groupSalesRows(rows ?? []), [rows]);
-  const workbookOrderNumbers = new Set(groupedRows.map(row => row.orderNumber).filter(Boolean));
-  const pendingVisible = pendingOrders.filter(order => !workbookOrderNumbers.has(order.orderNumber));
+  const pendingVisible = excludeWorkbookOrdersFromPending(pendingOrders, groupedRows);
   const visibleRows = sortViewerRows(filterViewerRows(groupedRows, query, payout));
   const pages = Math.max(1, Math.ceil(visibleRows.length / size));
   const shown = visibleRows.slice((page - 1) * size, page * size);
