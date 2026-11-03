@@ -40,7 +40,7 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit
       - name: Focused workbook regression tests
-        run: node --test tests/SalesOrderCorrection.test.mjs tests/SalesWorkbookCorrectionProfit.test.mjs tests/SalesWorkbookCorrectionRoute.test.mjs tests/SalesWorkbookUploadUi.test.mjs tests/SalesWorkbookDeferredRecovery.test.mjs tests/SalesWorkbookThemePreservation.test.mjs
+        run: node --test tests/SalesOrderCorrection.test.mjs tests/SalesWorkbookCorrectionProfit.test.mjs tests/SalesWorkbookCorrectionRoute.test.mjs tests/SalesWorkbookUploadUi.test.mjs tests/SalesWorkbookDeferredRecovery.test.mjs tests/SalesWorkbookThemePreservation.test.mjs tests/SalesWorkbookPendingOrders.test.mjs
       - name: Isolated PostgreSQL atomic batch transaction
         env:
           PGPASSWORD: test-only
