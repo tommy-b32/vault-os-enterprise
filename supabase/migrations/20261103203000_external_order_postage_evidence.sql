@@ -16,7 +16,7 @@ grant select, insert on public.vault_external_order_postage to service_role;
 
 create table public.vault_external_order_postage_audit (
   id uuid primary key default gen_random_uuid(),
-  order_id uuid not null references public.vault_shopify_orders(id) on delete restrict,
+  order_id uuid not null unique references public.vault_shopify_orders(id) on delete restrict,
   amount_pence bigint not null,
   recorded_by_operator_id uuid not null,
   created_at timestamptz not null default now()
@@ -71,9 +71,7 @@ begin
   insert into public.vault_external_order_postage_audit
     (order_id, amount_pence, recorded_by_operator_id)
   select p_order_id, p_amount_pence, p_operator_id
-  where not exists (
-    select 1 from public.vault_external_order_postage_audit where order_id = p_order_id
-  );
+  on conflict (order_id) do nothing;
   return jsonb_build_object('order_id', p_order_id, 'amount_pence', p_amount_pence, 'status', 'recorded');
 end;
 $$;
