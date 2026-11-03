@@ -2,6 +2,7 @@ import "server-only";
 
 import { requireOperatorRole } from "@/lib/auth/operators";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { createSessionSupabaseClient } from "@/lib/supabase-server";
 
 export class ExternalPostageValidationError extends Error {}
 
@@ -17,7 +18,7 @@ export async function recordExternalOrderPostage(input: {
   orderNumber: string;
   amountGbp: string;
 }) {
-  const operator = await requireOperatorRole("owner", "operator");
+  await requireOperatorRole("owner", "operator");
   if (!ORDER_NUMBER.test(input.orderNumber) || !GBP_AMOUNT.test(input.amountGbp)) {
     throw new ExternalPostageValidationError("A valid order number and GBP postage amount are required");
   }
@@ -40,10 +41,10 @@ export async function recordExternalOrderPostage(input: {
 
   // RPC must enforce order uniqueness, actor validation, immutable audit,
   // idempotency and Shopify/external source conflicts in one transaction.
-  const { data, error } = await supabaseAdmin.rpc("record_external_order_postage", {
+  const supabase = await createSessionSupabaseClient();
+  const { data, error } = await supabase.rpc("record_external_order_postage", {
     p_order_id: order.id,
     p_amount_pence: amountPence,
-    p_operator_id: operator.id,
   });
   if (error) throw new Error("Unable to record external postage");
   return { orderNumber: input.orderNumber, amountGbp: (amountPence / 100).toFixed(2), result: data };

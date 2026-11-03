@@ -37,17 +37,30 @@ create trigger external_order_postage_audit_no_mutation before update or delete 
 for each row execute function public.reject_external_order_postage_mutation();
 
 create function public.record_external_order_postage(
-  p_order_id uuid, p_amount_pence bigint, p_operator_id uuid
+  p_order_id uuid, p_amount_pence bigint
 ) returns jsonb
 language plpgsql
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
 declare
   canonical record;
   existing record;
+  v_actor_id uuid := auth.uid();
 begin
-  if p_order_id is null or p_operator_id is null or p_amount_pence is null
+  if v_actor_id is null then
+    raise exception 'EXTERNAL_ORDER_POSTAGE_AUTHENTICATED_OPERATOR_REQUIRED';
+  end if;
+  if not exists (
+    select 1
+    from public.vault_operators operator
+    where operator.id = v_actor_id
+      and operator.is_active
+      and operator.role in ('owner', 'operator')
+  ) then
+    raise exception 'EXTERNAL_ORDER_POSTAGE_ACTIVE_OPERATOR_REQUIRED';
+  end if;
+  if p_order_id is null or p_amount_pence is null
     or p_amount_pence < 0 or p_amount_pence > 999999999 then
     raise exception 'Invalid external postage request';
   end if;
@@ -59,7 +72,7 @@ begin
 
   insert into public.vault_external_order_postage
     (order_id, shopify_order_id, amount_pence, recorded_by_operator_id)
-  values (canonical.id, canonical.shopify_order_id, p_amount_pence, p_operator_id)
+  values (canonical.id, canonical.shopify_order_id, p_amount_pence, v_actor_id)
   on conflict (order_id) do nothing;
 
   select amount_pence, shopify_order_id into existing
@@ -70,13 +83,13 @@ begin
   end if;
   insert into public.vault_external_order_postage_audit
     (order_id, amount_pence, recorded_by_operator_id)
-  select p_order_id, p_amount_pence, p_operator_id
+  select p_order_id, p_amount_pence, v_actor_id
   on conflict (order_id) do nothing;
   return jsonb_build_object('order_id', p_order_id, 'amount_pence', p_amount_pence, 'status', 'recorded');
 end;
 $$;
-revoke all on function public.record_external_order_postage(uuid,bigint,uuid) from public, anon, authenticated;
-grant execute on function public.record_external_order_postage(uuid,bigint,uuid) to service_role;
+revoke all on function public.record_external_order_postage(uuid,bigint) from public, anon, authenticated, service_role;
+grant execute on function public.record_external_order_postage(uuid,bigint) to authenticated;
 
 -- Overlay preserves every original financial/COGS/payment exclusion.
 -- Only remove shipping exclusions when there is an approved external record
