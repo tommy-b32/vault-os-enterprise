@@ -86,15 +86,16 @@ with (security_invoker = true)
 as
 select d.order_id,
   case
-    when e.order_id is not null and d.shipping_source_state = 'covered' then null::numeric
+    when e.order_id is not null and (d.shipping_source_state = 'covered' or (d.observed_purchased_label_cost_gbp is not null and d.observed_purchased_label_cost_gbp > 0)) then null::numeric
     when e.order_id is not null then e.amount_pence::numeric / 100
     else d.observed_purchased_label_cost_gbp
   end as effective_shipping_cost_gbp,
   case
-    when e.order_id is not null and d.shipping_source_state = 'covered'
+    when e.order_id is not null and (d.shipping_source_state = 'covered' or (d.observed_purchased_label_cost_gbp is not null and d.observed_purchased_label_cost_gbp > 0))
       then array_append(d.exclusion_reason_codes, 'shipping_source_conflict'::text)
     when e.order_id is not null and e.shopify_order_id = d.shopify_order_id
       and d.shipping_row_count <= 1
+      and (d.observed_purchased_label_cost_gbp is null or d.observed_purchased_label_cost_gbp = 0)
       and (d.shipping_source_state is null or d.shipping_source_state in ('missing', 'awaiting_shopify_cost'))
       then array_remove(array_remove(array_remove(d.exclusion_reason_codes,
         'missing_shipping_label_cost'::text),
