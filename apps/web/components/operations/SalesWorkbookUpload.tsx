@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ExternalPostageEntry } from "@/components/operations/ExternalPostageEntry";
 
 type Stored = {
   id: string;
@@ -399,6 +400,7 @@ export function SalesWorkbookUpload() {
         <dt>Status</dt><dd>Stored securely</dd>
       </dl>
       <button disabled={busy} onClick={() => { void view(); }} type="button">{busy ? "Loading…" : "View Sales"}</button>
+      <ExternalPostageEntry onRecorded={() => view(true)} />
     </> : <form onSubmit={submit}>
       <p>Upload only a Stock Costings-style XLSX workbook. Accepted type: .xlsx · Maximum size: 20 MB.</p>
       <input accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={busy} onChange={(event) => setFile(event.target.files?.[0] ?? null)} type="file" />
