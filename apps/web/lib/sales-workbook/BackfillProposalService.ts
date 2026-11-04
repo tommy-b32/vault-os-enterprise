@@ -8,7 +8,9 @@ import { supabaseAdmin as productionSupabaseAdmin } from "@/lib/supabase-admin";
 const unresolved=<T,>(source:string):ProposalField<T>=>({value:null,status:"unresolved",source});
 const proven=<T,>(value:T,source:string):ProposalField<T>=>({value,status:"proven",source});
 const money=(value:unknown,source:string):ProposalField<number>=>{const number=Number(value);return Number.isFinite(number)&&number>=0?proven(number,source):unresolved(`${source}_unavailable`);};
-const ALLOCATION_RPC_BATCH_SIZE=5;
+// This RPC can time out under production load for multi-order arguments. Keep each
+// governed read isolated and sequential; financial allocation semantics stay unchanged.
+const ALLOCATION_RPC_BATCH_SIZE=1;
 const allocationOrderIdBatches=(orderIds:string[])=>Array.from({length:Math.ceil(orderIds.length/ALLOCATION_RPC_BATCH_SIZE)},(_,index)=>orderIds.slice(index*ALLOCATION_RPC_BATCH_SIZE,(index+1)*ALLOCATION_RPC_BATCH_SIZE));
 type CanonicalOrder={id:string;order_number:string;shopify_created_at:string;financial_status:string|null;fulfilment_status:string|null;cancelled_at:string|null;refunds:number|string;metadata:unknown};
 type CanonicalLine={id:string;order_id:string;title:string;cogs_quantity:number|string;total_cogs_gbp:number|string|null;unit_cogs_gbp:number|string|null;cogs_status:string;cogs_history_id:string|null;cogs_snapshotted_at:string|null;financial_treatment:string|null;financial_treatment_status:string|null;financial_treatment_history_id:string|null;financial_treatment_snapshotted_at:string|null;sale_time_direct_cogs_gbp:number|string|null};
