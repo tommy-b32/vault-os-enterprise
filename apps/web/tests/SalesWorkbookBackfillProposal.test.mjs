@@ -82,7 +82,9 @@ test("event-driven proposals accept only their explicit affected order scope", a
 test("backfill proposal route is read-only and uses bounded protected canonical evidence", async () => {
   const [source, service, route, migration] = await Promise.all([readFile(new URL("lib/sales-workbook/BackfillProposal.ts", root), "utf8"), readFile(new URL("lib/sales-workbook/BackfillProposalService.ts", root), "utf8"), readFile(new URL("app/api/sales-workbook/backfill-proposal/route.ts", root), "utf8"), readFile(new URL("../../supabase/migrations/20261095000000_sales_workbook_bounded_verified_allocation_query.sql", root), "utf8")]);
   for (const text of ["vault_shopify_order_lines", "vault_shopify_resolved_line_discount_evidence", "get_verified_product_profitability_allocations_for_orders", "requireOperatorRole(\"owner\", \"operator\")", "canonical_shopify_fulfilment_status"]) assert.ok(`${source}${service}${route}${migration}`.includes(text));
-  assert.match(service,/\.rpc\("get_verified_product_profitability_allocations_for_orders",\{p_order_ids:orderIds\}\)/);
+  assert.match(service,/ALLOCATION_RPC_BATCH_SIZE=5/);
+  assert.match(service,/for\(const batch of allocationOrderIdBatches\(orderIds\)\)/);
+  assert.match(service,/await supabaseAdmin\.rpc\("get_verified_product_profitability_allocations_for_orders",\{p_order_ids:batch\}\)/);
   assert.doesNotMatch(service,/from\("vault_shopify_verified_product_profitability_line_allocations"\)/);
   assert.match(migration,/where c\.order_id = any \(p_order_ids\)/);
   assert.match(migration,/cardinality\(p_order_ids\) > 100/);
