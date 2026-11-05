@@ -37,6 +37,7 @@ function processAtStage<T>(stage: SalesWorkbookWorkerFailureStage, operation: ()
 
 type WorkerDependencies={repository:typeof SalesWorkbookRepository;getBackfillProposal:typeof getBackfillProposal;parseSalesWorkbook:typeof parseSalesWorkbook;prepareSalesWorkbookBackfill:typeof prepareSalesWorkbookBackfill};
 const productionDependencies:WorkerDependencies={repository:SalesWorkbookRepository,getBackfillProposal,parseSalesWorkbook,prepareSalesWorkbookBackfill};
+const deferredReasonsFor=(proposal:Awaited<ReturnType<typeof getBackfillProposal>>)=>{const reasons=Object.fromEntries(proposal.proposals.filter(candidate=>candidate.classification!=="ready").map(candidate=>[candidate.orderNumber,candidate.issues.map(issue=>`EVIDENCE_${issue.toUpperCase()}`)]));for(const orderNumber of proposal.allocationLookupFailedOrderNumbers??[]){const current=reasons[orderNumber]??[];reasons[orderNumber]=[...new Set([...current,"ALLOCATION_LOOKUP_FAILED"])];}return reasons;};
 
 export async function runOrderReadyWorkbookWorker(orderNumbers: Iterable<string>,dependencies:WorkerDependencies=productionDependencies) {
   const {repository,getBackfillProposal,parseSalesWorkbook,prepareSalesWorkbookBackfill}=dependencies;
@@ -59,10 +60,8 @@ export async function runOrderReadyWorkbookWorker(orderNumbers: Iterable<string>
   if (!parsed.valid) throw new SalesWorkbookWorkerFailure("XLSX_PROCESSING");
   const proposal = await atStage("PROPOSAL_RPC", () => getBackfillProposal({ affectedOrderNumbers, existingWorkbookOrderNumbers: parsed.rows.flatMap(row => row.orderNumber ? [row.orderNumber] : []) }));
   const prepared = processAtStage("XLSX_PROCESSING", () => prepareSalesWorkbookBackfill(bytes, proposal));
+  const deferredReasons = deferredReasonsFor(proposal);
   if (!prepared.ordersWritten) {
-    const deferredReasons = Object.fromEntries(proposal.proposals
-      .filter(candidate => candidate.classification !== "ready")
-      .map(candidate => [candidate.orderNumber, candidate.issues.map(issue => `EVIDENCE_${issue.toUpperCase()}`)]));
     return { workbookAvailable: true, sourceWorkbookVersion: current.current_version, newWorkbookVersion: current.current_version, ...prepared,
       deferredOrderNumbers: Object.keys(deferredReasons), deferredReasons };
   }
@@ -72,5 +71,5 @@ export async function runOrderReadyWorkbookWorker(orderNumbers: Iterable<string>
   processAtStage("VERIFICATION", () => { if (sha256(persistedBytes) !== version.content_hash) throw new Error("Pending workbook hash verification failed"); });
   const activated = await atStage("ACTIVATION", () => repository.activatePendingWorkbookVersion({ current, version, operatorId: current.uploaded_by_operator_id }));
   return { workbookAvailable: true, sourceWorkbookVersion: current.current_version, newWorkbookVersion: activated.current_version, ...prepared,
-    deferredOrderNumbers: [], deferredReasons: {} as Record<string, string[]> };
+    deferredOrderNumbers: Object.keys(deferredReasons), deferredReasons };
 }
