@@ -45,6 +45,21 @@ test("worker emits stable stages for real read and proposal failures", async () 
   );
 });
 
+test("worker publishes ready orders while retaining failed allocation lookups as pending", async () => {
+  const worker = await loadWorker();
+  const result = await worker(["1341", "1342"], {
+    repository: repository({
+      writePendingBackfillWorkbook: async () => ({ workbook_id: "workbook", version: 22, activation_status: "pending", content_hash: "hash", storage_path: "pending" }),
+      activatePendingWorkbookVersion: async () => ({ ...current, current_version: 22 }),
+    }),
+    getBackfillProposal: async () => ({ proposals: [{ orderNumber: "1342", classification: "requires_review", issues: ["postageFee_unresolved", "cardFee_unresolved"] }], allocationLookupFailedOrderNumbers: ["1342"] }),
+    parseSalesWorkbook: () => ({ valid: true, rows: [] }),
+    prepareSalesWorkbookBackfill: () => ({ bytes: new Uint8Array([1]), ordersWritten: 1, rowsWritten: 1, skippedExistingOrders: 0, skippedReviewOrders: 1, writtenOrderNumbers: ["1341"] }),
+  });
+  assert.deepEqual(result.writtenOrderNumbers, ["1341"]);
+  assert.deepEqual(result.deferredReasons["1342"], ["EVIDENCE_POSTAGEFEE_UNRESOLVED", "EVIDENCE_CARDFEE_UNRESOLVED", "ALLOCATION_LOOKUP_FAILED"]);
+});
+
 test("worker classifies only allowlisted non-sensitive failure stages", async () => {
   const worker = await read("lib/sales-workbook/OrderReadyWorkbookWorker.ts");
   for (const stage of ["WORKBOOK_READ", "PROPOSAL_RPC", "XLSX_PROCESSING", "PENDING_WRITE", "VERIFICATION", "ACTIVATION"]) assert.match(worker, new RegExp(`"${stage}"`));
@@ -61,6 +76,7 @@ test("failed automatic outcomes retain allowlisted codes and stages only", async
   assert.match(route, /failureStage:error instanceof SalesWorkbookWorkerFailure\?error\.stage:undefined/);
   assert.match(repository, /failure_stage:failureStage/);
   assert.match(repository, /\["WORKBOOK_READ","PROPOSAL_RPC","XLSX_PROCESSING","PENDING_WRITE","VERIFICATION","ACTIVATION"\]/);
+  assert.match(repository, /input\.status!=="failed"&&Object\.keys\(reasons\)\.length/);
   assert.doesNotMatch(repository, /failure_stage:.*error\.message/);
 });
 
