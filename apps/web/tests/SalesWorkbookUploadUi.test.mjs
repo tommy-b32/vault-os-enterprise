@@ -206,3 +206,5 @@ test("inline review controls are a scroll-safe popover anchored to the active ce
   assert.match(ui, /addEventListener\("scroll", updatePopoverPosition, true\)/);
   assert.doesNotMatch(ui, /sales-workbook-inline-edit/);
 });
+
+test("pending orders are separate from workbook rows and use governed manual evidence", async () => { const ui=await readFile(componentUrl,"utf8"); for(const text of["aria-label=\"Pending Orders\"","/api/shopify-financial-evidence/manual","Supporting evidence reference","Save evidence","setPendingOrders(payload.pendingOrders ?? [])"])assert.ok(ui.includes(text)); assert.doesNotMatch(ui,/projectedPendingRows|projected_pending/); });

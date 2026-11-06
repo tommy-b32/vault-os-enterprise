@@ -37,6 +37,7 @@ type CanonicalOrderLinks = { shopifyAdminUrl: string | null; tracking: Array<{ n
 type CorrectionPreview = { proposalId: string; original: unknown; corrected: unknown; readinessBefore: string; readinessAfter: string };
 type InlineFinancialType = "sale_price" | "cogs" | "postage" | "card_fee";
 type InlineEdit = { row: ViewerRow; type: InlineFinancialType; value: string; reason: string };
+type PendingOrder = { orderId:string;orderNumber:string;products:string;salePrice:string;cost:string;postage:string;cardFee:string;postageSource:"shopify"|"manual"|"missing";cardFeeSource:"shopify"|"manual"|"missing" };
 const inlineFinancialTypes: Partial<Record<number, InlineFinancialType>> = { 1: "sale_price", 3: "cogs", 4: "postage", 5: "card_fee" };
 
 const workbookDate = (value: string): number | null => {
@@ -222,6 +223,8 @@ export function SalesWorkbookUpload() {
   const [stored, setStored] = useState<Stored | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [rows, setRows] = useState<SalesWorkbookSourceRow[] | null>(null);
+  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  const [pendingEdits, setPendingEdits] = useState<Record<string,{postage:string;cardFee:string;reason:string;supportingEvidence:string}>>({});
   const [canonical, setCanonical] = useState<Record<string, CanonicalOrderLinks>>({});
   const [query, setQuery] = useState("");
   const [payout, setPayout] = useState("All");
@@ -281,6 +284,7 @@ export function SalesWorkbookUpload() {
       const payload = await response.json();
       if (!response.ok) throw new Error();
       setRows(payload.sheet.rows);
+      setPendingOrders(payload.pendingOrders ?? []);
       setCanonical(payload.canonical ?? {});
       setStored((current) => current ?? {
         id: "",
@@ -343,6 +347,7 @@ export function SalesWorkbookUpload() {
       const successMessage = `Correction activated in workbook version ${payload.newWorkbookVersion}.`; setCorrectionPreview(null); await view(true); setMessage(successMessage);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Correction could not be applied."); } finally { setBusy(false); }
   }
+  async function savePending(row:PendingOrder){const edit=pendingEdits[row.orderNumber];if(!edit?.reason.trim()||!edit.supportingEvidence.trim()){setMessage("A reason and supporting evidence reference are required.");return}const entries=([row.postageSource==="missing"&&edit.postage.trim()?["shipping_cost",edit.postage.trim()]:null,row.cardFeeSource==="missing"&&edit.cardFee.trim()?["payment_fee",edit.cardFee.trim()]:null].filter(Boolean) as Array<[string,string]>);if(!entries.length){setMessage("Enter at least one currently missing financial value.");return}setBusy(true);try{for(const[evidenceType,amountGbp]of entries){const response=await fetch("/api/shopify-financial-evidence/manual",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({orderId:row.orderId,evidenceType,amountGbp,reason:edit.reason,supportingEvidence:edit.supportingEvidence})});const payload=await response.json();if(!response.ok)throw new Error(payload.error??"Manual financial evidence was rejected")}await view(true)}catch(error){setMessage(error instanceof Error?error.message:"Manual financial evidence could not be saved.")}finally{setBusy(false)}}
 
   const groupedRows = useMemo(() => groupSalesRows(rows ?? []), [rows]);
   const visibleRows = sortViewerRows(filterViewerRows(groupedRows, query, payout));
@@ -382,6 +387,7 @@ export function SalesWorkbookUpload() {
         <select onChange={(event) => { setSize(Number(event.target.value)); setPage(1); }} value={size}>{[25, 50, 100].map((value) => <option key={value}>{value}</option>)}</select>
         <span className="sales-workbook-count">{visibleRows.length} orders · {rows.length} underlying sales rows</span>
       </div>
+      {pendingOrders.length?<section className="sales-workbook-pending" aria-label="Pending Orders"><h3>Pending Orders</h3>{pendingOrders.map(row=>{const edit=pendingEdits[row.orderNumber]??{postage:"",cardFee:"",reason:"",supportingEvidence:""};const change=(key:keyof typeof edit,value:string)=>setPendingEdits(current=>({...current,[row.orderNumber]:{...(current[row.orderNumber]??edit),[key]:value}}));return <article key={row.orderNumber}><strong>Order {row.orderNumber}</strong><p>{row.products}</p><p>Sale price: {row.salePrice || "Missing"} · COGS: {row.cost || "Missing"}</p><p>Postage: {row.postage||"Missing"} ({row.postageSource}) · Card fee: {row.cardFee||"Missing"} ({row.cardFeeSource})</p>{row.postageSource==="missing"?<label>Postage (£)<input value={edit.postage} inputMode="decimal" onChange={event=>change("postage",event.target.value)}/></label>:null}{row.cardFeeSource==="missing"?<label>Card fee (£)<input value={edit.cardFee} inputMode="decimal" onChange={event=>change("cardFee",event.target.value)}/></label>:null}<label>Reason (required)<input value={edit.reason} onChange={event=>change("reason",event.target.value)}/></label><label>Supporting evidence reference (required)<input value={edit.supportingEvidence} onChange={event=>change("supportingEvidence",event.target.value)}/></label><button disabled={busy} onClick={()=>void savePending(row)} type="button">Save evidence</button></article>})}</section>:null}
       <div className="sales-workbook-table-wrap">
         <table className="sales-workbook-table">
           <colgroup>{viewerColumnClasses.map((className, index) => <col className={className} key={index} />)}</colgroup>
