@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthenticatedOperator } from "@/lib/auth/operators";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-type PendingOrder = { orderNumber: string; date: string; products: string[]; reasons: string[] };
+type PendingOrder = { orderId: string; orderNumber: string; date: string; products: string[]; reasons: string[]; paymentFee: string | null; paymentFeeSource: "shopify" | "manual" | "missing" };
 const LIMIT = 200;
 
 /** Read-only canonical pending orders; never generates workbook rows or financial totals. */
@@ -28,6 +28,12 @@ export async function GET() {
       ? await supabaseAdmin.from("vault_shopify_order_lines").select("order_id,title").in("order_id", ids)
       : { data: [], error: null };
     if (linesError) throw linesError;
+    const [coverageResult, feesResult, manualResult] = ids.length ? await Promise.all([
+      supabaseAdmin.from("vault_shopify_payment_fee_coverage").select("order_id,coverage_state").in("order_id", ids),
+      supabaseAdmin.from("vault_shopify_payment_fee_records").select("order_id,fee_amount,tax_amount,counts_toward_profit").in("order_id", ids),
+      supabaseAdmin.from("vault_shopify_manual_financial_evidence").select("order_id,evidence_type,amount_gbp").eq("evidence_type", "payment_fee").in("order_id", ids),
+    ]) : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+    if (coverageResult.error || feesResult.error || manualResult.error) throw new Error("Pending financial evidence unavailable");
     const byId = new Map<string, string[]>();
     for (const line of lines ?? []) {
       if (typeof line.title !== "string" || !line.title.trim()) continue;
@@ -38,7 +44,11 @@ export async function GET() {
       const orderNumber = String(entry.order_number);
       const order = byNumber.get(orderNumber);
       if (!order) return [];
-      return [{ orderNumber, date: order.shopify_created_at, products: byId.get(order.id) ?? [],
+      const covered = (coverageResult.data ?? []).some(row => row.order_id === order.id && row.coverage_state === "covered");
+      const shopifyFee = covered ? (feesResult.data ?? []).filter(row => row.order_id === order.id && row.counts_toward_profit).reduce((total, row) => total + Number(row.fee_amount) + Number(row.tax_amount ?? 0), 0) : null;
+      const manualFee = (manualResult.data ?? []).find(row => row.order_id === order.id)?.amount_gbp;
+      const paymentFee = shopifyFee === null ? (manualFee === undefined ? null : String(manualFee)) : String(shopifyFee);
+      return [{ orderId: order.id, orderNumber, date: order.shopify_created_at, products: byId.get(order.id) ?? [], paymentFee, paymentFeeSource: shopifyFee !== null ? "shopify" : manualFee === undefined ? "missing" : "manual",
         reasons: Array.isArray(entry.reason_codes) ? entry.reason_codes.filter((value: unknown): value is string => typeof value === "string") : [] }];
     });
     return NextResponse.json({ orders: result }, { headers: { "Cache-Control": "no-store" } });
