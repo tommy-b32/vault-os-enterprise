@@ -1,4 +1,4 @@
--- Extend the existing bounded workbook allocation reader. Manual evidence is
+-- Runs after the governed manual-financial-evidence ledger migration. Manual evidence is
 -- admissible only when the verified Shopify contribution has no value; the
 -- amount is then allocated with the unchanged authoritative revenue share.
 create or replace function public.get_verified_product_profitability_allocations_for_orders(

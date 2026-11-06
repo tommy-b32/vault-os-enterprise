@@ -19,7 +19,7 @@ grant select on public.vault_shopify_manual_financial_evidence to service_role;
 
 create trigger immutable_shopify_manual_financial_evidence before update or delete
   on public.vault_shopify_manual_financial_evidence for each row
-  execute function public.reject_shopify_financial_evidence_change_mutation();
+  execute function public.reject_shopify_financial_evidence_mutation();
 
 create function public.record_shopify_manual_financial_evidence(
   p_order_id uuid, p_evidence_type text, p_amount_gbp numeric,
